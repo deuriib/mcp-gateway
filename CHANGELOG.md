@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.4.1 (2026-08-24)
+
+### Bug Fixes
+
+- List command reads connection type from JSON config
+  ([`988bba3`](https://github.com/deuriib/mcp-gateway/commit/988bba3314c6c699a7eec89c774ca7e95cdd3721))
+
+list_servers() was parsing .pyi comments for connection_type, which no longer exist in the new
+  JSON-based format. Now reads from get_config() which handles both JSON and legacy .pyi comment
+  fallback.
+
+
 ## v0.4.0 (2026-08-24)
 
 ### Features
