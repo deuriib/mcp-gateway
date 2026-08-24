@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.1 (2026-08-24)
+
+### Bug Fixes
+
+- Update docstring format
+  ([`f421602`](https://github.com/deuriib/mcp-gateway/commit/f4216026bc86c833c1fadc3bdef4cf6d9803b75b))
+
+
 ## v0.1.0 (2026-08-24)
 
 ### Chores

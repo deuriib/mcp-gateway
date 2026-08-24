@@ -1,6 +1,6 @@
 [project]
 name = "mcp-gateway"
-version = "0.1.0"
+version = "0.1.1"
 description = "Manage MCP servers with Code Mode support."
 readme = "README.md"
 authors = [
