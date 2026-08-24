@@ -1,6 +1,32 @@
 # CHANGELOG
 
 
+## v0.4.0 (2026-08-24)
+
+### Features
+
+- Auto-auth OAuth flow, stdio config persistence, token cleanup
+  ([`0c4d448`](https://github.com/deuriib/mcp-gateway/commit/0c4d448b954d66d6e320dd5bba1b3a1d94bcac58))
+
+- Add force_auth param to _discover_tools for conditional OAuth - Add/remove/refresh commands try
+  without auth first, OAuth only on failure - Persist stdio_command and stdio_args in .pyi registry
+  files - Clean up stored OAuth tokens on server remove - Backward compat for old .pyi files without
+  stdio comments - Add comprehensive tests for all new behaviors
+
+- Harden gateway with session TTL, sandbox timeout, clean registry, and configurable OAuth
+  ([`6d51ebc`](https://github.com/deuriib/mcp-gateway/commit/6d51ebc6099dc6656a7faf8a6aa3aa27958f0ae5))
+
+- Session TTL + cleanup: evict idle sessions after 5min, send None sentinel to close SSE streams,
+  return JSON-RPC error for expired sessions - Real sandbox timeout: ThreadPoolExecutor with
+  configurable timeout (default 30s), SandboxTimeoutError for slow injected callbacks - Deduplicate
+  _discover_tools: extract _create_client_transport async context manager, single flight path for
+  all connection types - STREAMABLE_HTTP validation: require connection_string in model_post_init -
+  Configurable OAuth port: --oauth-port option on add/refresh commands - Clean registry: config in
+  JSON files, .pyi contains only tool signatures, backward compatible with old comment-style .pyi
+  files - serverInfo.version now reads __version__ instead of hardcoded 0.1.0 - 22 new tests (71
+  total), all passing, lint clean
+
+
 ## v0.3.0 (2026-08-24)
 
 ### Features
