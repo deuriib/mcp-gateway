@@ -1,11 +1,14 @@
 """HTTP/SSE gateway server for MCP protocol."""
 
 from __future__ import annotations
+
 from typing import Any
+
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+
 from mcp_gateway.code_mode import CodeMode
 from mcp_gateway.registry import Registry
 

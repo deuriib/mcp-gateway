@@ -1,6 +1,7 @@
 """Tests for MCP server proxy."""
 
 import pytest
+
 from mcp_gateway.server_proxy import ServerProxy
 
 

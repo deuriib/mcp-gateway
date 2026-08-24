@@ -1,7 +1,9 @@
 """Starlark sandbox for safe code execution."""
 
 from __future__ import annotations
+
 import inspect
+
 import starlark as sl
 
 

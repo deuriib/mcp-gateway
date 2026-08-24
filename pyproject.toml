@@ -23,6 +23,15 @@ mcp-gateway = "mcp_gateway.cli:main"
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
 
+[tool.ruff.lint]
+ignore = [
+    "BLE001",  # Blind exception catching is intentional for graceful degradation
+    "SIM117",  # Nested async with required by MCP library API
+    "PYI063",  # Pydantic model_post_init has fixed signature
+    "SIM102",  # Nested ifs with different error messages are clearer separate
+    "B017",    # Tests intentionally catch broad exceptions
+]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",

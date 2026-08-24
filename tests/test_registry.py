@@ -1,8 +1,9 @@
 """Tests for .pyi file registry operations."""
 
 import pytest
+
+from mcp_gateway.models import ToolInfo
 from mcp_gateway.registry import Registry
-from mcp_gateway.models import ConnectionType, MCPClientConfig, ToolInfo
 
 
 @pytest.fixture

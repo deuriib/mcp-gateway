@@ -1,6 +1,7 @@
 """Tests for MCP client config models."""
 
 import pytest
+
 from mcp_gateway.models import ConnectionType, MCPClientConfig, StdioConfig
 
 

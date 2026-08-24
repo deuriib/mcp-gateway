@@ -1,6 +1,7 @@
 """Server proxy that wraps MCP clients for sandbox use."""
 
 from __future__ import annotations
+
 from typing import Any
 
 

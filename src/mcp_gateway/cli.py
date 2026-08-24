@@ -1,11 +1,14 @@
 """CLI commands for MCP Gateway management."""
 
 from __future__ import annotations
+
 import asyncio
 import json
 import sys
 from pathlib import Path
+
 import click
+
 from mcp_gateway.models import ConnectionType, MCPClientConfig, StdioConfig, ToolInfo
 from mcp_gateway.registry import Registry
 

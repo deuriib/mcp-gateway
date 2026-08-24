@@ -1,7 +1,9 @@
 """Registry for managing .pyi stub files in the servers/ directory."""
 
 from __future__ import annotations
+
 from pathlib import Path
+
 from mcp_gateway.models import MCPClientConfig, ToolInfo
 
 

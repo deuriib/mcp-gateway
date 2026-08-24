@@ -1,6 +1,7 @@
 """Shared test fixtures."""
 
 import pytest
+
 from mcp_gateway.models import ConnectionType, MCPClientConfig, StdioConfig
 
 

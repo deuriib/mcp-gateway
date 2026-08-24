@@ -1,10 +1,11 @@
 """Tests for the HTTP/SSE gateway server."""
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from mcp_gateway.gateway import Gateway
-from mcp_gateway.registry import Registry
 from mcp_gateway.models import ConnectionType, MCPClientConfig, ToolInfo
+from mcp_gateway.registry import Registry
 
 
 @pytest.fixture
