@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-08-24)
+
+### Features
+
+- Add --docs-url option and open browser in getToolDocs
+  ([`c41f412`](https://github.com/deuriib/mcp-gateway/commit/c41f41209f8c720ab3e270100201f5325a639aed))
+
+
 ## v0.1.4 (2026-08-24)
 
 ### Bug Fixes
