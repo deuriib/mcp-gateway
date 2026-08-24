@@ -92,8 +92,8 @@ For servers requiring OAuth (e.g., Supabase):
 mcp-gway refresh supabase --auth
 
 # Or store token manually
-mkdir -p ~/.config/mcp-gateway/tokens
-echo '{"access_token": "YOUR_TOKEN"}' > ~/.config/mcp-gateway/tokens/supabase.json
+mkdir -p ~/.config/mcp-gway/tokens
+echo '{"access_token": "YOUR_TOKEN"}' > ~/.config/mcp-gway/tokens/supabase.json
 ```
 
 ## Development

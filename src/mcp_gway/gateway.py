@@ -136,7 +136,7 @@ class Gateway:
             return {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "mcp-gateway", "version": "0.1.0"},
+                "serverInfo": {"name": "mcp-gway", "version": "0.1.0"},
             }
         if method == "notifications/initialized":
             return {}

@@ -311,7 +311,7 @@ def refresh(name: str | None, auth: bool) -> None:
 
         if not discovered:
             click.echo(f"Warning: No tools discovered for {server_name}.")
-            click.echo(f"Try: mcp-gateway refresh {server_name} --auth")
+            click.echo(f"Try: mcp-gway refresh {server_name} --auth")
             continue
 
         # Update the registry with new tools

@@ -25,7 +25,7 @@ class FileTokenStorage:
 
     def __init__(self, server_name: str, storage_dir: Path | None = None) -> None:
         self._storage_dir = (
-            storage_dir or Path.home() / ".config" / "mcp-gateway" / "tokens"
+            storage_dir or Path.home() / ".config" / "mcp-gway" / "tokens"
         )
         self._storage_dir.mkdir(parents=True, exist_ok=True)
         self._token_file = self._storage_dir / f"{server_name}.json"
@@ -251,7 +251,7 @@ async def run_oauth_flow(
         output_callback("Warning: Could not discover OAuth metadata.")
         output_callback("Please provide a token manually:")
         output_callback(
-            f'  echo \'{{"access_token": "YOUR_TOKEN"}}\' > ~/.config/mcp-gateway/tokens/{server_name}.json'
+            f'  echo \'{{"access_token": "YOUR_TOKEN"}}\' > ~/.config/mcp-gway/tokens/{server_name}.json'
         )
         return None
 
@@ -273,7 +273,7 @@ async def run_oauth_flow(
     await callback_server.start()
 
     # Dynamic client registration (RFC 7591)
-    client_id = "mcp-gateway"
+    client_id = "mcp-gway"
     client_secret = None
 
     if registration_endpoint:

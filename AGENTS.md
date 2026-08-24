@@ -92,7 +92,7 @@ mcp-gway serve [--port 8080]
 2. Discover OAuth metadata from authorization server
 3. Dynamic client registration (RFC 7591)
 4. PKCE authorization code flow
-5. Token storage in `~/.config/mcp-gateway/tokens/`
+5. Token storage in `~/.config/mcp-gway/tokens/`
 
 ### SSE Transport
 - `GET /mcp` → SSE stream with `endpoint` event
