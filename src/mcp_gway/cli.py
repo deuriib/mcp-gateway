@@ -14,7 +14,7 @@ from mcp_gway.registry import Registry
 
 
 def _get_registry() -> Registry:
-    return Registry(servers_dir=Path("servers"))
+    return Registry(servers_dir=Path.home() / ".config" / "mcp-gway" / "servers")
 
 
 async def _discover_tools(config: MCPClientConfig) -> list[ToolInfo]:

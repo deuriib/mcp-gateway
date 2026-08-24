@@ -4,12 +4,18 @@ import pytest
 from click.testing import CliRunner
 
 from mcp_gway.cli import main
+from mcp_gway.registry import Registry
 
 
 @pytest.fixture
 def runner(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "servers").mkdir()
+
+    def mock_get_registry():
+        return Registry(servers_dir=tmp_path / "servers")
+
+    monkeypatch.setattr("mcp_gway.cli._get_registry", mock_get_registry)
     return CliRunner()
 
 

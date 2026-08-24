@@ -69,7 +69,6 @@ ENV/
 Thumbs.db
 
 # Project specific
-servers/*.pyi
-!servers/.gitkeep
+servers/
 .superpowers/
 .ruff_cache/
