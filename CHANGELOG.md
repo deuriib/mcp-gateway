@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.1.3 (2026-08-24)
+
+### Bug Fixes
+
+- Rename package to mcp-gway for PyPI
+  ([`e1e6622`](https://github.com/deuriib/mcp-gateway/commit/e1e6622d9b139bd23b0cae500aefef8f29ba8d66))
+
+- Rename Python module to mcp_gway to match PyPI package name
+  ([`4c6de5d`](https://github.com/deuriib/mcp-gateway/commit/4c6de5d9a6fc9d3212ba3a98c2e0a1336660a24e))
+
+
 ## v0.1.2 (2026-08-24)
 
 ### Bug Fixes
