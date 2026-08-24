@@ -23,6 +23,19 @@ mcp-gateway = "mcp_gateway.cli:main"
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
 
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["src/mcp_gateway/__init__.py:__version__"]
+
+[tool.semantic_release.branches.main]
+match = "(main|master)"
+match_source = true
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
 [tool.ruff.lint]
 ignore = [
     "BLE001",  # Blind exception catching is intentional for graceful degradation
@@ -37,4 +50,5 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.4",
+    "python-semantic-release>=10.0.0",
 ]
