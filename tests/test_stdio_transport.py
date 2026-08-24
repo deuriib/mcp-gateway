@@ -38,8 +38,9 @@ def test_resolve_absolute_path_valid(tmp_path: Any) -> None:
     assert result == str(existing)
 
 
-def test_resolve_absolute_path_invalid(tmp_path: Any) -> None:
+def test_resolve_absolute_path_invalid(tmp_path: Any, monkeypatch: Any) -> None:
     """An absolute path that does not exist should raise FileNotFoundError."""
+    monkeypatch.setattr(sys, "platform", "win32")
     missing = tmp_path / "nope.exe"
     with pytest.raises(FileNotFoundError, match="not found"):
         resolve_windows_command(str(missing))
