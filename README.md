@@ -1,8 +1,8 @@
 # MCP Gateway
 
-[![PyPI version](https://badge.fury.io/py/mcp-gateway.svg)](https://pypi.org/project/mcp-gateway/)
-[![Python](https://img.shields.io/pypi/pyversions/mcp-gateway)](https://pypi.org/project/mcp-gateway/)
-[![License](https://img.shields.io/pypi/l/mcp-gateway)](https://github.com/deuriib/mcp-gateway/blob/main/LICENSE)
+[![PyPI version](https://badge.fury.io/py/mcp-gway.svg)](https://pypi.org/project/mcp-gway/)
+[![Python](https://img.shields.io/pypi/pyversions/mcp-gway)](https://pypi.org/project/mcp-gway/)
+[![License](https://img.shields.io/pypi/l/mcp-gway)](https://github.com/deuriib/mcp-gateway/blob/main/LICENSE)
 
 A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) servers behind a single HTTP/SSE endpoint with **Code Mode** — reducing LLM input token usage by up to 92% when using multiple MCP servers.
 
@@ -17,7 +17,7 @@ A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) s
 ## Installation
 
 ```bash
-pip install mcp-gateway
+pip install mcp-gway
 ```
 
 Or with [mise](https://mise.jdx.dev/):
@@ -31,19 +31,19 @@ uv sync
 
 ```bash
 # Add an MCP server
-mcp-gateway add youtube --type http --url http://localhost:3001/mcp
+mcp-gway add youtube --type http --url http://localhost:3001/mcp
 
 # Add a stdio server
-mcp-gateway add filesystem --type stdio --command npx --args '["-y", "@anthropic/mcp-filesystem"]'
+mcp-gway add filesystem --type stdio --command npx --args '["-y", "@anthropic/mcp-filesystem"]'
 
 # Add a server requiring OAuth
-mcp-gateway add supabase --type streamable-http --url https://mcp.supabase.com/mcp
+mcp-gway add supabase --type streamable-http --url https://mcp.supabase.com/mcp
 
 # List all servers
-mcp-gateway list
+mcp-gway list
 
 # Start the gateway
-mcp-gateway serve --port 8080
+mcp-gway serve --port 8080
 ```
 
 ## Connect from Claude Desktop
@@ -64,13 +64,13 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 
 | Command | Description |
 |---------|-------------|
-| `mcp-gateway add` | Add an MCP server and generate `.pyi` stub |
-| `mcp-gateway remove` | Remove an MCP server |
-| `mcp-gateway update` | Update tools for a server |
-| `mcp-gateway list` | List all connected servers |
-| `mcp-gateway inspect` | Show tool signatures for a server |
-| `mcp-gateway refresh` | Refresh connection and re-discover tools |
-| `mcp-gateway serve` | Start the gateway server |
+| `mcp-gway add` | Add an MCP server and generate `.pyi` stub |
+| `mcp-gway remove` | Remove an MCP server |
+| `mcp-gway update` | Update tools for a server |
+| `mcp-gway list` | List all connected servers |
+| `mcp-gway inspect` | Show tool signatures for a server |
+| `mcp-gway refresh` | Refresh connection and re-discover tools |
+| `mcp-gway serve` | Start the gateway server |
 
 ## Code Mode
 
@@ -89,7 +89,7 @@ For servers requiring OAuth (e.g., Supabase):
 
 ```bash
 # Trigger OAuth flow
-mcp-gateway refresh supabase --auth
+mcp-gway refresh supabase --auth
 
 # Or store token manually
 mkdir -p ~/.config/mcp-gateway/tokens

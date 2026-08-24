@@ -18,7 +18,7 @@
 ## Project Structure
 
 ```
-src/mcp_gateway/
+src/mcp_gway/
 ├── __init__.py          # Package version
 ├── models.py            # Pydantic models (MCPClientConfig, ToolInfo, ConnectionType)
 ├── registry.py          # .pyi file CRUD (servers/ directory)
@@ -50,12 +50,12 @@ uv run ruff check src/     # Lint
 uv run ruff format src/    # Format
 
 # CLI
-mcp-gateway add <name> --type <http|stdio|sse|streamable-http> [--url <url>] [--command <cmd>]
-mcp-gateway remove <name>
-mcp-gateway list
-mcp-gateway inspect <name>
-mcp-gateway refresh [<name>] [--auth]
-mcp-gateway serve [--port 8080]
+mcp-gway add <name> --type <http|stdio|sse|streamable-http> [--url <url>] [--command <cmd>]
+mcp-gway remove <name>
+mcp-gway list
+mcp-gway inspect <name>
+mcp-gway refresh [<name>] [--auth]
+mcp-gway serve [--port 8080]
 ```
 
 ## Code Conventions
@@ -68,7 +68,7 @@ mcp-gateway serve [--port 8080]
 
 ## Testing
 
-- Tests in `tests/` mirror `src/mcp_gateway/` structure
+- Tests in `tests/` mirror `src/mcp_gway/` structure
 - Use `tmp_path` fixture for file system tests
 - Use `monkeypatch` for mocking
 - Async tests with `@pytest.mark.asyncio`
