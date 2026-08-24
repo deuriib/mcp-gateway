@@ -1,5 +1,8 @@
 """Tests for the HTTP/SSE gateway server."""
 
+import asyncio
+import time
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -9,15 +12,20 @@ from mcp_gway.registry import Registry
 
 
 @pytest.fixture
-def gateway(tmp_path):
-    registry = Registry(servers_dir=tmp_path / "servers")
+def registry(tmp_path):
+    reg = Registry(servers_dir=tmp_path / "servers")
     config = MCPClientConfig(
         name="youtube",
         connection_type=ConnectionType.HTTP,
         connection_string="http://localhost:3001/mcp",
     )
     tools = [ToolInfo(name="search", description="Search videos")]
-    registry.add(config, tools)
+    reg.add(config, tools)
+    return reg
+
+
+@pytest.fixture
+def gateway(registry):
     return Gateway(registry)
 
 
@@ -128,3 +136,70 @@ async def test_post_mcp_direct(gateway):
         tools = data["result"]["tools"]
         names = [t["name"] for t in tools]
         assert "listToolFiles" in names
+
+
+# --- Session TTL + Cleanup Tests ---
+
+
+@pytest.mark.asyncio
+async def test_session_tracks_last_activity(gateway):
+    """Each session should track its last activity timestamp."""
+    session_id = "test-session-1"
+    gateway._create_session(session_id)
+    session = gateway._sessions[session_id]
+    before = time.monotonic()
+    assert session.last_activity >= before - 0.1
+    assert session.last_activity <= before + 0.1
+
+
+@pytest.mark.asyncio
+async def test_session_last_activity_updates_on_message(gateway):
+    """Posting a message should update the session's last_activity."""
+    session_id = "test-session-2"
+    gateway._create_session(session_id)
+    initial_time = gateway._sessions[session_id].last_activity
+    await asyncio.sleep(0.05)
+    payload = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    await gateway._handle_post(payload, session_id=session_id)
+    assert gateway._sessions[session_id].last_activity > initial_time
+
+
+@pytest.mark.asyncio
+async def test_cleanup_evicts_idle_sessions(gateway):
+    """Sessions idle beyond TTL should be evicted."""
+    session_id = "idle-session"
+    gateway._create_session(session_id)
+    gateway._sessions[session_id].last_activity = time.monotonic() - 9999
+    evicted = gateway.cleanup_expired_sessions(max_idle_seconds=300)
+    assert evicted == 1
+    assert session_id not in gateway._sessions
+
+
+@pytest.mark.asyncio
+async def test_cleanup_keeps_active_sessions(gateway):
+    """Active sessions should survive cleanup."""
+    session_id = "active-session"
+    gateway._create_session(session_id)
+    evicted = gateway.cleanup_expired_sessions(max_idle_seconds=300)
+    assert evicted == 0
+    assert session_id in gateway._sessions
+
+
+@pytest.mark.asyncio
+async def test_cleanup_sends_none_to_queue(gateway):
+    """Evicted sessions should receive None sentinel to close the SSE stream."""
+    session_id = "closing-session"
+    gateway._create_session(session_id)
+    queue = gateway._sessions[session_id].queue
+    gateway._sessions[session_id].last_activity = time.monotonic() - 9999
+    gateway.cleanup_expired_sessions(max_idle_seconds=300)
+    assert await queue.get() is None
+
+
+@pytest.mark.asyncio
+async def test_post_to_expired_session_returns_404(gateway):
+    """Posting to a non-existent (evicted) session should return JSON-RPC error."""
+    payload = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    response = await gateway._handle_post(payload, session_id="expired-session")
+    assert "error" in response
+    assert response["error"]["code"] == -32001

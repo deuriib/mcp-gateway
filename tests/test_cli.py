@@ -99,7 +99,6 @@ def test_refresh_server_does_not_trigger_oauth_for_stdio(tmp_path, monkeypatch):
 
     async def mock_run_oauth_flow(**kwargs):
         oauth_called["called"] = True
-        return None
 
     monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
     monkeypatch.setattr("mcp_gway.oauth.run_oauth_flow", mock_run_oauth_flow)
@@ -185,7 +184,6 @@ def test_refresh_server_skips_oauth_when_no_auth_needed(tmp_path, monkeypatch):
 
     async def mock_run_oauth_flow(**kwargs):
         oauth_called["called"] = True
-        return None
 
     monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
     monkeypatch.setattr("mcp_gway.oauth.run_oauth_flow", mock_run_oauth_flow)
@@ -196,3 +194,39 @@ def test_refresh_server_skips_oauth_when_no_auth_needed(tmp_path, monkeypatch):
     assert len(discover_calls) == 1, "Should only call _discover_tools once"
     assert discover_calls[0] is False, "Should try without auth first"
     assert not oauth_called["called"], "OAuth should not be triggered"
+
+
+# --- OAuth callback port configurable ---
+
+
+def test_run_oauth_flow_accepts_callback_port():
+    """run_oauth_flow should accept callback_port parameter."""
+    import inspect
+
+    from mcp_gway.oauth import run_oauth_flow
+
+    sig = inspect.signature(run_oauth_flow)
+    assert "callback_port" in sig.parameters
+    assert sig.parameters["callback_port"].default == 8989
+
+
+def test_add_accepts_oauth_port_option():
+    """CLI add command should accept --oauth-port option."""
+    from click.testing import CliRunner
+
+    from mcp_gway.cli import main
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["add", "--help"])
+    assert "--oauth-port" in result.output
+
+
+def test_refresh_accepts_oauth_port_option():
+    """CLI refresh command should accept --oauth-port option."""
+    from click.testing import CliRunner
+
+    from mcp_gway.cli import main
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["refresh", "--help"])
+    assert "--oauth-port" in result.output

@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import click
@@ -17,82 +19,70 @@ def _get_registry() -> Registry:
     return Registry(servers_dir=Path.home() / ".config" / "mcp-gway" / "servers")
 
 
+@asynccontextmanager
+async def _create_client_transport(
+    config: MCPClientConfig, *, force_auth: bool = False
+) -> AsyncIterator[tuple[object, object]]:
+    """Create the appropriate MCP client transport for a connection type."""
+    if config.connection_type == ConnectionType.STDIO:
+        from mcp import StdioServerParameters
+        from mcp.client.stdio import stdio_client
+
+        params = StdioServerParameters(
+            command=config.stdio_config.command, args=config.stdio_config.args
+        )
+        async with stdio_client(params) as (read, write):
+            yield read, write
+    elif config.connection_type == ConnectionType.STREAMABLE_HTTP:
+        from mcp.client.streamable_http import streamable_http_client
+
+        http_client = None
+        if force_auth:
+            from mcp_gway.oauth import get_authenticated_client
+
+            http_client = await get_authenticated_client(config.name)
+        async with streamable_http_client(
+            config.connection_string, http_client=http_client
+        ) as (read, write):
+            yield read, write
+    else:
+        from mcp.client.sse import sse_client
+
+        headers = None
+        if force_auth:
+            from mcp_gway.oauth import get_authenticated_client
+
+            http_client = await get_authenticated_client(config.name)
+            headers = http_client.headers if http_client else None
+        async with sse_client(config.connection_string, headers=headers) as (
+            read,
+            write,
+        ):
+            yield read, write
+
+
 async def _discover_tools(
     config: MCPClientConfig, *, force_auth: bool = False
 ) -> list[ToolInfo]:
     """Connect to MCP server and discover available tools."""
     try:
-        if config.connection_type == ConnectionType.STDIO:
-            from mcp import ClientSession, StdioServerParameters
-            from mcp.client.stdio import stdio_client
+        from mcp import ClientSession
 
-            params = StdioServerParameters(
-                command=config.stdio_config.command, args=config.stdio_config.args
-            )
-            async with stdio_client(params) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    result = await session.list_tools()
-                    return [
-                        ToolInfo(
-                            name=t.name,
-                            description=t.description or "",
-                            input_schema=t.inputSchema,
-                        )
-                        for t in result.tools
-                    ]
-        elif config.connection_type == ConnectionType.STREAMABLE_HTTP:
-            from mcp import ClientSession
-            from mcp.client.streamable_http import streamable_http_client
-
-            url = config.connection_string
-
-            # Only get authenticated client when force_auth is True
-            http_client = None
-            if force_auth:
-                from mcp_gway.oauth import get_authenticated_client
-
-                http_client = await get_authenticated_client(config.name)
-            async with streamable_http_client(url, http_client=http_client) as (
-                read,
-                write,
-            ):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    result = await session.list_tools()
-                    return [
-                        ToolInfo(
-                            name=t.name,
-                            description=t.description or "",
-                            input_schema=t.inputSchema,
-                        )
-                        for t in result.tools
-                    ]
-        else:
-            from mcp import ClientSession
-            from mcp.client.sse import sse_client
-
-            url = config.connection_string
-
-            # Only get authenticated client when force_auth is True
-            headers = None
-            if force_auth:
-                from mcp_gway.oauth import get_authenticated_client
-
-                http_client = await get_authenticated_client(config.name)
-                headers = http_client.headers if http_client else None
-            async with sse_client(url, headers=headers) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    result = await session.list_tools()
-                    return [
-                        ToolInfo(
-                            name=t.name,
-                            description=t.description or "",
-                            input_schema=t.inputSchema,
-                        )
-                        for t in result.tools
-                    ]
+        async with _create_client_transport(config, force_auth=force_auth) as (
+            read,
+            write,
+        ):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.list_tools()
+                return [
+                    ToolInfo(
+                        name=t.name,
+                        description=t.description or "",
+                        input_schema=t.inputSchema,
+                    )
+                    for t in result.tools
+                ]
     except Exception as e:
         click.echo(f"Warning: Could not connect to server: {e}", err=True)
         return []
@@ -116,6 +106,12 @@ def main() -> None:
 @click.option("--args", help="JSON array of arguments for stdio", default="[]")
 @click.option("--tools", help="Comma-separated tool names (default: all)", default="*")
 @click.option("--docs-url", help="Documentation URL for the server", default=None)
+@click.option(
+    "--oauth-port",
+    type=int,
+    default=8989,
+    help="Local port for OAuth callback",
+)
 def add(
     name: str,
     conn_type: str,
@@ -124,6 +120,7 @@ def add(
     args: str,
     tools: str,
     docs_url: str | None,
+    oauth_port: int,
 ) -> None:
     """Add an MCP server and generate its .pyi stub."""
     stdio_config = None
@@ -164,6 +161,7 @@ def add(
                 server_url=config.connection_string,
                 server_name=name,
                 output_callback=click.echo,
+                callback_port=oauth_port,
             )
         )
         if client:
@@ -187,8 +185,6 @@ def remove(name: str) -> None:
     try:
         registry.remove(name)
         # Clean up OAuth tokens
-        from pathlib import Path
-
         tokens_dir = Path.home() / ".config" / "mcp-gway" / "tokens"
         for suffix in ("", "_client"):
             token_file = tokens_dir / f"{name}{suffix}.json"
@@ -273,7 +269,13 @@ def serve(host: str, port: int) -> None:
 @main.command()
 @click.argument("name", required=False)
 @click.option("--auth", is_flag=True, help="Force OAuth authentication flow")
-def refresh(name: str | None, auth: bool) -> None:
+@click.option(
+    "--oauth-port",
+    type=int,
+    default=8989,
+    help="Local port for OAuth callback",
+)
+def refresh(name: str | None, auth: bool, oauth_port: int) -> None:
     """Refresh server connections and re-discover tools.
 
     If NAME is provided, refreshes only that server.
@@ -328,6 +330,7 @@ def refresh(name: str | None, auth: bool) -> None:
                     server_url=cfg.connection_string,
                     server_name=srv_name,
                     output_callback=click.echo,
+                    callback_port=oauth_port,
                 )
                 if client:
                     click.echo("Authentication successful. Discovering tools...")

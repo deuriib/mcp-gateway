@@ -42,7 +42,11 @@ class MCPClientConfig(BaseModel):
         return v
 
     def model_post_init(self, __context: Any) -> None:
-        if self.connection_type in (ConnectionType.HTTP, ConnectionType.SSE):
+        if self.connection_type in (
+            ConnectionType.HTTP,
+            ConnectionType.SSE,
+            ConnectionType.STREAMABLE_HTTP,
+        ):
             if not self.connection_string:
                 raise ValueError(
                     f"connection_string required for {self.connection_type.value}"

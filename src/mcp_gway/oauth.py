@@ -218,6 +218,7 @@ async def run_oauth_flow(
     server_name: str,
     client_metadata: OAuthClientMetadata | None = None,
     output_callback: Any = None,
+    callback_port: int = 8989,
 ) -> httpx2.AsyncClient | None:
     """Run the full OAuth flow.
 
@@ -269,7 +270,7 @@ async def run_oauth_flow(
     state = secrets.token_urlsafe(32)
 
     # Start callback server
-    callback_server = OAuthCallbackServer(port=8989)
+    callback_server = OAuthCallbackServer(port=callback_port)
     await callback_server.start()
 
     # Dynamic client registration (RFC 7591)

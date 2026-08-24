@@ -1,4 +1,4 @@
-"""Registry for managing .pyi stub files in the servers/ directory."""
+"""Registry for managing .pyi stub files and JSON config in the servers/ directory."""
 
 from __future__ import annotations
 
@@ -17,6 +17,20 @@ class Registry:
         return sorted(p.stem for p in self.servers_dir.glob("*.pyi"))
 
     def add(self, config: MCPClientConfig, tools: list[ToolInfo]) -> None:
+        # Write JSON config
+        config_data = {
+            "name": config.name,
+            "connection_type": config.connection_type.value,
+            "connection_string": config.connection_string or "",
+            "docs_url": config.docs_url or "",
+        }
+        if config.stdio_config:
+            config_data["stdio_command"] = config.stdio_config.command
+            config_data["stdio_args"] = config.stdio_config.args
+        json_path = self.servers_dir / f"{config.name}.json"
+        json_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+
+        # Write clean .pyi (signatures only)
         pyi_path = self.servers_dir / f"{config.name}.pyi"
         content = self._generate_pyi(config, tools)
         pyi_path.write_text(content, encoding="utf-8")
@@ -26,15 +40,43 @@ class Registry:
         if not pyi_path.exists():
             raise FileNotFoundError(f"Server '{name}' not found")
         pyi_path.unlink()
+        json_path = self.servers_dir / f"{name}.json"
+        if json_path.exists():
+            json_path.unlink()
 
     def update(self, name: str, tools: list[ToolInfo]) -> None:
         config = self.get_config(name)
         self.add(config, tools)
 
     def get_config(self, name: str) -> MCPClientConfig:
+        json_path = self.servers_dir / f"{name}.json"
         pyi_path = self.servers_dir / f"{name}.pyi"
-        if not pyi_path.exists():
+
+        if not json_path.exists() and not pyi_path.exists():
             raise FileNotFoundError(f"Server '{name}' not found")
+
+        # Prefer JSON config if it exists
+        if json_path.exists():
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+            conn_type = ConnectionType(data["connection_type"])
+            stdio_config = None
+            if conn_type == ConnectionType.STDIO and data.get("stdio_command"):
+                stdio_config = StdioConfig(
+                    command=data["stdio_command"],
+                    args=data.get("stdio_args", []),
+                )
+            return MCPClientConfig(
+                name=name,
+                connection_type=conn_type,
+                connection_string=data.get("connection_string") or None,
+                stdio_config=stdio_config,
+                docs_url=data.get("docs_url") or None,
+            )
+
+        # Fallback: parse old-style .pyi comments for backward compatibility
+        return self._parse_config_from_pyi(name, pyi_path)
+
+    def _parse_config_from_pyi(self, name: str, pyi_path: Path) -> MCPClientConfig:
         content = pyi_path.read_text(encoding="utf-8")
         connection_type = "http"
         connection_string = ""
@@ -54,7 +96,6 @@ class Registry:
                 stdio_args = line.split(":", 1)[1].strip()
 
         conn_type = ConnectionType(connection_type)
-
         stdio_config = None
         if conn_type == ConnectionType.STDIO and stdio_command:
             stdio_config = StdioConfig(
@@ -103,21 +144,12 @@ class Registry:
 
     def _generate_pyi(self, config: MCPClientConfig, tools: list[ToolInfo]) -> str:
         name = config.name
-        conn_type = config.connection_type.value
-        conn_str = config.connection_string or ""
-        doc_url = config.docs_url or ""
         lines = [
             f"# {name} server tools",
             f"# Usage: {name}.tool_name(param=value)",
             f'# For detailed docs: use getToolDocs(server="{name}", tool="tool_name")',
-            f"# connection_type: {conn_type}",
-            f"# connection_string: {conn_str}",
-            f"# docs_url: {doc_url}",
+            "",
         ]
-        if config.stdio_config:
-            lines.append(f"# stdio_command: {config.stdio_config.command}")
-            lines.append(f"# stdio_args: {json.dumps(config.stdio_config.args)}")
-        lines.append("")
         for tool in tools:
             sig = self._make_signature(tool)
             lines.append(f"def {sig} -> dict:  # {tool.description}")

@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import inspect
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 
 import starlark as sl
+
+
+class SandboxTimeoutError(Exception):
+    """Raised when code execution exceeds the timeout."""
 
 
 class StarlarkSandbox:
@@ -36,13 +42,23 @@ class StarlarkSandbox:
 
         full_code = "\n".join(preamble_lines) + "\n" + code if preamble_lines else code
 
-        ast = sl.parse("code.star", full_code)
-        sl.eval(mod, ast, self.globals)
+        def _run() -> object:
+            ast = sl.parse("code.star", full_code)
+            sl.eval(mod, ast, self.globals)
+            try:
+                return mod["result"]
+            except (KeyError, Exception):
+                raise RuntimeError(
+                    "Code did not assign to 'result' variable. "
+                    "Assign your output to 'result' to return it."
+                )
 
-        try:
-            return mod["result"]
-        except (KeyError, Exception):
-            raise RuntimeError(
-                "Code did not assign to 'result' variable. "
-                "Assign your output to 'result' to return it."
-            )
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_run)
+            try:
+                return future.result(timeout=timeout)
+            except FuturesTimeoutError:
+                raise SandboxTimeoutError(
+                    f"Code execution timed out after {timeout}s. "
+                    "Avoid infinite loops or long-running operations."
+                )

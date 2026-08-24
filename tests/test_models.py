@@ -62,3 +62,17 @@ def test_http_requires_connection_string():
 def test_stdio_requires_stdio_config():
     with pytest.raises(ValueError, match="stdio_config required"):
         MCPClientConfig(name="filesystem", connection_type=ConnectionType.STDIO)
+
+
+def test_streamable_http_requires_connection_string():
+    with pytest.raises(ValueError, match="connection_string required"):
+        MCPClientConfig(name="myserver", connection_type=ConnectionType.STREAMABLE_HTTP)
+
+
+def test_streamable_http_valid():
+    config = MCPClientConfig(
+        name="myserver",
+        connection_type=ConnectionType.STREAMABLE_HTTP,
+        connection_string="http://localhost:3001/mcp",
+    )
+    assert config.connection_type == ConnectionType.STREAMABLE_HTTP
