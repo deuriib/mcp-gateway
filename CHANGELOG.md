@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.4.3 (2026-08-24)
+
+### Bug Fixes
+
+- Refresh continues after individual server errors
+  ([`4a9afe3`](https://github.com/deuriib/mcp-gateway/commit/4a9afe300efd0c3d774ada45d6798c8273cdc809))
+
+Extract _refresh_server as standalone async function (was defined inside the for loop). Wrap each
+  server refresh in try/except so a failure in one server does not abort the entire refresh cycle.
+
+
 ## v0.4.2 (2026-08-24)
 
 ### Bug Fixes
