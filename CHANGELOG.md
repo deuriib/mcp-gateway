@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.5.1 (2026-08-24)
+
+### Bug Fixes
+
+- Sanitize hyphenated MCP tool names for Starlark sandbox
+  ([`55ca24d`](https://github.com/deuriib/mcp-gateway/commit/55ca24dd17fac49685733cdbb720106751d546f0))
+
+MCP servers like context7 expose tools with hyphens (query-docs, resolve-library-id) which break
+  Starlark struct syntax. Add _sanitize_identifier() to convert non-identifier characters to
+  underscores at the Starlark boundary, preserving original names for MCP calls.
+
+
 ## v0.5.0 (2026-08-24)
 
 ### Bug Fixes
