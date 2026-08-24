@@ -17,7 +17,9 @@ def _get_registry() -> Registry:
     return Registry(servers_dir=Path.home() / ".config" / "mcp-gway" / "servers")
 
 
-async def _discover_tools(config: MCPClientConfig) -> list[ToolInfo]:
+async def _discover_tools(
+    config: MCPClientConfig, *, force_auth: bool = False
+) -> list[ToolInfo]:
     """Connect to MCP server and discover available tools."""
     try:
         if config.connection_type == ConnectionType.STDIO:
@@ -47,10 +49,12 @@ async def _discover_tools(config: MCPClientConfig) -> list[ToolInfo]:
 
             url = config.connection_string
 
-            # Try to get authenticated client
-            from mcp_gway.oauth import get_authenticated_client
+            # Only get authenticated client when force_auth is True
+            http_client = None
+            if force_auth:
+                from mcp_gway.oauth import get_authenticated_client
 
-            http_client = await get_authenticated_client(config.name)
+                http_client = await get_authenticated_client(config.name)
             async with streamable_http_client(url, http_client=http_client) as (
                 read,
                 write,
@@ -74,11 +78,13 @@ async def _discover_tools(config: MCPClientConfig) -> list[ToolInfo]:
 
             url = config.connection_string
 
-            # Try to get authenticated client
-            from mcp_gway.oauth import get_authenticated_client
+            # Only get authenticated client when force_auth is True
+            headers = None
+            if force_auth:
+                from mcp_gway.oauth import get_authenticated_client
 
-            http_client = await get_authenticated_client(config.name)
-            headers = http_client.headers if http_client else None
+                http_client = await get_authenticated_client(config.name)
+                headers = http_client.headers if http_client else None
             async with sse_client(url, headers=headers) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
@@ -149,6 +155,27 @@ def add(
     config.tools_to_execute = tool_filter
     click.echo(f"Discovering tools from {name}...")
     discovered = asyncio.run(_discover_tools(config))
+
+    # Auto-auth: if no tools and server type supports OAuth, try authentication
+    if not discovered and config.connection_type in (
+        ConnectionType.HTTP,
+        ConnectionType.SSE,
+        ConnectionType.STREAMABLE_HTTP,
+    ):
+        from mcp_gway.oauth import run_oauth_flow
+
+        click.echo("Connection failed. Trying OAuth authentication...")
+        client = asyncio.run(
+            run_oauth_flow(
+                server_url=config.connection_string,
+                server_name=name,
+                output_callback=click.echo,
+            )
+        )
+        if client:
+            click.echo("Authentication successful. Discovering tools...")
+            discovered = asyncio.run(_discover_tools(config, force_auth=True))
+
     if tools != "*":
         discovered = [t for t in discovered if t.name in tool_filter]
     if not discovered:
@@ -161,10 +188,18 @@ def add(
 @main.command()
 @click.argument("name")
 def remove(name: str) -> None:
-    """Remove an MCP server."""
+    """Remove an MCP server and its stored tokens."""
     registry = _get_registry()
     try:
         registry.remove(name)
+        # Clean up OAuth tokens
+        from pathlib import Path
+
+        tokens_dir = Path.home() / ".config" / "mcp-gway" / "tokens"
+        for suffix in ("", "_client"):
+            token_file = tokens_dir / f"{name}{suffix}.json"
+            if token_file.exists():
+                token_file.unlink()
         click.echo(f"Removed {name}.")
     except FileNotFoundError:
         click.echo(f"Error: Server '{name}' not found.", err=True)
@@ -278,43 +313,35 @@ def refresh(name: str | None, auth: bool) -> None:
         async def _refresh_server(
             cfg: MCPClientConfig, srv_name: str
         ) -> list[ToolInfo]:
-            # If auth flag is set or server is HTTP/SSE, try OAuth flow first
-            if auth or cfg.connection_type in (
+            # Step 1: Try connecting without auth
+            discovered = await _discover_tools(cfg, force_auth=False)
+
+            # Step 2: If empty and auth is needed, try OAuth flow
+            needs_auth = auth or cfg.connection_type in (
                 ConnectionType.HTTP,
                 ConnectionType.SSE,
                 ConnectionType.STREAMABLE_HTTP,
-            ):
+            )
+            if not discovered and needs_auth:
                 from mcp_gway.oauth import run_oauth_flow
 
-                # Check if we need to run OAuth
                 if auth:
                     click.echo("Running OAuth authentication flow...")
-                    client = await run_oauth_flow(
-                        server_url=cfg.connection_string,
-                        server_name=srv_name,
-                        output_callback=click.echo,
-                    )
-                    if client:
-                        click.echo("Authentication successful. Discovering tools...")
-                    else:
-                        click.echo("Authentication failed. Attempting without auth...")
                 else:
-                    # Try with existing tokens first
-                    from mcp_gway.oauth import get_authenticated_client
+                    click.echo("Connection failed. Trying OAuth authentication...")
 
-                    client = await get_authenticated_client(srv_name)
-                    if client:
-                        click.echo("Using existing token...")
-                    else:
-                        # No tokens, try OAuth flow
-                        click.echo("No valid token found. Starting OAuth flow...")
-                        client = await run_oauth_flow(
-                            server_url=cfg.connection_string,
-                            server_name=srv_name,
-                            output_callback=click.echo,
-                        )
+                client = await run_oauth_flow(
+                    server_url=cfg.connection_string,
+                    server_name=srv_name,
+                    output_callback=click.echo,
+                )
+                if client:
+                    click.echo("Authentication successful. Discovering tools...")
+                    discovered = await _discover_tools(cfg, force_auth=True)
+                else:
+                    click.echo("Authentication failed.")
 
-            return await _discover_tools(cfg)
+            return discovered
 
         discovered = asyncio.run(_refresh_server(config, server_name))
 

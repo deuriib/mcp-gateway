@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from mcp_gway.models import MCPClientConfig, ToolInfo
+from mcp_gway.models import ConnectionType, MCPClientConfig, StdioConfig, ToolInfo
 
 
 class Registry:
@@ -38,6 +39,8 @@ class Registry:
         connection_type = "http"
         connection_string = ""
         docs_url = ""
+        stdio_command = ""
+        stdio_args = "[]"
         for line in content.splitlines():
             if line.startswith("# connection_type:"):
                 connection_type = line.split(":", 1)[1].strip()
@@ -45,10 +48,30 @@ class Registry:
                 connection_string = line.split(":", 1)[1].strip()
             elif line.startswith("# docs_url:"):
                 docs_url = line.split(":", 1)[1].strip()
+            elif line.startswith("# stdio_command:"):
+                stdio_command = line.split(":", 1)[1].strip()
+            elif line.startswith("# stdio_args:"):
+                stdio_args = line.split(":", 1)[1].strip()
+
+        conn_type = ConnectionType(connection_type)
+
+        stdio_config = None
+        if conn_type == ConnectionType.STDIO and stdio_command:
+            stdio_config = StdioConfig(
+                command=stdio_command, args=json.loads(stdio_args)
+            )
+
+        if conn_type == ConnectionType.STDIO and not stdio_config:
+            # Backward compat: old .pyi files without stdio_command.
+            # Reconstruct StdioConfig from connection_string (which holds the command).
+            if connection_string:
+                stdio_config = StdioConfig(command=connection_string, args=[])
+
         return MCPClientConfig(
             name=name,
-            connection_type=connection_type,
+            connection_type=conn_type,
             connection_string=connection_string or None,
+            stdio_config=stdio_config,
             docs_url=docs_url or None,
         )
 
@@ -100,8 +123,11 @@ class Registry:
             f"# connection_type: {conn_type}",
             f"# connection_string: {conn_str}",
             f"# docs_url: {doc_url}",
-            "",
         ]
+        if config.stdio_config:
+            lines.append(f"# stdio_command: {config.stdio_config.command}")
+            lines.append(f"# stdio_args: {json.dumps(config.stdio_config.args)}")
+        lines.append("")
         for tool in tools:
             sig = self._make_signature(tool)
             lines.append(f"def {sig} -> dict:  # {tool.description}")
