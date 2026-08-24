@@ -224,3 +224,30 @@ def memory_recall() -> dict:  # Recall memories
     assert config.connection_type == ConnectionType.STDIO
     assert config.stdio_config is not None
     assert config.stdio_config.command == "npx"
+
+
+# --- FIX 1: envs roundtrip ---
+
+
+def test_registry_stores_and_restores_envs(registry):
+    """add() with envs should store them in JSON, get_config should restore them."""
+    config = MCPClientConfig(
+        name="envserver",
+        connection_type=ConnectionType.STDIO,
+        stdio_config=StdioConfig(
+            command="node",
+            args=["server.js"],
+            envs=["FOO=bar", "BAZ=qux"],
+        ),
+    )
+    tools = [ToolInfo(name="ping", description="Ping")]
+    registry.add(config, tools)
+
+    restored = registry.get_config("envserver")
+    assert restored.stdio_config is not None
+    assert restored.stdio_config.envs == ["FOO=bar", "BAZ=qux"]
+
+    # Verify raw JSON contains stdio_envs
+    json_path = registry.servers_dir / "envserver.json"
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    assert data["stdio_envs"] == ["FOO=bar", "BAZ=qux"]

@@ -19,6 +19,20 @@ def _get_registry() -> Registry:
     return Registry(servers_dir=Path.home() / ".config" / "mcp-gway" / "servers")
 
 
+def _parse_envs(envs: list[str]) -> dict[str, str]:
+    """Parse KEY=VALUE env strings into a dict."""
+    result: dict[str, str] = {}
+    for item in envs:
+        key, _, value = item.partition("=")
+        result[key] = value
+    return result
+
+
+def _default_on_noise(count: int) -> None:
+    """Log a warning when noise is detected in the server output."""
+    click.echo(f"Warning: {count} non-JSON messages received from server", err=True)
+
+
 @asynccontextmanager
 async def _create_client_transport(
     config: MCPClientConfig, *, force_auth: bool = False
@@ -26,12 +40,27 @@ async def _create_client_transport(
     """Create the appropriate MCP client transport for a connection type."""
     if config.connection_type == ConnectionType.STDIO:
         from mcp import StdioServerParameters
-        from mcp.client.stdio import stdio_client
 
-        params = StdioServerParameters(
-            command=config.stdio_config.command, args=config.stdio_config.args
+        from mcp_gway.stdio_transport import (
+            filtered_stdio_client,
+            resolve_windows_command,
         )
-        async with stdio_client(params) as (read, write):
+
+        # We resolve commands ourselves to prefer .exe over .cmd/.bat/.ps1.
+        # The MCP SDK's built-in resolution prefers shell-script shims (.cmd first).
+        resolved = resolve_windows_command(config.stdio_config.command)
+        env_dict = (
+            _parse_envs(config.stdio_config.envs) if config.stdio_config.envs else None
+        )
+        params = StdioServerParameters(
+            command=resolved,
+            args=config.stdio_config.args,
+            env=env_dict,
+        )
+        async with filtered_stdio_client(server=params, on_noise=_default_on_noise) as (
+            read,
+            write,
+        ):
             yield read, write
     elif config.connection_type == ConnectionType.STREAMABLE_HTTP:
         from mcp.client.streamable_http import streamable_http_client
@@ -79,7 +108,7 @@ async def _discover_tools(
                     ToolInfo(
                         name=t.name,
                         description=t.description or "",
-                        input_schema=t.inputSchema,
+                        input_schema=t.input_schema,
                     )
                     for t in result.tools
                 ]
@@ -112,6 +141,9 @@ def main() -> None:
     default=8989,
     help="Local port for OAuth callback",
 )
+@click.option(
+    "--env", "envs", multiple=True, help="Environment variable KEY=VALUE (repeatable)"
+)
 def add(
     name: str,
     conn_type: str,
@@ -121,6 +153,7 @@ def add(
     tools: str,
     docs_url: str | None,
     oauth_port: int,
+    envs: tuple[str, ...],
 ) -> None:
     """Add an MCP server and generate its .pyi stub."""
     stdio_config = None
@@ -129,7 +162,9 @@ def add(
         if not command:
             click.echo("Error: --command required for stdio connection", err=True)
             sys.exit(1)
-        stdio_config = StdioConfig(command=command, args=json.loads(args))
+        stdio_config = StdioConfig(
+            command=command, args=json.loads(args), envs=list(envs)
+        )
         connection_string = command
     elif conn_type in ("http", "sse", "streamable-http"):
         if not url:

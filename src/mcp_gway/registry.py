@@ -27,6 +27,8 @@ class Registry:
         if config.stdio_config:
             config_data["stdio_command"] = config.stdio_config.command
             config_data["stdio_args"] = config.stdio_config.args
+            if config.stdio_config.envs:
+                config_data["stdio_envs"] = config.stdio_config.envs
         json_path = self.servers_dir / f"{config.name}.json"
         json_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
 
@@ -64,6 +66,7 @@ class Registry:
                 stdio_config = StdioConfig(
                     command=data["stdio_command"],
                     args=data.get("stdio_args", []),
+                    envs=data.get("stdio_envs", []),
                 )
             return MCPClientConfig(
                 name=name,

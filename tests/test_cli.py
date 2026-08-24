@@ -232,6 +232,177 @@ def test_refresh_accepts_oauth_port_option():
     assert "--oauth-port" in result.output
 
 
+# --- FIX 1: --env option and env passthrough ---
+
+
+def test_add_stdio_with_env(tmp_path, monkeypatch):
+    """add --env KEY=VALUE should populate StdioConfig.envs in stored config."""
+    from mcp_gway.models import ToolInfo
+    from mcp_gway.registry import Registry
+
+    servers_dir = tmp_path / "servers"
+    servers_dir.mkdir()
+
+    def mock_get_registry():
+        return Registry(servers_dir=servers_dir)
+
+    monkeypatch.setattr("mcp_gway.cli._get_registry", mock_get_registry)
+
+    async def mock_discover_tools(config, force_auth=False):
+        return [ToolInfo(name="ping", description="Ping")]
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "add",
+            "myserver",
+            "--type",
+            "stdio",
+            "--command",
+            "node",
+            "--env",
+            "FOO=bar",
+            "--env",
+            "BAZ=qux",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    registry = Registry(servers_dir=servers_dir)
+    config = registry.get_config("myserver")
+    assert config.stdio_config is not None
+    assert config.stdio_config.envs == ["FOO=bar", "BAZ=qux"]
+
+
+def test_create_client_transport_passes_env(tmp_path, monkeypatch):
+    """_create_client_transport should parse envs into a dict for StdioServerParameters."""
+    import asyncio
+
+    from mcp_gway.models import ConnectionType, MCPClientConfig, StdioConfig
+
+    config = MCPClientConfig(
+        name="envtest",
+        connection_type=ConnectionType.STDIO,
+        stdio_config=StdioConfig(
+            command="echo",
+            args=["hello"],
+            envs=["FOO=bar", "BAZ=qux"],
+        ),
+    )
+
+    captured_params = {}
+
+    def mock_filtered_stdio_client(*, server=None, read_stream=None, on_noise=None):
+        from contextlib import asynccontextmanager
+
+        class _FakeStream:
+            def __init__(self, items):
+                self._items = iter(items)
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                try:
+                    return next(self._items)
+                except StopIteration:
+                    raise StopAsyncIteration
+
+        captured_params["env"] = server.env if server else None
+
+        @asynccontextmanager
+        async def _fake():
+            msg = {"jsonrpc": "2.0", "id": 1, "result": {}}
+            from mcp_gway.stdio_transport import _FilteredReadStream
+
+            stream = _FilteredReadStream(_FakeStream([msg]), on_noise)
+            yield stream, None
+
+        return _fake()
+
+    monkeypatch.setattr(
+        "mcp_gway.stdio_transport.filtered_stdio_client",
+        mock_filtered_stdio_client,
+    )
+    monkeypatch.setattr(
+        "mcp_gway.stdio_transport.resolve_windows_command", lambda cmd: cmd
+    )
+
+    async def run_test():
+        from mcp_gway.cli import _create_client_transport
+
+        async with _create_client_transport(config) as (_read, _write):
+            pass
+
+    asyncio.run(run_test())
+    assert captured_params["env"] == {"FOO": "bar", "BAZ": "qux"}
+
+
+def test_create_client_transport_passes_on_noise(tmp_path, monkeypatch):
+    """_create_client_transport should pass on_noise callback to filtered_stdio_client."""
+    import asyncio
+
+    from mcp_gway.models import ConnectionType, MCPClientConfig, StdioConfig
+
+    config = MCPClientConfig(
+        name="noisetest",
+        connection_type=ConnectionType.STDIO,
+        stdio_config=StdioConfig(command="echo", args=["hello"]),
+    )
+
+    captured_on_noise: dict[str, object] = {}
+
+    def mock_filtered_stdio_client(*, server=None, read_stream=None, on_noise=None):
+        from contextlib import asynccontextmanager
+
+        class _FakeStream:
+            def __init__(self, items):
+                self._items = iter(items)
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                try:
+                    return next(self._items)
+                except StopIteration:
+                    raise StopAsyncIteration
+
+        captured_on_noise["callback"] = on_noise
+
+        @asynccontextmanager
+        async def _fake():
+            msg = {"jsonrpc": "2.0", "id": 1, "result": {}}
+            from mcp_gway.stdio_transport import _FilteredReadStream
+
+            stream = _FilteredReadStream(_FakeStream([msg]), on_noise)
+            yield stream, None
+
+        return _fake()
+
+    monkeypatch.setattr(
+        "mcp_gway.stdio_transport.filtered_stdio_client",
+        mock_filtered_stdio_client,
+    )
+    monkeypatch.setattr(
+        "mcp_gway.stdio_transport.resolve_windows_command", lambda cmd: cmd
+    )
+
+    async def run_test():
+        from mcp_gway.cli import _create_client_transport
+
+        async with _create_client_transport(config) as (_read, _write):
+            pass
+
+    asyncio.run(run_test())
+    assert captured_on_noise["callback"] is not None, (
+        "on_noise callback should be passed to filtered_stdio_client"
+    )
+
+
 # --- list command shows correct connection type ---
 
 
