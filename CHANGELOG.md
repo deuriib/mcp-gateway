@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.2.1 (2026-08-24)
+
+### Bug Fixes
+
+- Return docs_url in getToolDocs instead of opening browser
+  ([`7bc1457`](https://github.com/deuriib/mcp-gateway/commit/7bc145717a113e8840d4f7dcce5c80ba4d14875a))
+
+
 ## v0.2.0 (2026-08-24)
 
 ### Features
