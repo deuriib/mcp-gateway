@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.4.2 (2026-08-24)
+
+### Bug Fixes
+
+- Parse stdio command from connection_string in old .pyi fallback
+  ([`1acdeed`](https://github.com/deuriib/mcp-gateway/commit/1acdeed05d4b856aafeeab2bf9ec822f418d4770))
+
+Old-format STDIO .pyi files store the command in # connection_string: instead of # stdio_command:.
+  The fallback parser was checking for stdio_command first and creating no StdioConfig when it was
+  missing, causing validation errors on refresh.
+
+
 ## v0.4.1 (2026-08-24)
 
 ### Bug Fixes
