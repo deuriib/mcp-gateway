@@ -204,3 +204,23 @@ def search(query: str) -> dict:  # Search videos
     config = registry.get_config("testserver")
     assert config.connection_type == ConnectionType.HTTP
     assert config.connection_string == "http://localhost:3001/mcp"
+
+
+def test_backward_compat_stdio_old_format(registry):
+    """Old STDIO .pyi with command in connection_string, no stdio_command comment."""
+    old_pyi = """# agentmemory server tools
+# Usage: agentmemory.tool_name(param=value)
+# connection_type: stdio
+# connection_string: npx
+# docs_url:
+
+def memory_recall() -> dict:  # Recall memories
+    ...
+"""
+    registry.servers_dir.mkdir(parents=True, exist_ok=True)
+    (registry.servers_dir / "agentmemory.pyi").write_text(old_pyi)
+
+    config = registry.get_config("agentmemory")
+    assert config.connection_type == ConnectionType.STDIO
+    assert config.stdio_config is not None
+    assert config.stdio_config.command == "npx"

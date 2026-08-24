@@ -97,10 +97,11 @@ class Registry:
 
         conn_type = ConnectionType(connection_type)
         stdio_config = None
-        if conn_type == ConnectionType.STDIO and stdio_command:
-            stdio_config = StdioConfig(
-                command=stdio_command, args=json.loads(stdio_args)
-            )
+        if conn_type == ConnectionType.STDIO:
+            # Old format: command stored in connection_string
+            command = stdio_command or connection_string
+            if command:
+                stdio_config = StdioConfig(command=command, args=json.loads(stdio_args))
 
         return MCPClientConfig(
             name=name,
