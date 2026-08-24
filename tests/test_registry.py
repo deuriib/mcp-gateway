@@ -4,7 +4,13 @@ import json
 
 import pytest
 
-from mcp_gway.models import ConnectionType, MCPClientConfig, StdioConfig, ToolInfo
+from mcp_gway.models import (
+    ConnectionType,
+    MCPClientConfig,
+    MCPServerConfig,
+    StdioConfig,
+    ToolInfo,
+)
 from mcp_gway.registry import Registry
 
 
@@ -247,7 +253,106 @@ def test_registry_stores_and_restores_envs(registry):
     assert restored.stdio_config is not None
     assert restored.stdio_config.envs == ["FOO=bar", "BAZ=qux"]
 
-    # Verify raw JSON contains stdio_envs
     json_path = registry.servers_dir / "envserver.json"
     data = json.loads(json_path.read_text(encoding="utf-8"))
-    assert data["stdio_envs"] == ["FOO=bar", "BAZ=qux"]
+    if "environment" in data:
+        assert data["environment"] == {"FOO": "bar", "BAZ": "qux"}
+    else:
+        assert data["stdio_envs"] == ["FOO=bar", "BAZ=qux"]
+
+
+def test_add_creates_opencode_json(registry):
+    config = MCPServerConfig(
+        name="myserver",
+        type="remote",
+        url="https://mcp.example.com/mcp",
+        headers={"Authorization": "Bearer TOKEN"},
+    )
+    tools = [ToolInfo(name="search", description="Search videos")]
+    registry.add(config, tools)
+    data = json.loads(
+        (registry.servers_dir / "myserver.json").read_text(encoding="utf-8")
+    )
+    assert data["type"] == "remote"
+    assert data["url"] == "https://mcp.example.com/mcp"
+    assert data["headers"] == {"Authorization": "Bearer TOKEN"}
+    assert data["enabled"] is True
+    assert data["timeout"] == 5000
+
+
+def test_add_local_config_json(registry):
+    config = MCPServerConfig(
+        name="myserver",
+        type="local",
+        command=["npx", "-y", "my-mcp-server"],
+        environment={"FOO": "bar"},
+    )
+    tools = [ToolInfo(name="ping", description="Ping")]
+    registry.add(config, tools)
+    data = json.loads((registry.servers_dir / "myserver.json").read_text())
+    assert data["type"] == "local"
+    assert data["command"] == ["npx", "-y", "my-mcp-server"]
+    assert data["environment"] == {"FOO": "bar"}
+
+
+def test_get_config_new_format(registry):
+    config = MCPServerConfig(
+        name="myserver", type="remote", url="https://mcp.example.com/mcp"
+    )
+    registry.add(config, [ToolInfo(name="search", description="Search videos")])
+    restored = registry.get_config("myserver")
+    assert restored.type == "remote"
+    assert restored.url == "https://mcp.example.com/mcp"
+
+
+def test_auto_migrate_old_json(registry):
+    old_data = {
+        "name": "myserver",
+        "connection_type": "sse",
+        "connection_string": "https://mcp.example.com/sse",
+        "docs_url": "",
+    }
+    json_path = registry.servers_dir / "myserver.json"
+    json_path.write_text(json.dumps(old_data, indent=2), encoding="utf-8")
+    (registry.servers_dir / "myserver.pyi").write_text(
+        "# myserver server tools\n\ndef search() -> dict:\n    ...\n"
+    )
+    config = registry.get_config("myserver")
+    assert config.type == "remote"
+    assert config.url == "https://mcp.example.com/sse"
+    assert config.resolved_transport == "sse"
+    migrated = json.loads(json_path.read_text(encoding="utf-8"))
+    assert migrated["type"] == "remote"
+    assert "connection_type" not in migrated
+
+
+def test_auto_migrate_old_stdio_json(registry):
+    old_data = {
+        "name": "gitserver",
+        "connection_type": "stdio",
+        "connection_string": "npx",
+        "stdio_command": "npx",
+        "stdio_args": ["-y", "mcp-server-git"],
+        "stdio_envs": ["FOO=bar"],
+    }
+    json_path = registry.servers_dir / "gitserver.json"
+    json_path.write_text(json.dumps(old_data, indent=2), encoding="utf-8")
+    (registry.servers_dir / "gitserver.pyi").write_text(
+        "# gitserver\n\ndef clone() -> dict:\n    ...\n"
+    )
+    config = registry.get_config("gitserver")
+    assert config.type == "local"
+    assert config.command == ["npx", "-y", "mcp-server-git"]
+    assert config.environment == {"FOO": "bar"}
+
+
+def test_add_stores_resolved_transport(registry):
+    config = MCPServerConfig(
+        name="myserver",
+        type="remote",
+        url="https://mcp.example.com/mcp",
+        resolved_transport="streamable-http",
+    )
+    registry.add(config, [ToolInfo(name="search", description="Search")])
+    data = json.loads((registry.servers_dir / "myserver.json").read_text())
+    assert data["resolved_transport"] == "streamable-http"
