@@ -264,3 +264,50 @@ def test_list_shows_correct_type_for_new_format(tmp_path, monkeypatch):
     assert result.exit_code == 0
     assert "STDIO" in result.output
     assert "HTTP" not in result.output
+
+
+# --- refresh resilience ---
+
+
+def test_refresh_continues_after_server_error(tmp_path, monkeypatch):
+    """refresh should continue to next server if one fails."""
+    from mcp_gway.models import ConnectionType, MCPClientConfig, ToolInfo
+
+    servers_dir = tmp_path / "servers"
+    servers_dir.mkdir()
+
+    def mock_get_registry():
+        return Registry(servers_dir=servers_dir)
+
+    monkeypatch.setattr("mcp_gway.cli._get_registry", mock_get_registry)
+
+    registry = Registry(servers_dir=servers_dir)
+    # Add two servers
+    for name in ("server_a", "server_b"):
+        config = MCPClientConfig(
+            name=name,
+            connection_type=ConnectionType.HTTP,
+            connection_string=f"http://localhost:9999/{name}",
+        )
+        registry.add(config, [ToolInfo(name="ping", description="Ping")])
+
+    call_count = {"n": 0}
+
+    async def mock_discover(cfg, force_auth=False):
+        call_count["n"] += 1
+        if cfg.name == "server_a":
+            raise RuntimeError("Connection refused")
+        return [ToolInfo(name="ping", description="Ping")]
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+
+    from click.testing import CliRunner
+
+    from mcp_gway.cli import main
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["refresh"])
+    assert result.exit_code == 0
+    assert "Error refreshing server_a" in result.output
+    assert "Refreshed server_b" in result.output
+    assert call_count["n"] == 2, "Both servers should be attempted"

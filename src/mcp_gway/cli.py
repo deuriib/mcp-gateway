@@ -266,6 +266,43 @@ def serve(host: str, port: int) -> None:
     uvicorn.run(gateway.app, host=host, port=port)
 
 
+async def _refresh_server(
+    cfg: MCPClientConfig,
+    srv_name: str,
+    force_auth: bool,
+    oauth_port: int = 8989,
+) -> list[ToolInfo]:
+    """Refresh a single server: try without auth, then with OAuth if needed."""
+    discovered = await _discover_tools(cfg, force_auth=False)
+
+    needs_auth = force_auth or cfg.connection_type in (
+        ConnectionType.HTTP,
+        ConnectionType.SSE,
+        ConnectionType.STREAMABLE_HTTP,
+    )
+    if not discovered and needs_auth:
+        from mcp_gway.oauth import run_oauth_flow
+
+        if force_auth:
+            click.echo("Running OAuth authentication flow...")
+        else:
+            click.echo("Connection failed. Trying OAuth authentication...")
+
+        client = await run_oauth_flow(
+            server_url=cfg.connection_string,
+            server_name=srv_name,
+            output_callback=click.echo,
+            callback_port=oauth_port,
+        )
+        if client:
+            click.echo("Authentication successful. Discovering tools...")
+            discovered = await _discover_tools(cfg, force_auth=True)
+        else:
+            click.echo("Authentication failed.")
+
+    return discovered
+
+
 @main.command()
 @click.argument("name", required=False)
 @click.option("--auth", is_flag=True, help="Force OAuth authentication flow")
@@ -306,41 +343,13 @@ def refresh(name: str | None, auth: bool, oauth_port: int) -> None:
 
         click.echo(f"\n--- {server_name} ({config.connection_type.value}) ---")
 
-        async def _refresh_server(
-            cfg: MCPClientConfig, srv_name: str
-        ) -> list[ToolInfo]:
-            # Step 1: Try connecting without auth
-            discovered = await _discover_tools(cfg, force_auth=False)
-
-            # Step 2: If empty and auth is needed, try OAuth flow
-            needs_auth = auth or cfg.connection_type in (
-                ConnectionType.HTTP,
-                ConnectionType.SSE,
-                ConnectionType.STREAMABLE_HTTP,
+        try:
+            discovered = asyncio.run(
+                _refresh_server(config, server_name, auth, oauth_port)
             )
-            if not discovered and needs_auth:
-                from mcp_gway.oauth import run_oauth_flow
-
-                if auth:
-                    click.echo("Running OAuth authentication flow...")
-                else:
-                    click.echo("Connection failed. Trying OAuth authentication...")
-
-                client = await run_oauth_flow(
-                    server_url=cfg.connection_string,
-                    server_name=srv_name,
-                    output_callback=click.echo,
-                    callback_port=oauth_port,
-                )
-                if client:
-                    click.echo("Authentication successful. Discovering tools...")
-                    discovered = await _discover_tools(cfg, force_auth=True)
-                else:
-                    click.echo("Authentication failed.")
-
-            return discovered
-
-        discovered = asyncio.run(_refresh_server(config, server_name))
+        except Exception as e:
+            click.echo(f"Error refreshing {server_name}: {e}", err=True)
+            continue
 
         if not discovered:
             click.echo(f"Warning: No tools discovered for {server_name}.")
