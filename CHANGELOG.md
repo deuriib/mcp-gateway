@@ -1,6 +1,29 @@
 # CHANGELOG
 
 
+## v0.4.4 (2026-08-24)
+
+### Bug Fixes
+
+- Mock win32 platform in absolute_path_invalid test for CI (Linux)
+  ([`1c8faad`](https://github.com/deuriib/mcp-gateway/commit/1c8faad645948334fd8747bca0f00bbced993012))
+
+- Use Self type for __aenter__/__aiter__ (ruff PYI034)
+  ([`349986e`](https://github.com/deuriib/mcp-gateway/commit/349986e3f36378616d7cdfefb97097b1ccd1e78b))
+
+- Windows stdio transport — command resolution, noise filter, env passthrough
+  ([`c4c2a69`](https://github.com/deuriib/mcp-gateway/commit/c4c2a69ee120a02a729a2bf2dad1f54628f2f221))
+
+- Add stdio_transport.py: resolve_windows_command prefers .exe over .cmd/.bat to bypass cmd.exe
+  banner injection on Windows - Add filtered_stdio_client: wraps MCP SDK stdio_client, drops
+  non-JSON parse failures from read stream with on_noise callback - Fix _FilteredReadStream to
+  implement async context manager protocol (__aenter__/__aexit__) required by MCP SDK dispatcher -
+  Fix t.inputSchema -> t.input_schema for MCP SDK v2 compatibility - Wire StdioConfig.envs ->
+  StdioServerParameters.env with --env CLI option - Wire on_noise callback in production (logs
+  warning to stderr) - 22 new tests in test_stdio_transport.py, 3 new tests in test_cli.py, 1 new
+  test in test_registry.py (96/96 pass, ruff clean)
+
+
 ## v0.4.3 (2026-08-24)
 
 ### Bug Fixes
