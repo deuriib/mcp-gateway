@@ -12,6 +12,7 @@ class ConnectionType(str, Enum):
     HTTP = "http"
     STDIO = "stdio"
     SSE = "sse"
+    STREAMABLE_HTTP = "streamable-http"
 
 
 class StdioConfig(BaseModel):

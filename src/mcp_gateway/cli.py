@@ -41,12 +41,45 @@ async def _discover_tools(config: MCPClientConfig) -> list[ToolInfo]:
                         )
                         for t in result.tools
                     ]
+        elif config.connection_type == ConnectionType.STREAMABLE_HTTP:
+            from mcp import ClientSession
+            from mcp.client.streamable_http import streamable_http_client
+
+            url = config.connection_string
+
+            # Try to get authenticated client
+            from mcp_gateway.oauth import get_authenticated_client
+
+            http_client = await get_authenticated_client(config.name)
+            async with streamable_http_client(url, http_client=http_client) as (
+                read,
+                write,
+            ):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    result = await session.list_tools()
+                    return [
+                        ToolInfo(
+                            name=t.name,
+                            description=t.description or "",
+                            input_schema=t.inputSchema
+                            if hasattr(t, "inputSchema")
+                            else {},
+                        )
+                        for t in result.tools
+                    ]
         else:
             from mcp import ClientSession
             from mcp.client.sse import sse_client
 
             url = config.connection_string
-            async with sse_client(url) as (read, write):
+
+            # Try to get authenticated client
+            from mcp_gateway.oauth import get_authenticated_client
+
+            http_client = await get_authenticated_client(config.name)
+            headers = http_client.headers if http_client else None
+            async with sse_client(url, headers=headers) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     result = await session.list_tools()
@@ -73,7 +106,10 @@ def main() -> None:
 @main.command()
 @click.argument("name")
 @click.option(
-    "--type", "conn_type", type=click.Choice(["http", "stdio", "sse"]), required=True
+    "--type",
+    "conn_type",
+    type=click.Choice(["http", "stdio", "sse", "streamable-http"]),
+    required=True,
 )
 @click.option("--url", help="Connection URL for http/sse")
 @click.option("--command", help="Command for stdio connection")
@@ -96,6 +132,10 @@ def add(
             sys.exit(1)
         stdio_config = StdioConfig(command=command, args=json.loads(args))
         connection_string = command
+    elif conn_type in ("http", "sse", "streamable-http"):
+        if not url:
+            click.echo(f"Error: --url required for {conn_type} connection", err=True)
+            sys.exit(1)
     config = MCPClientConfig(
         name=name,
         connection_type=conn_type,
@@ -190,6 +230,96 @@ def serve(host: str, port: int) -> None:
     gateway = Gateway(registry)
     click.echo(f"Starting MCP Gateway on {host}:{port}")
     uvicorn.run(gateway.app, host=host, port=port)
+
+
+@main.command()
+@click.argument("name", required=False)
+@click.option("--auth", is_flag=True, help="Force OAuth authentication flow")
+def refresh(name: str | None, auth: bool) -> None:
+    """Refresh server connections and re-discover tools.
+
+    If NAME is provided, refreshes only that server.
+    If no NAME is provided, refreshes all servers.
+
+    If the server requires OAuth and has no valid token, triggers authentication.
+    Use --auth to force re-authentication even if tokens exist.
+    """
+    registry = _get_registry()
+
+    if name:
+        names = [name]
+    else:
+        names = registry.list()
+        if not names:
+            click.echo("No servers connected.")
+            return
+        click.echo(f"Refreshing {len(names)} servers...")
+
+    for server_name in names:
+        try:
+            config = registry.get_config(server_name)
+        except FileNotFoundError:
+            click.echo(
+                f"Warning: Server '{server_name}' not found, skipping.", err=True
+            )
+            continue
+
+        click.echo(f"\n--- {server_name} ({config.connection_type.value}) ---")
+
+        async def _refresh_server(
+            cfg: MCPClientConfig, srv_name: str
+        ) -> list[ToolInfo]:
+            # If auth flag is set or server is HTTP/SSE, try OAuth flow first
+            if auth or cfg.connection_type in (
+                ConnectionType.HTTP,
+                ConnectionType.SSE,
+                ConnectionType.STREAMABLE_HTTP,
+            ):
+                from mcp_gateway.oauth import run_oauth_flow
+
+                # Check if we need to run OAuth
+                if auth:
+                    click.echo("Running OAuth authentication flow...")
+                    client = await run_oauth_flow(
+                        server_url=cfg.connection_string,
+                        server_name=srv_name,
+                        output_callback=click.echo,
+                    )
+                    if client:
+                        click.echo("Authentication successful. Discovering tools...")
+                    else:
+                        click.echo("Authentication failed. Attempting without auth...")
+                else:
+                    # Try with existing tokens first
+                    from mcp_gateway.oauth import get_authenticated_client
+
+                    client = await get_authenticated_client(srv_name)
+                    if client:
+                        click.echo("Using existing token...")
+                    else:
+                        # No tokens, try OAuth flow
+                        click.echo("No valid token found. Starting OAuth flow...")
+                        client = await run_oauth_flow(
+                            server_url=cfg.connection_string,
+                            server_name=srv_name,
+                            output_callback=click.echo,
+                        )
+
+            return await _discover_tools(cfg)
+
+        discovered = asyncio.run(_refresh_server(config, server_name))
+
+        if not discovered:
+            click.echo(f"Warning: No tools discovered for {server_name}.")
+            click.echo(f"Try: mcp-gateway refresh {server_name} --auth")
+            continue
+
+        # Update the registry with new tools
+        registry.update(server_name, discovered)
+        click.echo(f"Refreshed {server_name} with {len(discovered)} tools.")
+
+    if len(names) > 1:
+        click.echo(f"\nDone. Refreshed {len(names)} servers.")
 
 
 if __name__ == "__main__":

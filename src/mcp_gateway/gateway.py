@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import uuid
 from typing import Any
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
 from mcp_gateway.code_mode import CodeMode
@@ -70,38 +73,73 @@ class Gateway:
     def __init__(self, registry: Registry) -> None:
         self.registry = registry
         self.code_mode = CodeMode(registry)
+        self._sessions: dict[str, asyncio.Queue[dict[str, Any]]] = {}
         self.app = Starlette(
             routes=[
                 Route("/health", self._health, methods=["GET"]),
-                Route("/mcp", self._mcp_post, methods=["POST"]),
                 Route("/mcp", self._mcp_sse, methods=["GET"]),
+                Route("/mcp", self._mcp_post, methods=["POST"]),
+                Route("/mcp/messages", self._mcp_post, methods=["POST"]),
             ]
         )
 
     async def _health(self, request: Request) -> JSONResponse:
         return JSONResponse({"status": "ok"})
 
+    async def _mcp_sse(self, request: Request) -> StreamingResponse:
+        session_id = str(uuid.uuid4())
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._sessions[session_id] = queue
+
+        async def event_stream():
+            try:
+                yield f"event: endpoint\ndata: /mcp/messages?session_id={session_id}\n\n"
+                while True:
+                    msg = await queue.get()
+                    if msg is None:
+                        break
+                    yield f"event: message\ndata: {json.dumps(msg)}\n\n"
+            finally:
+                self._sessions.pop(session_id, None)
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     async def _mcp_post(self, request: Request) -> JSONResponse:
+        session_id = request.query_params.get("session_id")
         body = await request.json()
         method = body.get("method")
         req_id = body.get("id")
         params = body.get("params", {})
         try:
             result = self._handle_method(method, params)
-            return JSONResponse({"jsonrpc": "2.0", "id": req_id, "result": result})
+            response = {"jsonrpc": "2.0", "id": req_id, "result": result}
         except Exception as e:
-            return JSONResponse(
-                {
-                    "jsonrpc": "2.0",
-                    "id": req_id,
-                    "error": {"code": -1, "message": str(e)},
-                }
-            )
-
-    async def _mcp_sse(self, request: Request) -> JSONResponse:
-        return JSONResponse({"message": "SSE not yet implemented"})
+            response = {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -1, "message": str(e)},
+            }
+        if session_id and session_id in self._sessions:
+            await self._sessions[session_id].put(response)
+        return JSONResponse(response)
 
     def _handle_method(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        if method == "initialize":
+            return {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "mcp-gateway", "version": "0.1.0"},
+            }
+        if method == "notifications/initialized":
+            return {}
         if method == "tools/list":
             return {"tools": CODE_MODE_TOOLS}
         if method == "tools/call":
