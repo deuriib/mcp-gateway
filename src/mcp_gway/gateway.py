@@ -60,7 +60,7 @@ CODE_MODE_TOOLS = [
     },
     {
         "name": "executeToolCode",
-        "description": "Executes Python code in a sandboxed Starlark interpreter with tool access.",
+        "description": "Executes Python code in a sandboxed Starlark interpreter with MCP tool access. Use call_tool(server, tool, **kwargs) to invoke MCP tools, or server.tool_name(**kwargs) for registered servers.",
         "inputSchema": {
             "type": "object",
             "properties": {

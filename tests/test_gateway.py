@@ -203,3 +203,48 @@ async def test_post_to_expired_session_returns_404(gateway):
     response = await gateway._handle_post(payload, session_id="expired-session")
     assert "error" in response
     assert response["error"]["code"] == -32001
+
+
+# --- executeToolCode with MCP tool access ---
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_code_has_call_tool(gateway):
+    """executeToolCode sandbox should have call_tool injected."""
+    assert "call_tool" in gateway.code_mode.sandbox._custom_globals
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_code_has_server_structs(gateway):
+    """executeToolCode sandbox should have server structs for registered servers."""
+    assert "youtube" in gateway.code_mode.sandbox._modules
+
+
+@pytest.mark.asyncio
+async def test_execute_code_with_server_struct_via_gateway(gateway, monkeypatch):
+    """Gateway should execute code that calls MCP tools via server struct."""
+
+    async def mock_call_tool_async(config, tool_name, arguments):
+        return {"query": arguments.get("query", ""), "items": []}
+
+    monkeypatch.setattr(
+        gateway.code_mode.server_factory,
+        "_call_tool_async",
+        mock_call_tool_async,
+    )
+    transport = ASGITransport(app=gateway.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+                "name": "executeToolCode",
+                "arguments": {"code": 'result = youtube.search(query="gateway test")'},
+            },
+        }
+        response = await client.post("/mcp/messages", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        text = data["result"]["content"][0]["text"]
+        assert "query" in text

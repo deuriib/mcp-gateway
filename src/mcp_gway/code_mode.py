@@ -4,12 +4,34 @@ from __future__ import annotations
 
 from mcp_gway.registry import Registry
 from mcp_gway.sandbox import StarlarkSandbox
+from mcp_gway.server_factory import ServerFactory
 
 
 class CodeMode:
     def __init__(self, registry: Registry) -> None:
         self.registry = registry
         self.sandbox = StarlarkSandbox()
+        self.server_factory = ServerFactory(registry)
+        self._inject_tools()
+
+    def _inject_tools(self) -> None:
+        """Inject MCP tool access into the sandbox.
+
+        Adds:
+        - call_tool(server, tool, **kwargs) function
+        - Server structs for each registered server (e.g., agentmemory.search(...))
+        """
+        # Inject the call_tool function
+        self.sandbox.set_global("call_tool", self.server_factory.call_tool)
+
+        # Inject server structs for each registered server
+        for server_name in self.registry.list():
+            try:
+                struct = self.server_factory.make_server_struct(server_name)
+                self.sandbox.inject_server(server_name, struct)
+            except Exception:
+                # Skip servers that can't be loaded (missing config, etc.)
+                pass
 
     def list_tool_files(self) -> str:
         names = self.registry.list()

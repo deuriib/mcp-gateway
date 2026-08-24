@@ -17,6 +17,11 @@ class StarlarkSandbox:
     def __init__(self) -> None:
         self.globals = sl.Globals.extended_by([sl.LibraryExtension.StructType])
         self._modules: dict[str, object] = {}
+        self._custom_globals: dict[str, object] = {}
+
+    def set_global(self, name: str, value: object) -> None:
+        """Set a custom global variable (e.g., call_tool function)."""
+        self._custom_globals[name] = value
 
     def inject_server(self, name: str, server_proxy: object) -> None:
         self._modules[name] = server_proxy
@@ -24,6 +29,10 @@ class StarlarkSandbox:
     def execute(self, code: str, timeout: float = 30.0) -> object:
         mod = sl.Module()
         preamble_lines: list[str] = []
+
+        # Inject custom globals (e.g., call_tool function)
+        for name, value in self._custom_globals.items():
+            mod.add_callable(name, value)
 
         for name, proxy in self._modules.items():
             methods: list[str] = []
