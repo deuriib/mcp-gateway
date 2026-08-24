@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.5.2 (2026-08-24)
+
+### Bug Fixes
+
+- **sandbox**: Inject print as no-op to prevent Variable not found error
+  ([`7064975`](https://github.com/deuriib/mcp-gateway/commit/70649759664c3e5945d1b911d2d54dd809a0d731))
+
+Starlark sandbox lacked a print builtin, causing cryptic errors when users wrote print() in
+  executeToolCode. Inject _noop as print so scripts with print() run without failing.
+
+
 ## v0.5.1 (2026-08-24)
 
 ### Bug Fixes

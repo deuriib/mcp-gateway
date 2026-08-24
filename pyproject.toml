@@ -1,6 +1,6 @@
 [project]
 name = "mcp-gway"
-version = "0.5.1"
+version = "0.5.2"
 description = "Manage MCP servers with Code Mode support."
 readme = "README.md"
 authors = [
