@@ -433,7 +433,7 @@ def test_list_shows_correct_type_for_new_format(tmp_path, monkeypatch):
     runner = CliRunner()
     result = runner.invoke(main, ["list"])
     assert result.exit_code == 0
-    assert "STDIO" in result.output
+    assert "STDIO" in result.output or "LOCAL" in result.output
     assert "HTTP" not in result.output
 
 
@@ -482,3 +482,166 @@ def test_refresh_continues_after_server_error(tmp_path, monkeypatch):
     assert "Error refreshing server_a" in result.output
     assert "Refreshed server_b" in result.output
     assert call_count["n"] == 2, "Both servers should be attempted"
+
+
+# --- Task 4: OpenCode-style CLI options ---
+
+
+def test_add_remote_type(runner, monkeypatch):
+    async def mock_discover_tools(config, force_auth=False):
+        from mcp_gway.models import ToolInfo
+
+        return [ToolInfo(name="search", description="Search videos")]
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
+    result = runner.invoke(
+        main,
+        ["add", "myserver", "--type", "remote", "--url", "https://mcp.example.com/mcp"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "myserver" in result.output
+
+
+def test_add_local_type(runner, monkeypatch):
+    async def mock_discover_tools(config, force_auth=False):
+        from mcp_gway.models import ToolInfo
+
+        return [ToolInfo(name="ping", description="Ping")]
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
+    result = runner.invoke(
+        main, ["add", "myserver", "--type", "local", "--command", "npx -y my-mcp"]
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_add_with_header_option(runner, monkeypatch):
+    async def mock_discover_tools(config, force_auth=False):
+        from mcp_gway.models import ToolInfo
+
+        return [ToolInfo(name="search", description="Search")]
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
+    result = runner.invoke(
+        main,
+        [
+            "add",
+            "myserver",
+            "--type",
+            "remote",
+            "--url",
+            "https://mcp.example.com/mcp",
+            "--header",
+            "Authorization=Bearer TOKEN",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_add_with_timeout_option(runner, monkeypatch):
+    async def mock_discover_tools(config, force_auth=False):
+        from mcp_gway.models import ToolInfo
+
+        return [ToolInfo(name="search", description="Search")]
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
+    result = runner.invoke(
+        main,
+        [
+            "add",
+            "myserver",
+            "--type",
+            "remote",
+            "--url",
+            "https://mcp.example.com/mcp",
+            "--timeout",
+            "10000",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_add_backward_compat_stdio(runner, monkeypatch):
+    async def mock_discover_tools(config, force_auth=False):
+        from mcp_gway.models import ToolInfo
+
+        return [ToolInfo(name="ping", description="Ping")]
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
+    result = runner.invoke(
+        main,
+        [
+            "add",
+            "myserver",
+            "--type",
+            "stdio",
+            "--command",
+            "node",
+            "--args",
+            '["server.js"]',
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_add_backward_compat_sse(runner, monkeypatch):
+    async def mock_discover_tools(config, force_auth=False):
+        from mcp_gway.models import ToolInfo
+
+        return [ToolInfo(name="ping", description="Ping")]
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
+    result = runner.invoke(
+        main, ["add", "myserver", "--type", "sse", "--url", "https://example.com/sse"]
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_list_shows_remote_type(tmp_path, monkeypatch):
+    from mcp_gway.models import MCPServerConfig, ToolInfo
+
+    servers_dir = tmp_path / "servers"
+    servers_dir.mkdir()
+
+    def mock_get_registry():
+        return Registry(servers_dir=servers_dir)
+
+    monkeypatch.setattr("mcp_gway.cli._get_registry", mock_get_registry)
+
+    registry = Registry(servers_dir=servers_dir)
+    config = MCPServerConfig(
+        name="myserver",
+        type="remote",
+        url="https://mcp.example.com/mcp",
+    )
+    registry.add(config, [ToolInfo(name="search", description="Search")])
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["list"])
+    assert result.exit_code == 0
+    assert "REMOTE" in result.output
+
+
+def test_list_shows_local_type(tmp_path, monkeypatch):
+    from mcp_gway.models import MCPServerConfig, ToolInfo
+
+    servers_dir = tmp_path / "servers"
+    servers_dir.mkdir()
+
+    def mock_get_registry():
+        return Registry(servers_dir=servers_dir)
+
+    monkeypatch.setattr("mcp_gway.cli._get_registry", mock_get_registry)
+
+    registry = Registry(servers_dir=servers_dir)
+    config = MCPServerConfig(
+        name="myserver",
+        type="local",
+        command=["npx", "-y", "my-mcp"],
+    )
+    registry.add(config, [ToolInfo(name="ping", description="Ping")])
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["list"])
+    assert result.exit_code == 0
+    assert "LOCAL" in result.output
