@@ -1,6 +1,29 @@
 # CHANGELOG
 
 
+## v0.5.0 (2026-08-24)
+
+### Bug Fixes
+
+- Resolve ruff lint errors (S110, I001)
+  ([`00bb396`](https://github.com/deuriib/mcp-gateway/commit/00bb396d81d2766e1ad683210696f33248f40aaf))
+
+### Features
+
+- Wire MCP tool execution into Starlark sandbox via ServerFactory
+  ([`452d258`](https://github.com/deuriib/mcp-gateway/commit/452d258688ef187d667e958269b98e0af9260914))
+
+Previously, executeToolCode ran code in an empty sandbox with no access to MCP servers. This commit
+  bridges the gap by:
+
+- Adding ServerFactory: creates server structs and call_tool function that wrap async MCP client
+  calls with asyncio.run() for sync access - Extending StarlarkSandbox with set_global() for
+  injecting functions - Wiring CodeMode to inject call_tool + server structs on init - Updating
+  executeToolCode description to document tool access
+
+112 tests passing, 0 regressions.
+
+
 ## v0.4.4 (2026-08-24)
 
 ### Bug Fixes
