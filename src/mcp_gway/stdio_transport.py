@@ -7,7 +7,7 @@ import sys
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 if TYPE_CHECKING:
     from mcp import StdioServerParameters
@@ -96,7 +96,7 @@ class _FilteredReadStream:
         self._on_noise = on_noise
         self._noise_count = 0
 
-    async def __aenter__(self) -> _FilteredReadStream:
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(
@@ -108,7 +108,7 @@ class _FilteredReadStream:
         if hasattr(self._stream, "aclose"):
             await self._stream.aclose()
 
-    def __aiter__(self) -> _FilteredReadStream:
+    def __aiter__(self) -> Self:
         return self
 
     async def __anext__(self) -> Any:
