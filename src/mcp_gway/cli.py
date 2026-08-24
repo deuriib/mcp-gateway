@@ -276,9 +276,11 @@ async def _discover_tools(
     try:
         from mcp import ClientSession
 
-        timeout_sec = getattr(config, "timeout", 5000) / 1000
-        if timeout_sec is None or timeout_sec <= 0:
+        raw_timeout = getattr(config, "timeout", 5000)
+        if raw_timeout is None or raw_timeout <= 0:
             timeout_sec = 5
+        else:
+            timeout_sec = raw_timeout / 1000
         async with _create_client_transport(config, force_auth=force_auth) as (
             read,
             write,
