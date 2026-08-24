@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.1.4 (2026-08-24)
+
+### Bug Fixes
+
+- Update config path to mcp-gway in oauth, gateway, cli
+  ([`9ce40ba`](https://github.com/deuriib/mcp-gateway/commit/9ce40ba8f367903b612afdbd63afc930d3f47a6e))
+
+### Documentation
+
+- Update package name to mcp-gway in README and AGENTS
+  ([`6a3e48e`](https://github.com/deuriib/mcp-gateway/commit/6a3e48e4dc777dacf270c113f74361f3d85cc801))
+
+
 ## v0.1.3 (2026-08-24)
 
 ### Bug Fixes
