@@ -2,7 +2,7 @@
 
 import pytest
 
-from mcp_gateway.models import ConnectionType, MCPClientConfig, StdioConfig
+from mcp_gway.models import ConnectionType, MCPClientConfig, StdioConfig
 
 
 @pytest.fixture

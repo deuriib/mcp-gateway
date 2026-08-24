@@ -3,9 +3,9 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from mcp_gateway.gateway import Gateway
-from mcp_gateway.models import ConnectionType, MCPClientConfig, ToolInfo
-from mcp_gateway.registry import Registry
+from mcp_gway.gateway import Gateway
+from mcp_gway.models import ConnectionType, MCPClientConfig, ToolInfo
+from mcp_gway.registry import Registry
 
 
 @pytest.fixture

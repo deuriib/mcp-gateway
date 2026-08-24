@@ -2,9 +2,9 @@
 
 import pytest
 
-from mcp_gateway.code_mode import CodeMode
-from mcp_gateway.models import ConnectionType, MCPClientConfig, ToolInfo
-from mcp_gateway.registry import Registry
+from mcp_gway.code_mode import CodeMode
+from mcp_gway.models import ConnectionType, MCPClientConfig, ToolInfo
+from mcp_gway.registry import Registry
 
 
 @pytest.fixture

@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-gateway = "mcp_gateway.cli:main"
+mcp-gway = "mcp_gway.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
@@ -25,7 +25,7 @@ build-backend = "uv_build"
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-version_variables = ["src/mcp_gateway/__init__.py:__version__"]
+version_variables = ["src/mcp_gway/__init__.py:__version__"]
 
 [tool.semantic_release.branches.main]
 match = "(main|master)"

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from mcp_gateway.registry import Registry
-from mcp_gateway.sandbox import StarlarkSandbox
+from mcp_gway.registry import Registry
+from mcp_gway.sandbox import StarlarkSandbox
 
 
 class CodeMode:

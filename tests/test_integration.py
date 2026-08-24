@@ -2,11 +2,11 @@
 
 from click.testing import CliRunner
 
-from mcp_gateway.cli import main
-from mcp_gateway.code_mode import CodeMode
-from mcp_gateway.gateway import Gateway
-from mcp_gateway.models import ToolInfo
-from mcp_gateway.registry import Registry
+from mcp_gway.cli import main
+from mcp_gway.code_mode import CodeMode
+from mcp_gway.gateway import Gateway
+from mcp_gway.models import ToolInfo
+from mcp_gway.registry import Registry
 
 
 def test_full_flow(tmp_path, monkeypatch):
@@ -36,7 +36,7 @@ def test_full_flow(tmp_path, monkeypatch):
             ),
         ]
 
-    monkeypatch.setattr("mcp_gateway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
     runner = CliRunner()
 
     # Add server

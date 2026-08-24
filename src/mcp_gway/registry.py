@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mcp_gateway.models import MCPClientConfig, ToolInfo
+from mcp_gway.models import MCPClientConfig, ToolInfo
 
 
 class Registry:

@@ -2,7 +2,7 @@
 
 import pytest
 
-from mcp_gateway.sandbox import StarlarkSandbox
+from mcp_gway.sandbox import StarlarkSandbox
 
 
 def test_execute_simple_expression():

@@ -3,7 +3,7 @@
 import pytest
 from click.testing import CliRunner
 
-from mcp_gateway.cli import main
+from mcp_gway.cli import main
 
 
 @pytest.fixture
@@ -21,11 +21,11 @@ def test_list_empty(runner):
 
 def test_add_http_server(runner, monkeypatch):
     async def mock_discover_tools(config):
-        from mcp_gateway.models import ToolInfo
+        from mcp_gway.models import ToolInfo
 
         return [ToolInfo(name="search", description="Search videos")]
 
-    monkeypatch.setattr("mcp_gateway.cli._discover_tools", mock_discover_tools)
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
     result = runner.invoke(
         main, ["add", "youtube", "--type", "http", "--url", "http://localhost:3001/mcp"]
     )
@@ -35,11 +35,11 @@ def test_add_http_server(runner, monkeypatch):
 
 def test_inspect_server(runner, monkeypatch):
     async def mock_discover_tools(config):
-        from mcp_gateway.models import ToolInfo
+        from mcp_gway.models import ToolInfo
 
         return [ToolInfo(name="search", description="Search videos")]
 
-    monkeypatch.setattr("mcp_gateway.cli._discover_tools", mock_discover_tools)
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
     runner.invoke(
         main, ["add", "youtube", "--type", "http", "--url", "http://localhost:3001/mcp"]
     )

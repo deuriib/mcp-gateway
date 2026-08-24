@@ -12,8 +12,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
-from mcp_gateway.code_mode import CodeMode
-from mcp_gateway.registry import Registry
+from mcp_gway.code_mode import CodeMode
+from mcp_gway.registry import Registry
 
 CODE_MODE_TOOLS = [
     {

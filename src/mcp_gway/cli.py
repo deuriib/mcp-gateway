@@ -9,8 +9,8 @@ from pathlib import Path
 
 import click
 
-from mcp_gateway.models import ConnectionType, MCPClientConfig, StdioConfig, ToolInfo
-from mcp_gateway.registry import Registry
+from mcp_gway.models import ConnectionType, MCPClientConfig, StdioConfig, ToolInfo
+from mcp_gway.registry import Registry
 
 
 def _get_registry() -> Registry:
@@ -48,7 +48,7 @@ async def _discover_tools(config: MCPClientConfig) -> list[ToolInfo]:
             url = config.connection_string
 
             # Try to get authenticated client
-            from mcp_gateway.oauth import get_authenticated_client
+            from mcp_gway.oauth import get_authenticated_client
 
             http_client = await get_authenticated_client(config.name)
             async with streamable_http_client(url, http_client=http_client) as (
@@ -75,7 +75,7 @@ async def _discover_tools(config: MCPClientConfig) -> list[ToolInfo]:
             url = config.connection_string
 
             # Try to get authenticated client
-            from mcp_gateway.oauth import get_authenticated_client
+            from mcp_gway.oauth import get_authenticated_client
 
             http_client = await get_authenticated_client(config.name)
             headers = http_client.headers if http_client else None
@@ -225,7 +225,7 @@ def serve(host: str, port: int) -> None:
     import uvicorn
 
     registry = _get_registry()
-    from mcp_gateway.gateway import Gateway
+    from mcp_gway.gateway import Gateway
 
     gateway = Gateway(registry)
     click.echo(f"Starting MCP Gateway on {host}:{port}")
@@ -275,7 +275,7 @@ def refresh(name: str | None, auth: bool) -> None:
                 ConnectionType.SSE,
                 ConnectionType.STREAMABLE_HTTP,
             ):
-                from mcp_gateway.oauth import run_oauth_flow
+                from mcp_gway.oauth import run_oauth_flow
 
                 # Check if we need to run OAuth
                 if auth:
@@ -291,7 +291,7 @@ def refresh(name: str | None, auth: bool) -> None:
                         click.echo("Authentication failed. Attempting without auth...")
                 else:
                     # Try with existing tokens first
-                    from mcp_gateway.oauth import get_authenticated_client
+                    from mcp_gway.oauth import get_authenticated_client
 
                     client = await get_authenticated_client(srv_name)
                     if client:

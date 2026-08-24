@@ -2,8 +2,8 @@
 
 import pytest
 
-from mcp_gateway.models import ToolInfo
-from mcp_gateway.registry import Registry
+from mcp_gway.models import ToolInfo
+from mcp_gway.registry import Registry
 
 
 @pytest.fixture

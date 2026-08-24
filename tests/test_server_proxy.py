@@ -2,7 +2,7 @@
 
 import pytest
 
-from mcp_gateway.server_proxy import ServerProxy
+from mcp_gway.server_proxy import ServerProxy
 
 
 class MockMCPClient:

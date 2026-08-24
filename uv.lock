@@ -633,8 +633,8 @@ wheels = [
 ]
 
 [[package]]
-name = "mcp-gateway"
-version = "0.1.1"
+name = "mcp-gway"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
