@@ -645,3 +645,47 @@ def test_list_shows_local_type(tmp_path, monkeypatch):
     result = runner.invoke(main, ["list"])
     assert result.exit_code == 0
     assert "LOCAL" in result.output
+
+
+def test_add_remote_auto_detects_transport(runner, monkeypatch):
+    """add --type remote should call detect_transport and store result."""
+    from mcp_gway.models import ToolInfo
+
+    async def mock_discover_tools(config, force_auth=False):
+        assert config.resolved_transport == "streamable-http"
+        return [ToolInfo(name="search", description="Search")]
+
+    async def mock_detect_transport(config):
+        return "streamable-http"
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
+    monkeypatch.setattr("mcp_gway.transport.detect_transport", mock_detect_transport)
+    result = runner.invoke(
+        main,
+        ["add", "myserver", "--type", "remote", "--url", "https://mcp.example.com/mcp"],
+    )
+    assert result.exit_code == 0
+    assert "myserver" in result.output
+
+
+def test_add_remote_detect_failure_still_adds(runner, monkeypatch):
+    """If detect_transport fails, add should still succeed with empty transport."""
+    from mcp_gway.models import ToolInfo
+
+    async def mock_discover_tools(config, force_auth=False):
+        assert (
+            config.resolved_transport is None
+            or config.resolved_transport == "streamable-http"
+        )
+        return [ToolInfo(name="search", description="Search")]
+
+    async def mock_detect_transport(config):
+        raise ConnectionError("All transports failed for https://...")
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover_tools)
+    monkeypatch.setattr("mcp_gway.transport.detect_transport", mock_detect_transport)
+    result = runner.invoke(
+        main,
+        ["add", "myserver", "--type", "remote", "--url", "https://mcp.example.com/mcp"],
+    )
+    assert result.exit_code == 0

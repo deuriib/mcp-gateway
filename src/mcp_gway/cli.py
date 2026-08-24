@@ -381,6 +381,20 @@ def add(
             timeout=timeout,
             enabled=enabled,
         )
+        try:
+            from mcp_gway.transport import detect_transport
+
+            try:
+                detected = asyncio.run(
+                    asyncio.wait_for(
+                        detect_transport(config), timeout=timeout / 1000 + 2
+                    )
+                )
+                config.resolved_transport = detected  # type: ignore[assignment]
+            except Exception:  # noqa: S110
+                pass
+        except Exception:  # noqa: S110
+            pass
     else:
         click.echo(f"Error: Unknown connection type {conn_type}", err=True)
         sys.exit(1)
