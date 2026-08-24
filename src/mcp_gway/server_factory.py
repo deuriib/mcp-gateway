@@ -39,6 +39,7 @@ class ServerFactory:
     ) -> Any:
         """Call an MCP tool asynchronously."""
         from mcp import ClientSession
+
         from mcp_gway.cli import _create_client_transport
 
         async with _create_client_transport(config) as (read, write):

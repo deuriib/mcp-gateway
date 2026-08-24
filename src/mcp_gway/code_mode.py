@@ -29,8 +29,7 @@ class CodeMode:
             try:
                 struct = self.server_factory.make_server_struct(server_name)
                 self.sandbox.inject_server(server_name, struct)
-            except Exception:
-                # Skip servers that can't be loaded (missing config, etc.)
+            except Exception:  # noqa: S110 — servers may lack config, skip silently
                 pass
 
     def list_tool_files(self) -> str:
