@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.1.2 (2026-08-24)
+
+### Bug Fixes
+
+- Build package after semantic release bumps version
+  ([`be80eeb`](https://github.com/deuriib/mcp-gateway/commit/be80eeb1f0eccb9bbd863df71d3671424b90bced))
+
+### Continuous Integration
+
+- Chain release workflow to run after tests pass
+  ([`bfe88bc`](https://github.com/deuriib/mcp-gateway/commit/bfe88bcd0127db06385013f21a7f8a3716b50137))
+
+
 ## v0.1.1 (2026-08-24)
 
 ### Bug Fixes
