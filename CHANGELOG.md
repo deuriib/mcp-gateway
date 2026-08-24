@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-08-24)
+
+### Features
+
+- Move servers/ to ~/.config/mcp-gway/servers/
+  ([`db62a5a`](https://github.com/deuriib/mcp-gateway/commit/db62a5a6fb4eafc8547191ce8a8685f9152c31c9))
+
+
 ## v0.2.1 (2026-08-24)
 
 ### Bug Fixes
