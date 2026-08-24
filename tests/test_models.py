@@ -76,3 +76,93 @@ def test_streamable_http_valid():
         connection_string="http://localhost:3001/mcp",
     )
     assert config.connection_type == ConnectionType.STREAMABLE_HTTP
+
+
+# ──────────────────────────────────────────────────────────────────────
+# New OpenCode-schema models: MCPServerConfig + OAuthConfig
+# ──────────────────────────────────────────────────────────────────────
+
+from mcp_gway.models import MCPServerConfig, OAuthConfig
+
+
+def test_remote_config_valid():
+    config = MCPServerConfig(
+        name="youtube",
+        type="remote",
+        url="https://mcp.example.com/mcp",
+    )
+    assert config.name == "youtube"
+    assert config.type == "remote"
+    assert config.url == "https://mcp.example.com/mcp"
+    assert config.enabled is True
+    assert config.timeout == 5000
+
+
+def test_local_config_valid():
+    config = MCPServerConfig(
+        name="myserver",
+        type="local",
+        command=["npx", "-y", "my-mcp-server"],
+    )
+    assert config.type == "local"
+    assert config.command == ["npx", "-y", "my-mcp-server"]
+
+
+def test_local_requires_command():
+    with pytest.raises(ValueError, match="command.*required"):
+        MCPServerConfig(name="myserver", type="local")
+
+
+def test_remote_requires_url():
+    with pytest.raises(ValueError, match="url.*required"):
+        MCPServerConfig(name="myserver", type="remote")
+
+
+def test_remote_with_headers():
+    config = MCPServerConfig(
+        name="myserver",
+        type="remote",
+        url="https://mcp.example.com/mcp",
+        headers={"Authorization": "Bearer TOKEN"},
+    )
+    assert config.headers == {"Authorization": "Bearer TOKEN"}
+
+
+def test_remote_with_oauth_object():
+    config = MCPServerConfig(
+        name="myserver",
+        type="remote",
+        url="https://mcp.example.com/mcp",
+        oauth=OAuthConfig(clientId="id", clientSecret="secret"),
+    )
+    assert config.oauth.clientId == "id"
+
+
+def test_remote_with_oauth_false():
+    config = MCPServerConfig(
+        name="myserver",
+        type="remote",
+        url="https://mcp.example.com/mcp",
+        oauth=False,
+    )
+    assert config.oauth is False
+
+
+def test_local_with_environment():
+    config = MCPServerConfig(
+        name="myserver",
+        type="local",
+        command=["node", "server.js"],
+        environment={"FOO": "bar", "BAZ": "qux"},
+    )
+    assert config.environment == {"FOO": "bar", "BAZ": "qux"}
+
+
+def test_local_with_cwd():
+    config = MCPServerConfig(
+        name="myserver",
+        type="local",
+        command=["python", "-m", "server"],
+        cwd="/path/to/workdir",
+    )
+    assert config.cwd == "/path/to/workdir"

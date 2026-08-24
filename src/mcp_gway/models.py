@@ -1,11 +1,15 @@
-"""Pydantic models for MCP client configurations."""
+"""Pydantic models for MCP client and server configurations."""
 
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# ──────────────────────────────────────────────────────────────────────
+# Legacy models (deprecated, kept for backward compat during migration)
+# ──────────────────────────────────────────────────────────────────────
 
 
 class ConnectionType(str, Enum):
@@ -56,14 +60,60 @@ class MCPClientConfig(BaseModel):
                 raise ValueError("stdio_config required for stdio connection")
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Shared models
+# ──────────────────────────────────────────────────────────────────────
+
+
 class ToolInfo(BaseModel):
     name: str
     description: str = ""
     input_schema: dict[str, Any] = Field(default_factory=dict)
 
 
+# ──────────────────────────────────────────────────────────────────────
+# New OpenCode-aligned models
+# ──────────────────────────────────────────────────────────────────────
+
+
+class OAuthConfig(BaseModel):
+    clientId: str | None = None
+    clientSecret: str | None = None
+    scope: str | None = None
+
+
+class MCPServerConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str
+    type: Literal["local", "remote"]
+    enabled: bool = True
+    timeout: int = 5000
+
+    # type=local
+    command: list[str] | None = None
+    cwd: str | None = None
+    environment: dict[str, str] | None = None
+
+    # type=remote
+    url: str | None = None
+    headers: dict[str, str] | None = None
+    oauth: OAuthConfig | bool | None = None
+
+    # Internal: resolved after connection test, stored in JSON
+    resolved_transport: Literal["sse", "streamable-http", "http"] | None = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.type == "local":
+            if not self.command:
+                raise ValueError("'command' required for type=local")
+        elif self.type == "remote":
+            if not self.url:
+                raise ValueError("'url' required for type=remote")
+
+
 class MCPServerState(BaseModel):
     name: str
-    config: MCPClientConfig
+    config: MCPServerConfig
     tools: list[ToolInfo] = Field(default_factory=list)
     state: str = "healthy"
