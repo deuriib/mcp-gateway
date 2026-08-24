@@ -13,6 +13,10 @@ import starlark as sl
 _INVALID_IDENTIFIER_RE = re.compile(r"[^a-zA-Z0-9_]")
 
 
+def _noop(*args: object, **kwargs: object) -> None:
+    """No-op function injected as ``print`` so scripts using ``print()`` do not fail."""
+
+
 def _sanitize_identifier(name: str) -> str:
     """Replace non-identifier characters with underscores for Starlark safety.
 
@@ -35,6 +39,7 @@ class StarlarkSandbox:
         self.globals = sl.Globals.extended_by([sl.LibraryExtension.StructType])
         self._modules: dict[str, object] = {}
         self._custom_globals: dict[str, object] = {}
+        self._custom_globals["print"] = _noop
 
     def set_global(self, name: str, value: object) -> None:
         """Set a custom global variable (e.g., call_tool function)."""

@@ -167,3 +167,34 @@ def test_sanitize_identifier_edge_cases():
     assert _sanitize_identifier("") == ""
     assert _sanitize_identifier("_private") == "_private"
     assert _sanitize_identifier("3start") == "_3start"
+
+
+# --- print() no-op tests ---
+
+
+def test_print_noop_does_not_fail():
+    """Scripts using print() should not raise Variable 'print' not found."""
+    sandbox = StarlarkSandbox()
+    result = sandbox.execute('print("hello"); result = 42')
+    assert result == 42
+
+
+def test_print_noop_with_multiple_args():
+    """print() with multiple positional args should be silently ignored."""
+    sandbox = StarlarkSandbox()
+    result = sandbox.execute('print("a", "b", "c"); result = 1')
+    assert result == 1
+
+
+def test_print_noop_with_kwargs():
+    """print() with keyword args (e.g. end, sep) should be silently ignored."""
+    sandbox = StarlarkSandbox()
+    result = sandbox.execute('print("x", end=""); result = 99')
+    assert result == 99
+
+
+def test_print_noop_returns_none():
+    """print() should return None so assignments like x = print(...) work."""
+    sandbox = StarlarkSandbox()
+    result = sandbox.execute("x = print('test'); result = x")
+    assert result is None
