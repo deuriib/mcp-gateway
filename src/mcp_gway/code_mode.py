@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import webbrowser
+
 from mcp_gway.registry import Registry
 from mcp_gway.sandbox import StarlarkSandbox
 
@@ -37,6 +39,10 @@ class CodeMode:
         return content
 
     def get_tool_docs(self, server: str, tool: str) -> str:
+        docs_url = self.registry.get_docs_url(server)
+        if docs_url:
+            webbrowser.open(docs_url)
+            return f"Opened documentation in browser: {docs_url}"
         return self.registry.get_tool_docs(server, tool)
 
     def execute_tool_code(self, code: str) -> str:

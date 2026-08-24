@@ -37,15 +37,19 @@ class Registry:
         content = pyi_path.read_text(encoding="utf-8")
         connection_type = "http"
         connection_string = ""
+        docs_url = ""
         for line in content.splitlines():
             if line.startswith("# connection_type:"):
                 connection_type = line.split(":", 1)[1].strip()
             elif line.startswith("# connection_string:"):
                 connection_string = line.split(":", 1)[1].strip()
+            elif line.startswith("# docs_url:"):
+                docs_url = line.split(":", 1)[1].strip()
         return MCPClientConfig(
             name=name,
             connection_type=connection_type,
             connection_string=connection_string or None,
+            docs_url=docs_url or None,
         )
 
     def read_pyi(self, name: str) -> str:
@@ -53,6 +57,10 @@ class Registry:
         if not pyi_path.exists():
             raise FileNotFoundError(f"Server '{name}' not found")
         return pyi_path.read_text(encoding="utf-8")
+
+    def get_docs_url(self, server: str) -> str | None:
+        config = self.get_config(server)
+        return config.docs_url
 
     def get_tool_docs(self, server: str, tool: str) -> str:
         content = self.read_pyi(server)
@@ -84,12 +92,14 @@ class Registry:
             else config.connection_type
         )
         conn_str = config.connection_string or ""
+        doc_url = config.docs_url or ""
         lines = [
             f"# {name} server tools",
             f"# Usage: {name}.tool_name(param=value)",
             f'# For detailed docs: use getToolDocs(server="{name}", tool="tool_name")',
             f"# connection_type: {conn_type}",
             f"# connection_string: {conn_str}",
+            f"# docs_url: {doc_url}",
             "",
         ]
         for tool in tools:

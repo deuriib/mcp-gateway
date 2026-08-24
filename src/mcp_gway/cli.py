@@ -115,6 +115,7 @@ def main() -> None:
 @click.option("--command", help="Command for stdio connection")
 @click.option("--args", help="JSON array of arguments for stdio", default="[]")
 @click.option("--tools", help="Comma-separated tool names (default: all)", default="*")
+@click.option("--docs-url", help="Documentation URL for the server", default=None)
 def add(
     name: str,
     conn_type: str,
@@ -122,6 +123,7 @@ def add(
     command: str | None,
     args: str,
     tools: str,
+    docs_url: str | None,
 ) -> None:
     """Add an MCP server and generate its .pyi stub."""
     stdio_config = None
@@ -141,6 +143,7 @@ def add(
         connection_type=conn_type,
         connection_string=connection_string,
         stdio_config=stdio_config,
+        docs_url=docs_url,
     )
     tool_filter = tools.split(",") if tools != "*" else ["*"]
     config.tools_to_execute = tool_filter
@@ -171,12 +174,18 @@ def remove(name: str) -> None:
 @main.command()
 @click.argument("name")
 @click.option("--tools", help="Comma-separated tool names", required=True)
-def update(name: str, tools: str) -> None:
+@click.option("--docs-url", help="Documentation URL for the server", default=None)
+def update(name: str, tools: str, docs_url: str | None) -> None:
     """Update tools for an existing server."""
     registry = _get_registry()
     tool_list = [ToolInfo(name=t.strip(), description="") for t in tools.split(",")]
     try:
-        registry.update(name, tool_list)
+        if docs_url:
+            config = registry.get_config(name)
+            config.docs_url = docs_url
+            registry.add(config, tool_list)
+        else:
+            registry.update(name, tool_list)
         click.echo(f"Updated {name} with {len(tool_list)} tools.")
     except FileNotFoundError:
         click.echo(f"Error: Server '{name}' not found.", err=True)

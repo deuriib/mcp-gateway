@@ -28,6 +28,7 @@ class MCPClientConfig(BaseModel):
     stdio_config: StdioConfig | None = None
     tools_to_execute: list[str] = Field(default_factory=lambda: ["*"])
     is_code_mode_client: bool = True
+    docs_url: str | None = None
 
     @field_validator("name")
     @classmethod
