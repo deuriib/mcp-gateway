@@ -1,5 +1,5 @@
 [project]
-name = "mcp-gateway"
+name = "mcp-gway"
 version = "0.1.2"
 description = "Manage MCP servers with Code Mode support."
 readme = "README.md"
