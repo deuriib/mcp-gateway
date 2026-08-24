@@ -115,27 +115,3 @@ def test_get_config_stdio_roundtrip(registry):
     assert restored.stdio_config is not None
     assert restored.stdio_config.command == "npx"
     assert restored.stdio_config.args == ["-y", "mcp-server-git"]
-
-
-def test_get_config_stdio_without_comments_backward_compat(registry):
-    """Old .pyi files without stdio_command should reconstruct stdio_config from connection_string."""
-    # Manually write a .pyi without stdio comments (simulates old format)
-    content = """\
-# myserver server tools
-# Usage: myserver.tool_name(param=value)
-# For detailed docs: use getToolDocs(server="myserver", tool="tool_name")
-# connection_type: stdio
-# connection_string: npx
-# docs_url:
-
-def clone(repo: str) -> dict:  # Clone a repo
-    ...
-"""
-    (registry.servers_dir / "myserver.pyi").write_text(content, encoding="utf-8")
-    # get_config reconstructs stdio_config from connection_string for old files
-    restored = registry.get_config("myserver")
-    assert restored.name == "myserver"
-    assert restored.connection_type == ConnectionType.STDIO
-    assert restored.stdio_config is not None
-    assert restored.stdio_config.command == "npx"
-    assert restored.stdio_config.args == []

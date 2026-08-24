@@ -61,12 +61,6 @@ class Registry:
                 command=stdio_command, args=json.loads(stdio_args)
             )
 
-        if conn_type == ConnectionType.STDIO and not stdio_config:
-            # Backward compat: old .pyi files without stdio_command.
-            # Reconstruct StdioConfig from connection_string (which holds the command).
-            if connection_string:
-                stdio_config = StdioConfig(command=connection_string, args=[])
-
         return MCPClientConfig(
             name=name,
             connection_type=conn_type,
@@ -109,11 +103,7 @@ class Registry:
 
     def _generate_pyi(self, config: MCPClientConfig, tools: list[ToolInfo]) -> str:
         name = config.name
-        conn_type = (
-            config.connection_type.value
-            if hasattr(config.connection_type, "value")
-            else config.connection_type
-        )
+        conn_type = config.connection_type.value
         conn_str = config.connection_string or ""
         doc_url = config.docs_url or ""
         lines = [

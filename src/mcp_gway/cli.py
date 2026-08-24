@@ -37,9 +37,7 @@ async def _discover_tools(
                         ToolInfo(
                             name=t.name,
                             description=t.description or "",
-                            input_schema=t.inputSchema
-                            if hasattr(t, "inputSchema")
-                            else {},
+                            input_schema=t.inputSchema,
                         )
                         for t in result.tools
                     ]
@@ -66,9 +64,7 @@ async def _discover_tools(
                         ToolInfo(
                             name=t.name,
                             description=t.description or "",
-                            input_schema=t.inputSchema
-                            if hasattr(t, "inputSchema")
-                            else {},
+                            input_schema=t.inputSchema,
                         )
                         for t in result.tools
                     ]
@@ -93,9 +89,7 @@ async def _discover_tools(
                         ToolInfo(
                             name=t.name,
                             description=t.description or "",
-                            input_schema=t.inputSchema
-                            if hasattr(t, "inputSchema")
-                            else {},
+                            input_schema=t.inputSchema,
                         )
                         for t in result.tools
                     ]
