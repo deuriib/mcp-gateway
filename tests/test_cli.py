@@ -230,3 +230,37 @@ def test_refresh_accepts_oauth_port_option():
     runner = CliRunner()
     result = runner.invoke(main, ["refresh", "--help"])
     assert "--oauth-port" in result.output
+
+
+# --- list command shows correct connection type ---
+
+
+def test_list_shows_correct_type_for_new_format(tmp_path, monkeypatch):
+    """list should show correct connection type from JSON config, not default HTTP."""
+    from mcp_gway.models import ConnectionType, MCPClientConfig, StdioConfig, ToolInfo
+
+    servers_dir = tmp_path / "servers"
+    servers_dir.mkdir()
+
+    def mock_get_registry():
+        return Registry(servers_dir=servers_dir)
+
+    monkeypatch.setattr("mcp_gway.cli._get_registry", mock_get_registry)
+
+    registry = Registry(servers_dir=servers_dir)
+    config = MCPClientConfig(
+        name="gitserver",
+        connection_type=ConnectionType.STDIO,
+        stdio_config=StdioConfig(command="npx", args=["-y", "mcp-server-git"]),
+    )
+    registry.add(config, [ToolInfo(name="clone", description="Clone a repo")])
+
+    from click.testing import CliRunner
+
+    from mcp_gway.cli import main
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["list"])
+    assert result.exit_code == 0
+    assert "STDIO" in result.output
+    assert "HTTP" not in result.output

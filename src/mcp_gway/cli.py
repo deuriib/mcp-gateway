@@ -230,11 +230,11 @@ def list_servers() -> None:
     for name in names:
         content = registry.read_pyi(name)
         tool_count = content.count("def ")
-        conn_type = "http"
-        for line in content.splitlines():
-            if line.startswith("# connection_type:"):
-                conn_type = line.split(":", 1)[1].strip()
-                break
+        try:
+            config = registry.get_config(name)
+            conn_type = config.connection_type.value
+        except Exception:
+            conn_type = "http"
         click.echo(f"{name:<20} {conn_type.upper():<10} {tool_count:<8}")
 
 
