@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shlex
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -110,11 +111,20 @@ async def _create_client_transport(
             args = cmd_list[1:] if len(cmd_list) > 1 else []
             resolved = resolve_windows_command(command)
             env_dict = getattr(config, "environment", None)
-            params = StdioServerParameters(
-                command=resolved,
-                args=args,
-                env=env_dict,
-            )
+            cwd = getattr(config, "cwd", None)
+            try:
+                params = StdioServerParameters(
+                    command=resolved,
+                    args=args,
+                    env=env_dict,
+                    cwd=cwd,
+                )
+            except TypeError:
+                params = StdioServerParameters(
+                    command=resolved,
+                    args=args,
+                    env=env_dict,
+                )
             async with filtered_stdio_client(
                 server=params, on_noise=_default_on_noise
             ) as (
@@ -131,12 +141,42 @@ async def _create_client_transport(
             if resolved_transport == "streamable-http":
                 from mcp.client.streamable_http import streamable_http_client
 
-                http_client = None
                 if force_auth:
                     from mcp_gway.oauth import get_authenticated_client
 
                     http_client = await get_authenticated_client(config.name)
-                async with streamable_http_client(url, http_client=http_client) as (
+                    async with streamable_http_client(url, http_client=http_client) as (
+                        read,
+                        write,
+                    ):
+                        yield read, write
+                elif headers:
+                    import httpx
+
+                    async with httpx.AsyncClient(headers=headers) as hc:
+                        async with streamable_http_client(url, http_client=hc) as (
+                            read,
+                            write,
+                        ):
+                            yield read, write
+                else:
+                    async with streamable_http_client(url) as (
+                        read,
+                        write,
+                    ):
+                        yield read, write
+            elif resolved_transport == "http":
+                from mcp.client.sse import sse_client
+
+                sse_headers = None
+                if force_auth:
+                    from mcp_gway.oauth import get_authenticated_client
+
+                    http_client = await get_authenticated_client(config.name)
+                    sse_headers = http_client.headers if http_client else None
+                elif headers:
+                    sse_headers = headers
+                async with sse_client(url, headers=sse_headers) as (
                     read,
                     write,
                 ):
@@ -187,15 +227,30 @@ async def _create_client_transport(
         elif config.connection_type == ConnectionType.STREAMABLE_HTTP:
             from mcp.client.streamable_http import streamable_http_client
 
-            http_client = None
             if force_auth:
                 from mcp_gway.oauth import get_authenticated_client
 
                 http_client = await get_authenticated_client(config.name)
-            async with streamable_http_client(
-                config.connection_string, http_client=http_client
-            ) as (read, write):
-                yield read, write
+                async with streamable_http_client(
+                    config.connection_string, http_client=http_client
+                ) as (read, write):
+                    yield read, write
+            else:
+                headers = getattr(config, "headers", None)
+                if headers:
+                    import httpx
+
+                    async with httpx.AsyncClient(headers=headers) as hc:
+                        async with streamable_http_client(
+                            config.connection_string, http_client=hc
+                        ) as (read, write):
+                            yield read, write
+                else:
+                    async with streamable_http_client(config.connection_string) as (
+                        read,
+                        write,
+                    ):
+                        yield read, write
         else:
             from mcp.client.sse import sse_client
 
@@ -205,6 +260,8 @@ async def _create_client_transport(
 
                 http_client = await get_authenticated_client(config.name)
                 headers = http_client.headers if http_client else None
+            else:
+                headers = getattr(config, "headers", None)
             async with sse_client(config.connection_string, headers=headers) as (
                 read,
                 write,
@@ -219,13 +276,17 @@ async def _discover_tools(
     try:
         from mcp import ClientSession
 
+        timeout_sec = getattr(config, "timeout", 5000) / 1000
+        if timeout_sec is None or timeout_sec <= 0:
+            timeout_sec = 5
         async with _create_client_transport(config, force_auth=force_auth) as (
             read,
             write,
         ):
             async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.list_tools()
+                async with asyncio.timeout(timeout_sec):
+                    await session.initialize()
+                    result = await session.list_tools()
                 return [
                     ToolInfo(
                         name=t.name,
@@ -351,7 +412,7 @@ def add(
         if not command:
             click.echo("Error: --command required for local connection", err=True)
             sys.exit(1)
-        cmd_parts = command.strip().split()
+        cmd_parts = shlex.split(command, posix=sys.platform != "win32")
         if args and args != "[]":
             try:
                 extra = json.loads(args)
@@ -391,10 +452,10 @@ def add(
                     )
                 )
                 config.resolved_transport = detected  # type: ignore[assignment]
-            except Exception:  # noqa: S110
-                pass
-        except Exception:  # noqa: S110
-            pass
+            except Exception as e:
+                click.echo(f"Warning: transport detection failed: {e}", err=True)
+        except Exception as e:
+            click.echo(f"Warning: transport detection failed: {e}", err=True)
     else:
         click.echo(f"Error: Unknown connection type {conn_type}", err=True)
         sys.exit(1)
@@ -403,15 +464,31 @@ def add(
     click.echo(f"Discovering tools from {name}...")
     discovered = asyncio.run(_discover_tools(config))
 
-    if not discovered and _is_remote_config(config):
+    if (
+        not discovered
+        and _is_remote_config(config)
+        and getattr(config, "oauth", None) is not False
+    ):
         from mcp_gway.oauth import run_oauth_flow
 
         click.echo("Connection failed. Trying OAuth authentication...")
         server_url = _get_config_url(config) or ""
+        client_metadata = None
+        if isinstance(config.oauth, OAuthConfig):
+            try:
+                from mcp.shared.auth import OAuthClientMetadata
+
+                client_metadata = OAuthClientMetadata(
+                    scope=config.oauth.scope,
+                    redirect_uris=[f"http://127.0.0.1:{oauth_port}/callback"],
+                )
+            except Exception:
+                client_metadata = None
         client = asyncio.run(
             run_oauth_flow(
                 server_url=server_url,
                 server_name=name,
+                client_metadata=client_metadata,
                 output_callback=click.echo,
                 callback_port=oauth_port,
             )
@@ -484,9 +561,12 @@ def list_servers() -> None:
         try:
             config = registry.get_config(name)
             conn_type = _get_config_display_type(config)
+            enabled = getattr(config, "enabled", True)
         except Exception:
             conn_type = "http"
-        click.echo(f"{name:<20} {conn_type.upper():<10} {tool_count:<8}")
+            enabled = True
+        suffix = " (disabled)" if not enabled else ""
+        click.echo(f"{name:<20} {conn_type.upper():<10} {tool_count:<8}{suffix}")
 
 
 @main.command()
@@ -526,7 +606,9 @@ async def _refresh_server(
     """Refresh a single server: try without auth, then with OAuth if needed."""
     discovered = await _discover_tools(cfg, force_auth=False)
 
-    needs_auth = force_auth or _is_remote_config(cfg)
+    needs_auth = (force_auth or _is_remote_config(cfg)) and getattr(
+        cfg, "oauth", None
+    ) is not False
     if not discovered and needs_auth:
         from mcp_gway.oauth import run_oauth_flow
 
@@ -536,9 +618,21 @@ async def _refresh_server(
             click.echo("Connection failed. Trying OAuth authentication...")
 
         server_url = _get_config_url(cfg) or ""
+        client_metadata = None
+        if isinstance(getattr(cfg, "oauth", None), OAuthConfig):
+            try:
+                from mcp.shared.auth import OAuthClientMetadata
+
+                client_metadata = OAuthClientMetadata(
+                    scope=cfg.oauth.scope,  # type: ignore[union-attr]
+                    redirect_uris=[f"http://127.0.0.1:{oauth_port}/callback"],
+                )
+            except Exception:
+                client_metadata = None
         client = await run_oauth_flow(
             server_url=server_url,
             server_name=srv_name,
+            client_metadata=client_metadata,
             output_callback=click.echo,
             callback_port=oauth_port,
         )
@@ -587,6 +681,10 @@ def refresh(name: str | None, auth: bool, oauth_port: int) -> None:
             click.echo(
                 f"Warning: Server '{server_name}' not found, skipping.", err=True
             )
+            continue
+
+        if not getattr(config, "enabled", True):
+            click.echo(f"Skipping {server_name} (disabled)")
             continue
 
         display_type = _get_config_display_type(config)

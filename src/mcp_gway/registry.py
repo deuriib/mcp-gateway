@@ -63,6 +63,17 @@ class Registry:
     def list(self) -> list[str]:
         return sorted(p.stem for p in self.servers_dir.glob("*.pyi"))
 
+    def list_enabled(self) -> list[str]:
+        result: list[str] = []
+        for name in self.list():
+            try:
+                cfg = self.get_config(name)
+                if getattr(cfg, "enabled", True):
+                    result.append(name)
+            except Exception:
+                result.append(name)
+        return result
+
     def add(
         self, config: MCPServerConfig | MCPClientConfig, tools: list[ToolInfo]
     ) -> None:
