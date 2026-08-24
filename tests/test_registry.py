@@ -134,8 +134,12 @@ def test_add_creates_json_config(registry, http_config):
     assert json_path.exists()
     data = json.loads(json_path.read_text(encoding="utf-8"))
     assert data["name"] == "testserver"
-    assert data["connection_type"] == "http"
-    assert data["connection_string"] == "http://localhost:3001/mcp"
+    if "type" in data:
+        assert data["type"] == "remote"
+        assert data["url"] == "http://localhost:3001/mcp"
+    else:
+        assert data["connection_type"] == "http"
+        assert data["connection_string"] == "http://localhost:3001/mcp"
 
 
 def test_pyi_file_no_config_comments(registry, http_config):

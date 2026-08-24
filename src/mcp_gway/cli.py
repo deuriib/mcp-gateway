@@ -300,6 +300,7 @@ def add(
     cwd: str | None,
 ) -> None:
     """Add an MCP server and generate its .pyi stub."""
+    _ = docs_url  # deprecated, kept for backward compat
     headers_dict = _parse_headers(list(headers)) if headers else None
     oauth_config = None
     if oauth_client_id or oauth_client_secret or oauth_scope:

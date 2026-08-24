@@ -223,6 +223,7 @@ class Registry:
                 stdio_command = line.split(":", 1)[1].strip()
             elif line.startswith("# stdio_args:"):
                 stdio_args = line.split(":", 1)[1].strip()
+        _ = docs_url  # deprecated, kept for backward compat
 
         conn_type = ConnectionType(connection_type)
         if conn_type == ConnectionType.STDIO:

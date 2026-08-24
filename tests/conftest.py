@@ -2,22 +2,36 @@
 
 import pytest
 
-from mcp_gway.models import ConnectionType, MCPClientConfig, StdioConfig
+from mcp_gway.models import (
+    ConnectionType,
+    MCPClientConfig,
+    MCPServerConfig,
+    StdioConfig,
+)
 
 
 @pytest.fixture
-def http_config() -> MCPClientConfig:
-    return MCPClientConfig(
+def http_config() -> MCPServerConfig:
+    return MCPServerConfig(
         name="testserver",
-        connection_type=ConnectionType.HTTP,
-        connection_string="http://localhost:3001/mcp",
+        type="remote",
+        url="http://localhost:3001/mcp",
     )
 
 
 @pytest.fixture
-def stdio_config() -> MCPClientConfig:
-    return MCPClientConfig(
+def stdio_config() -> MCPServerConfig:
+    return MCPServerConfig(
         name="teststdio",
-        connection_type=ConnectionType.STDIO,
-        stdio_config=StdioConfig(command="echo", args=["hello"]),
+        type="local",
+        command=["echo", "hello"],
+    )
+
+
+@pytest.fixture
+def legacy_http_config() -> MCPClientConfig:
+    return MCPClientConfig(
+        name="testserver",
+        connection_type=ConnectionType.HTTP,
+        connection_string="http://localhost:3001/mcp",
     )
