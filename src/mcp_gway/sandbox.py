@@ -3,10 +3,27 @@
 from __future__ import annotations
 
 import inspect
+import re
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 
 import starlark as sl
+
+# Characters not allowed in Starlark/Python identifiers
+_INVALID_IDENTIFIER_RE = re.compile(r"[^a-zA-Z0-9_]")
+
+
+def _sanitize_identifier(name: str) -> str:
+    """Replace non-identifier characters with underscores for Starlark safety.
+
+    Hyphens, dots, and other special chars in MCP tool names (e.g. query-docs)
+    break Starlark struct syntax. This converts them to valid identifiers.
+    """
+    sanitized = _INVALID_IDENTIFIER_RE.sub("_", name)
+    # Starlark identifiers can't start with a digit
+    if sanitized and sanitized[0].isdigit():
+        sanitized = f"_{sanitized}"
+    return sanitized
 
 
 class SandboxTimeoutError(Exception):
@@ -41,9 +58,10 @@ class StarlarkSandbox:
                     continue
                 attr_val = getattr(proxy, attr_name, None)
                 if callable(attr_val) or (inspect.isfunction(attr_val)):
-                    callable_name = f"{name}_{attr_name}"
+                    safe_name = _sanitize_identifier(attr_name)
+                    callable_name = f"{name}_{safe_name}"
                     mod.add_callable(callable_name, attr_val)
-                    methods.append(f"{attr_name} = {callable_name}")
+                    methods.append(f"{safe_name} = {callable_name}")
 
             if methods:
                 fields = ", ".join(methods)

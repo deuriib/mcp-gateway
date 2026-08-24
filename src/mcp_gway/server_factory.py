@@ -10,9 +10,25 @@ Bridges async MCP clients with synchronous Starlark execution by:
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
 
 from mcp_gway.registry import Registry
+
+# Characters not allowed in Python identifiers
+_INVALID_IDENTIFIER_RE = re.compile(r"[^a-zA-Z0-9_]")
+
+
+def _sanitize_identifier(name: str) -> str:
+    """Replace non-identifier characters with underscores.
+
+    MCP tool names may contain hyphens (e.g. query-docs) which are
+    invalid as Python/Starlark identifiers.
+    """
+    sanitized = _INVALID_IDENTIFIER_RE.sub("_", name)
+    if sanitized and sanitized[0].isdigit():
+        sanitized = f"_{sanitized}"
+    return sanitized
 
 
 class ServerFactory:
@@ -70,7 +86,12 @@ class ServerFactory:
         return struct
 
     def _bind_tool_method(self, struct: object, config: Any, tool_name: str) -> None:
-        """Bind a synchronous tool method to the struct."""
+        """Bind a synchronous tool method to the struct.
+
+        Uses sanitized attribute names (hyphens → underscores) so that
+        the struct is introspectable by the Starlark sandbox.
+        The original tool_name is preserved for MCP calls.
+        """
 
         def make_tool_fn(cfg: Any, tn: str) -> Any:
             def tool_fn(**kwargs: Any) -> Any:
@@ -79,7 +100,8 @@ class ServerFactory:
             tool_fn.__name__ = tn
             return tool_fn
 
-        setattr(struct, tool_name, make_tool_fn(config, tool_name))
+        safe_name = _sanitize_identifier(tool_name)
+        setattr(struct, safe_name, make_tool_fn(config, tool_name))
 
     def _get_tool_names(self, server_name: str) -> list[str]:
         """Extract tool names from the server's .pyi stub."""

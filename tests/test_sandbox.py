@@ -96,3 +96,74 @@ def test_default_timeout_is_reasonable():
 
     sig = inspect.signature(StarlarkSandbox.execute)
     assert sig.parameters["timeout"].default == 30.0
+
+
+# --- Hyphenated tool name tests ---
+
+
+def test_execute_with_hyphenated_method():
+    """Methods with hyphens (like query-docs) should work via sanitized names."""
+    from mcp_gway.sandbox import _sanitize_identifier
+
+    assert _sanitize_identifier("query-docs") == "query_docs"
+    assert _sanitize_identifier("resolve-library-id") == "resolve_library_id"
+    assert _sanitize_identifier("memory_smart_search") == "memory_smart_search"
+    assert _sanitize_identifier("123tool") == "_123tool"
+
+    class Context7Server:
+        pass
+
+    def query_docs(self, library_id="", query=""):
+        return {"answer": f"Docs for {library_id}: {query}"}
+
+    setattr(Context7Server, "query-docs", query_docs)
+
+    sandbox = StarlarkSandbox()
+    sandbox.inject_server("context7", Context7Server())
+    # Should work because hyphens are sanitized to underscores
+    result = sandbox.execute(
+        'result = context7.query_docs(library_id="react", query="hooks")'
+    )
+    assert result["answer"] == "Docs for react: hooks"
+
+
+def test_inject_server_with_hyphenated_methods():
+    """Server struct with hyphenated method names should be injectable."""
+    from mcp_gway.sandbox import _sanitize_identifier
+
+    class MyServer:
+        pass
+
+    def query_docs(self, q=""):
+        return q
+
+    def resolve_library_id(self, lib=""):
+        return lib
+
+    setattr(MyServer, "query-docs", query_docs)
+    setattr(MyServer, "resolve-library-id", resolve_library_id)
+
+    sandbox = StarlarkSandbox()
+    sandbox.inject_server("context7", MyServer())
+
+    # Verify sanitized names are valid identifiers
+    proxy = sandbox._modules["context7"]
+    for attr_name in dir(proxy):
+        if attr_name.startswith("_"):
+            continue
+        safe = _sanitize_identifier(attr_name)
+        assert safe.isidentifier(), f"'{safe}' is not a valid identifier"
+
+
+def test_sanitize_identifier_edge_cases():
+    """Test various edge cases for identifier sanitization."""
+    from mcp_gway.sandbox import _sanitize_identifier
+
+    assert _sanitize_identifier("simple") == "simple"
+    assert _sanitize_identifier("with-dash") == "with_dash"
+    assert _sanitize_identifier("with.dot") == "with_dot"
+    assert _sanitize_identifier("with space") == "with_space"
+    assert _sanitize_identifier("with@special#chars!") == "with_special_chars_"
+    assert _sanitize_identifier("") == ""
+    assert _sanitize_identifier("_private") == "_private"
+    assert _sanitize_identifier("3start") == "_3start"
