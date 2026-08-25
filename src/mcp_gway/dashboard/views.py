@@ -17,7 +17,7 @@ _CLOSE_ATTRS: dict[str, str] = {
     "hx-swap": "innerHTML",
 }
 _BASE_BADGE = (
-    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium "
+    "inline-flex items-center justify-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium leading-none "
     "transition-colors duration-200"
 )
 _BADGE_COLORS: dict[str, str] = {
@@ -142,7 +142,7 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
         else "bg-zinc-50 text-zinc-700 border-zinc-200"
     )
     return htpy.tr(
-        class_="group transition-all duration-200 hover:bg-slate-50/80 cursor-pointer border-b border-slate-100 last:border-0 animate-row",
+        class_="group transition-all duration-200 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 animate-row",
         style=f"animation-delay:{idx * 28}ms",
         **{
             "hx-get": detail_url,
@@ -188,6 +188,7 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
                 htpy.button(
                     class_="inline-flex items-center justify-center rounded-full bg-white border border-slate-200 h-9 px-3 text-xs font-medium text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-1 transition-all duration-200 h-9",
                     aria_label=f"View {name}",
+                    title=f"View details for {name}",
                     **{
                         "hx-get": detail_url,
                         "hx-target": _DIALOG_TARGET,
@@ -198,6 +199,7 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
                 htpy.button(
                     class_="hidden sm:inline-flex items-center justify-center rounded-full bg-white border border-slate-200 h-9 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 h-9",
                     aria_label=f"{toggle_label} {name}",
+                    title=f"{toggle_label} server {name}",
                     **{
                         "hx-patch": patch_url,
                         "hx-vals": json.dumps({"enabled": toggle_val}),
@@ -209,6 +211,7 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
                 htpy.button(
                     class_="inline-flex items-center justify-center rounded-full bg-white border border-slate-200 h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200",
                     aria_label=f"Delete {name}",
+                    title=f"Delete server {name}",
                     **{
                         "hx-delete": delete_url,
                         "hx-confirm": f"Delete server '{name}'? This cannot be undone.",
@@ -406,37 +409,6 @@ def add_form() -> Any:
                 ],
             ],
         ],
-        htpy.script[
-            Markup("""
-(function(){
-  const sel=document.getElementById('field-type');
-  const urlG=document.getElementById('group-url');
-  const cmdG=document.getElementById('group-command');
-  if(!sel||!urlG||!cmdG) return;
-  function sync(){
-    const isLocal=sel.value==='local';
-    urlG.classList.toggle('hidden', isLocal);
-    cmdG.classList.toggle('hidden', !isLocal);
-  }
-  sel.addEventListener('change', sync);
-  sync();
-  const q=document.getElementById('server-filter');
-  if(q){
-    q.addEventListener('input', function(){
-      const v=this.value.toLowerCase();
-      document.querySelectorAll('tr[data-name]').forEach(function(tr){
-        tr.style.display = tr.getAttribute('data-name').includes(v) ? '' : 'none';
-      });
-    });
-  }
-  document.addEventListener('click', function(e){
-    const b=e.target.closest('.copy-btn');
-    if(!b) return;
-    const pre=b.closest('div').nextElementSibling;
-    if(pre && navigator.clipboard){ navigator.clipboard.writeText(pre.textContent).then(()=>{const t=b.textContent; b.textContent='Copied!'; setTimeout(()=>b.textContent=t,1200)}); }
-  });
-})();""")
-        ],
     ]
 
 
@@ -464,6 +436,7 @@ def drawer_error(message: str, status: int = 404) -> Any:
             htpy.button(
                 class_="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition-colors duration-200",
                 aria_label="Close",
+                title="Close drawer",
                 **_CLOSE_ATTRS,
             )["×"],
         ],
@@ -491,6 +464,7 @@ def _drawer_header(name: str) -> Any:
         htpy.button(
             class_="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition-colors duration-200",
             aria_label="Close",
+            title="Close drawer",
             **_CLOSE_ATTRS,
         )["×"],
     ]
@@ -634,6 +608,8 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
     return htpy.div(class_="flex flex-wrap gap-2")[
         htpy.button(
             class_="inline-flex items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-black hover:shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11",
+            aria_label=toggle_label,
+            title=f"{toggle_label} server {name}" if name else toggle_label,
             **{
                 "hx-patch": patch_url,
                 "hx-vals": json.dumps({"enabled": toggle_val}),
@@ -644,6 +620,8 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
         )[toggle_label],
         htpy.button(
             class_="inline-flex items-center justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11",
+            aria_label="Refresh tools",
+            title="Refresh tool list from server",
             **{
                 "hx-post": refresh_url,
                 "hx-target": "#toast",
@@ -652,6 +630,7 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
         )["Refresh"],
         htpy.button(
             class_="inline-flex items-center justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-11",
+            aria_label="Reveal secrets",
             **(
                 {
                     "hx-post": reveal_url,
@@ -665,11 +644,14 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
                     "hx-post": reveal_url,
                     "hx-target": "#toast",
                     "hx-swap": "innerHTML",
+                    "title": "Reveal masked secrets (local only)",
                 }
             ),
         )["Reveal"],
         htpy.button(
             class_="inline-flex items-center justify-center rounded-full bg-white border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 min-h-11",
+            aria_label=f"Delete {name}",
+            title=f"Delete server {name}",
             **{
                 "hx-delete": delete_url,
                 "hx-confirm": f"Delete server '{name}'? This cannot be undone.",
@@ -694,6 +676,7 @@ def _tool_panel(tool_count: Any, pyi_content: str, truncated: bool) -> Any:
             htpy.button(
                 class_="inline-flex items-center gap-1 rounded-full bg-white border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-colors duration-200 copy-btn",
                 aria_label="Copy tool signatures",
+                title="Copy tool signatures to clipboard",
                 **{"data-copy-target": "tool-pre"},
             )["Copy"],
             htpy.span(class_="hidden")[[]],
@@ -868,6 +851,7 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
             htpy.link(rel="stylesheet", href="/static/tailwind.css"),
             htpy.script(src="/static/htmx.min.js")[[]],
             htpy.script(src="/static/dialog.js")[[]],
+            htpy.script(src="/static/dashboard.js")[[]],
             htpy.style[
                 Markup("""
 @keyframes rowIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
@@ -930,7 +914,7 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
                 ],
             ],
             htpy.div(
-                class_="max-w-6xl mx-auto px-4 py-6 pb-12 flex-1 flex flex-col min-h-0 w-full gap-6"
+                class_="max-w-6xl mx-auto px-4 pt-8 pb-12 flex-1 flex flex-col min-h-0 w-full gap-8"
             )[
                 warning,
                 _stats(servers),
@@ -960,7 +944,7 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
                                         class_="w-full sm:w-56 rounded-full border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 transition-all duration-200",
                                     ),
                                     htpy.span(
-                                        class_="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                                        class_="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"
                                     )[_icon("search", cls="h-4 w-4")],
                                 ],
                             ],

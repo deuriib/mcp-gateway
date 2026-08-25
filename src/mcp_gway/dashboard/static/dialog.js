@@ -147,20 +147,13 @@
     handleDialogError(e, "swapError");
   });
 
-  // M3 delegated stopPropagation for dynamically swapped #server-table-body
-  document.addEventListener(
-    "click",
-    function (e) {
-      var btn = e.target.closest("tr[hx-get] button");
-      if (btn) e.stopPropagation();
-      var closeBtn = e.target.closest("#" + DIALOG_ID + ' button[aria-label="Close"]');
-      if (closeBtn) {
-        var dlg = closeBtn.closest("dialog");
-        if (dlg && dlg.open) dlg.close();
-      }
-    },
-    true
-  );
+  document.addEventListener("click", function (e) {
+    var closeBtn = e.target.closest("#" + DIALOG_ID + ' button[aria-label="Close"]');
+    if (closeBtn) {
+      var dlg = closeBtn.closest("dialog");
+      if (dlg && dlg.open) dlg.close();
+    }
+  });
 
   // close via hx-get="/dashboard/close" — wait 50ms for swap to clear before closing
   document.addEventListener("click", function (e) {
