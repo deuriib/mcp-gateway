@@ -5,12 +5,57 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 import secrets
 import string
 import webbrowser
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
+
+_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+_RESERVED_NAMES = {
+    "con",
+    "prn",
+    "aux",
+    "nul",
+    "com1",
+    "com2",
+    "com3",
+    "com4",
+    "com5",
+    "com6",
+    "com7",
+    "com8",
+    "com9",
+    "lpt1",
+    "lpt2",
+    "lpt3",
+    "lpt4",
+    "lpt5",
+    "lpt6",
+    "lpt7",
+    "lpt8",
+    "lpt9",
+}
+
+
+def _validate_server_name(name: str) -> None:
+    if not name or "/" in name or "\\" in name or name in (".", ".."):
+        raise ValueError("Invalid server name")
+    if not name.isascii():
+        raise ValueError("Name must contain only ASCII characters")
+    if "-" in name or " " in name:
+        raise ValueError("Name cannot contain hyphens or spaces")
+    if name and name[0].isdigit():
+        raise ValueError("Name cannot start with a number")
+    if "<" in name or ">" in name:
+        raise ValueError("Name contains invalid characters")
+    if not _NAME_RE.match(name):
+        raise ValueError("Name must match ^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    if name.lower() in _RESERVED_NAMES:
+        raise ValueError("Name is reserved")
+
 
 import httpx2
 from mcp.shared.auth import (
@@ -24,11 +69,20 @@ class FileTokenStorage:
     """File-based token storage for OAuth tokens."""
 
     def __init__(self, server_name: str, storage_dir: Path | None = None) -> None:
+        _validate_server_name(server_name)
         self._storage_dir = (
             storage_dir or Path.home() / ".config" / "mcp-gway" / "tokens"
         )
         self._storage_dir.mkdir(parents=True, exist_ok=True)
-        self._token_file = self._storage_dir / f"{server_name}.json"
+        token_path = self._storage_dir / f"{server_name}.json"
+        try:
+            if not token_path.resolve().is_relative_to(self._storage_dir.resolve()):
+                raise ValueError("Invalid server name: path traversal")
+        except ValueError:
+            raise
+        except Exception as e:
+            raise ValueError("Invalid server name") from e
+        self._token_file = token_path
 
     async def get_tokens(self) -> OAuthToken | None:
         if not self._token_file.exists():

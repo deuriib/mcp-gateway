@@ -79,18 +79,25 @@ class SessionInfo:
 
 
 class Gateway:
-    def __init__(self, registry: Registry) -> None:
+    def __init__(self, registry: Registry, host: str = "127.0.0.1") -> None:
         self.registry = registry
+        self.host = host
         self.code_mode = CodeMode(registry)
         self._sessions: dict[str, SessionInfo] = {}
+        from mcp_gway.dashboard.routes import get_dashboard_routes
+
+        dashboard_routes = get_dashboard_routes(registry)
         self.app = Starlette(
             routes=[
                 Route("/health", self._health, methods=["GET"]),
                 Route("/mcp", self._mcp_sse, methods=["GET"]),
                 Route("/mcp", self._mcp_post, methods=["POST"]),
                 Route("/mcp/messages", self._mcp_post, methods=["POST"]),
+                *dashboard_routes,
             ]
         )
+        self.app.state.registry = registry  # type: ignore[attr-defined]
+        self.app.state.dashboard_host = host  # type: ignore[attr-defined]
 
     def _create_session(self, session_id: str) -> SessionInfo:
         info = SessionInfo(queue=asyncio.Queue())

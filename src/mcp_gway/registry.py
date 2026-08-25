@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,51 @@ from mcp_gway.models import (
     StdioConfig,
     ToolInfo,
 )
+
+_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+_RESERVED_NAMES = {
+    "con",
+    "prn",
+    "aux",
+    "nul",
+    "com1",
+    "com2",
+    "com3",
+    "com4",
+    "com5",
+    "com6",
+    "com7",
+    "com8",
+    "com9",
+    "lpt1",
+    "lpt2",
+    "lpt3",
+    "lpt4",
+    "lpt5",
+    "lpt6",
+    "lpt7",
+    "lpt8",
+    "lpt9",
+}
+
+
+def _validate_safe_name(name: str) -> None:
+    if not name or "/" in name or "\\" in name or name in (".", ".."):
+        raise ValueError(
+            "Invalid name: must not contain path separators or be '.' or '..'"
+        )
+    if not name.isascii():
+        raise ValueError("Name must contain only ASCII characters")
+    if "-" in name or " " in name:
+        raise ValueError("Name cannot contain hyphens or spaces")
+    if name and name[0].isdigit():
+        raise ValueError("Name cannot start with a number")
+    if "<" in name or ">" in name:
+        raise ValueError("Name contains invalid characters")
+    if not _NAME_RE.match(name):
+        raise ValueError("Name must match ^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    if name.lower() in _RESERVED_NAMES:
+        raise ValueError("Name is reserved")
 
 
 def _get_legacy_connection_type(self: MCPServerConfig) -> ConnectionType:
@@ -60,6 +106,25 @@ class Registry:
         self.servers_dir = Path(servers_dir)
         self.servers_dir.mkdir(parents=True, exist_ok=True)
 
+    def _safe_path(self, name: str, suffix: str) -> Path:
+        _validate_safe_name(name)
+        p = self.servers_dir / f"{name}{suffix}"
+        try:
+            resolved_base = self.servers_dir.resolve()
+            resolved_path = p.resolve()
+            if not resolved_path.is_relative_to(resolved_base):
+                raise ValueError("Invalid name: path traversal detected")
+        except ValueError:
+            raise
+        except Exception:
+            raise ValueError("Invalid name: path traversal detected")
+        return p
+
+    def _atomic_write_text(self, path: Path, content: str) -> None:
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(path)
+
     def list(self) -> list[str]:
         return sorted(p.stem for p in self.servers_dir.glob("*.pyi"))
 
@@ -89,8 +154,8 @@ class Registry:
                 config_data["stdio_args"] = config.stdio_config.args
                 if config.stdio_config.envs:
                     config_data["stdio_envs"] = config.stdio_config.envs
-            json_path = self.servers_dir / f"{config.name}.json"
-            json_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+            json_path = self._safe_path(config.name, ".json")
+            self._atomic_write_text(json_path, json.dumps(config_data, indent=2))
         else:
             config_data: dict[str, Any] = {
                 "name": config.name,
@@ -115,19 +180,19 @@ class Registry:
                         config_data["oauth"] = config.oauth.model_dump()
                 if config.resolved_transport:
                     config_data["resolved_transport"] = config.resolved_transport
-            json_path = self.servers_dir / f"{config.name}.json"
-            json_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+            json_path = self._safe_path(config.name, ".json")
+            self._atomic_write_text(json_path, json.dumps(config_data, indent=2))
 
-        pyi_path = self.servers_dir / f"{config.name}.pyi"
+        pyi_path = self._safe_path(config.name, ".pyi")
         content = self._generate_pyi(config, tools)
-        pyi_path.write_text(content, encoding="utf-8")
+        self._atomic_write_text(pyi_path, content)
 
     def remove(self, name: str) -> None:
-        pyi_path = self.servers_dir / f"{name}.pyi"
+        pyi_path = self._safe_path(name, ".pyi")
         if not pyi_path.exists():
             raise FileNotFoundError(f"Server '{name}' not found")
         pyi_path.unlink()
-        json_path = self.servers_dir / f"{name}.json"
+        json_path = self._safe_path(name, ".json")
         if json_path.exists():
             json_path.unlink()
 
@@ -136,8 +201,8 @@ class Registry:
         self.add(config, tools)
 
     def get_config(self, name: str) -> MCPServerConfig:
-        json_path = self.servers_dir / f"{name}.json"
-        pyi_path = self.servers_dir / f"{name}.pyi"
+        json_path = self._safe_path(name, ".json")
+        pyi_path = self._safe_path(name, ".pyi")
 
         if not json_path.exists() and not pyi_path.exists():
             raise FileNotFoundError(f"Server '{name}' not found")
@@ -213,7 +278,7 @@ class Registry:
                     config_data["oauth"] = config.oauth.model_dump()
             if config.resolved_transport:
                 config_data["resolved_transport"] = config.resolved_transport
-        json_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+        self._atomic_write_text(json_path, json.dumps(config_data, indent=2))
         return config
 
     def _parse_config_from_pyi(self, name: str, pyi_path: Path) -> MCPServerConfig:
@@ -263,7 +328,7 @@ class Registry:
             )
 
     def read_pyi(self, name: str) -> str:
-        pyi_path = self.servers_dir / f"{name}.pyi"
+        pyi_path = self._safe_path(name, ".pyi")
         if not pyi_path.exists():
             raise FileNotFoundError(f"Server '{name}' not found")
         return pyi_path.read_text(encoding="utf-8")

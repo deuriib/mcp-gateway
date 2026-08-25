@@ -2,10 +2,58 @@
 
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+_RESERVED_NAMES = {
+    "con",
+    "prn",
+    "aux",
+    "nul",
+    "com1",
+    "com2",
+    "com3",
+    "com4",
+    "com5",
+    "com6",
+    "com7",
+    "com8",
+    "com9",
+    "lpt1",
+    "lpt2",
+    "lpt3",
+    "lpt4",
+    "lpt5",
+    "lpt6",
+    "lpt7",
+    "lpt8",
+    "lpt9",
+}
+
+
+def _validate_name_value(v: str) -> str:
+    if not v:
+        raise ValueError("Name must not be empty")
+    if "/" in v or "\\" in v or v in (".", ".."):
+        raise ValueError("Name must not contain path separators or be '.' or '..'")
+    if not v.isascii():
+        raise ValueError("Name must contain only ASCII characters")
+    if "-" in v or " " in v:
+        raise ValueError("Name cannot contain hyphens or spaces")
+    if v[0].isdigit():
+        raise ValueError("Name cannot start with a number")
+    if "<" in v or ">" in v or '"' in v or "'" in v or "&" in v:
+        raise ValueError("Name contains invalid characters")
+    if not _NAME_RE.match(v):
+        raise ValueError("Name must match ^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    if v.lower() in _RESERVED_NAMES:
+        raise ValueError("Name is reserved")
+    return v
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Legacy models (deprecated, kept for backward compat during migration)
@@ -37,13 +85,7 @@ class MCPClientConfig(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
-        if not v.isascii():
-            raise ValueError("Name must contain only ASCII characters")
-        if "-" in v or " " in v:
-            raise ValueError("Name cannot contain hyphens or spaces")
-        if v[0].isdigit():
-            raise ValueError("Name cannot start with a number")
-        return v
+        return _validate_name_value(v)
 
     def model_post_init(self, __context: Any) -> None:
         if self.connection_type in (
@@ -87,6 +129,12 @@ class MCPServerConfig(BaseModel):
 
     name: str
     type: Literal["local", "remote"]
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        return _validate_name_value(v)
+
     enabled: bool = True
     timeout: int = 5000
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shlex
 import sys
 from collections.abc import AsyncIterator
@@ -585,16 +586,29 @@ def inspect(name: str) -> None:
 
 
 @main.command()
-@click.option("--host", default="0.0.0.0", help="Bind host")
+@click.option("--host", default="127.0.0.1", help="Bind host")
 @click.option("--port", default=8080, type=int, help="Bind port")
 def serve(host: str, port: int) -> None:
     """Start the gateway server."""
+    import os
+
     import uvicorn
 
+    allowed_remote = os.environ.get("MCP_GWAY_ALLOW_REMOTE") == "1"
+    is_loopback = host in ("127.0.0.1", "::1", "localhost")
+    if not is_loopback and not allowed_remote:
+        click.echo(
+            f"Error: binding to non-loopback host '{host}' requires MCP_GWAY_ALLOW_REMOTE=1",
+            err=True,
+        )
+        sys.exit(2)
     registry = _get_registry()
     from mcp_gway.gateway import Gateway
 
-    gateway = Gateway(registry)
+    if not is_loopback:
+        logger = logging.getLogger(__name__)
+        logger.warning("dashboard exposed on non-loopback host %s", host)
+    gateway = Gateway(registry, host=host)
     click.echo(f"Starting MCP Gateway on {host}:{port}")
     uvicorn.run(gateway.app, host=host, port=port)
 

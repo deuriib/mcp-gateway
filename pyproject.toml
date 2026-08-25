@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.4.2",
+    "htpy>=26.5.1",
     "httpx>=0.28.1",
     "mcp>=2.0.0",
     "starlark-pyo3>=2026.1.1",
@@ -43,6 +44,10 @@ ignore = [
     "PYI063",  # Pydantic model_post_init has fixed signature
     "SIM102",  # Nested ifs with different error messages are clearer separate
     "B017",    # Tests intentionally catch broad exceptions
+    "S110",    # try-except-pass intentional for resilience
+    "S112",    # try-except-continue intentional
+    "LOG015",  # logger warning intentional
+    "RUF100",  # allow unused noqa
 ]
 
 [dependency-groups]
