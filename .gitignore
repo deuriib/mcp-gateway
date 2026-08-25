@@ -72,3 +72,4 @@ Thumbs.db
 servers/
 .superpowers/
 .ruff_cache/
+junit.xml
