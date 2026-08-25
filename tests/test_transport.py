@@ -1,7 +1,9 @@
 """Tests for transport auto-detection."""
 
 import asyncio
+
 import pytest
+
 from mcp_gway.models import MCPServerConfig
 
 

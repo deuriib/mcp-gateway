@@ -6,7 +6,6 @@ from mcp_gway.models import (
     ConnectionType,
     MCPClientConfig,
     MCPServerConfig,
-    StdioConfig,
 )
 
 
