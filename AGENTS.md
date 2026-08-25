@@ -44,10 +44,12 @@ tests/
 
 ```bash
 # Development
-uv sync                    # Install dependencies
-uv run pytest -v           # Run tests
-uv run ruff check src/     # Lint
-uv run ruff format src/    # Format
+uv sync                                 # Install dependencies
+uv run pre-commit install                # Install git hooks (once per clone)
+uv run pre-commit run --all-files        # Run hooks on all files
+uv run pytest -v                         # Run tests
+uv run ruff check src/ tests/            # Lint (CI parity)
+uv run ruff format --check src/ tests/   # Format check (CI parity)
 
 # CLI
 mcp-gway add <name> --type <http|stdio|sse|streamable-http> [--url <url>] [--command <cmd>]

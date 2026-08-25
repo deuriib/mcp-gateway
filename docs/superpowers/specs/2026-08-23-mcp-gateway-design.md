@@ -235,11 +235,11 @@ import starlark as sl
 class StarlarkSandbox:
     def __init__(self):
         self.globals = sl.Globals.standard()
-    
+
     def inject_server(self, name: str, server_proxy):
         """Inject a server proxy as a global object."""
         self.modules[name] = server_proxy
-    
+
     def execute(self, code: str, timeout: float = 30.0) -> dict:
         """Execute code in sandbox, return result."""
         mod = sl.Module()
@@ -257,7 +257,7 @@ class ServerProxy:
     def __init__(self, name: str, client: MCPClient):
         self.name = name
         self.client = client
-    
+
     def __getattr__(self, tool_name: str):
         def tool_fn(**kwargs):
             return self.client.call_tool(tool_name, kwargs)
