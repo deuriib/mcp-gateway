@@ -236,11 +236,9 @@ async def handle_get(request: Request) -> JSONResponse | HTMLResponse:
 async def handle_create(request: Request) -> JSONResponse | HTMLResponse:
     registry: Registry = request.app.state.registry  # type: ignore[attr-defined]
 
-    try:
-        body_bytes = await request.body()
-    except Exception:  # noqa: BLE001
-        body_bytes = b""
-    if len(body_bytes) > MAX_PAYLOAD_SIZE:
+    ctype = request.headers.get("content-type", "")
+    clen = request.headers.get("content-length")
+    if clen and clen.isdigit() and int(clen) > MAX_PAYLOAD_SIZE:
         if _is_htmx_request(request):
             html_content = (
                 f"<div class='toast bg-red-100 p-2'>{_e('payload too large')}</div>"
@@ -248,9 +246,19 @@ async def handle_create(request: Request) -> JSONResponse | HTMLResponse:
             return HTMLResponse(html_content, status_code=413)
         return JSONResponse({"detail": "payload too large"}, status_code=413)
 
-    ctype = request.headers.get("content-type", "")
     payload: dict[str, Any]
     if "application/json" in ctype:
+        try:
+            body_bytes = await request.body()
+        except Exception:  # noqa: BLE001
+            body_bytes = b""
+        if len(body_bytes) > MAX_PAYLOAD_SIZE:
+            if _is_htmx_request(request):
+                html_content = (
+                    f"<div class='toast bg-red-100 p-2'>{_e('payload too large')}</div>"
+                )
+                return HTMLResponse(html_content, status_code=413)
+            return JSONResponse({"detail": "payload too large"}, status_code=413)
         try:
             payload = json.loads(body_bytes.decode("utf-8") if body_bytes else "{}")
             if not isinstance(payload, dict):
@@ -266,6 +274,16 @@ async def handle_create(request: Request) -> JSONResponse | HTMLResponse:
         try:
             form = await request.form()
             payload = dict(form)  # type: ignore[arg-type]
+            try:
+                if len(json.dumps(payload, default=str)) > MAX_PAYLOAD_SIZE:
+                    if _is_htmx_request(request):
+                        html_content = f"<div class='toast bg-red-100 p-2'>{_e('payload too large')}</div>"
+                        return HTMLResponse(html_content, status_code=413)
+                    return JSONResponse(
+                        {"detail": "payload too large"}, status_code=413
+                    )
+            except Exception:  # noqa: BLE001, S110
+                pass
             for key in ("headers", "environment"):
                 val = payload.get(key)
                 if isinstance(val, str) and val.strip():

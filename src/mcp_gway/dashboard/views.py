@@ -68,9 +68,8 @@ def server_row(server: dict[str, Any]) -> Any:
         state = "healthy"
     quoted = urllib.parse.quote(name, safe="")
     detail_url = f"/dashboard/servers/{quoted}"
-    delete_url = f"/api/servers/{quoted}"
     return htpy.tr(
-        class_="transition-colors duration-150 hover:bg-slate-50",
+        class_="transition-colors duration-150 hover:bg-slate-50 cursor-pointer",
         **{"hx-get": detail_url, "hx-target": "#drawer", "hx-swap": "innerHTML"},
     )[
         htpy.td(class_="px-4 py-2 font-mono text-sm text-slate-900")[name],
@@ -80,29 +79,7 @@ def server_row(server: dict[str, Any]) -> Any:
         htpy.td(class_="px-4 py-2 text-sm text-center text-slate-700")[str(tool_count)],
         htpy.td(class_="px-4 py-2 text-sm text-center text-slate-600")[f"{timeout}ms"],
         htpy.td(class_="px-4 py-2 text-sm")[badge(state),],
-        htpy.td(class_="px-4 py-2 text-sm")[
-            htpy.button(
-                class_="text-red-600 hover:text-red-800 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded px-1",
-                aria_label=f"Delete {name}",
-                **{
-                    "hx-delete": delete_url,
-                    "hx-confirm": f"Delete {name}?",
-                    "hx-target": "closest tr",
-                    "hx-swap": "outerHTML",
-                },
-            )["Delete"],
-            " ",
-            htpy.button(
-                class_="text-blue-600 hover:text-blue-800 text-xs ml-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded px-1",
-                aria_label=f"Toggle {name}",
-                **{
-                    "hx-patch": delete_url,
-                    "hx-vals": '{"enabled": false}',
-                    "hx-target": "closest tr",
-                    "hx-swap": "outerHTML",
-                },
-            )["Toggle"],
-        ],
+        htpy.td(class_="px-4 py-2 text-sm text-slate-400")["\u2014"],
     ]
 
 
