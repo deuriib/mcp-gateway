@@ -1,6 +1,47 @@
 # CHANGELOG
 
 
+## v0.7.2 (2026-08-25)
+
+### Bug Fixes
+
+- **dashboard**: Harden dialog resilience and clean architecture
+  ([`70c64df`](https://github.com/deuriib/mcp-gateway/commit/70c64df6cffe8b599d180fbafae52097d2efbef8))
+
+Resilience C1: dialog.js now handles htmx:responseError/sendError/ timeout/swapError with
+  handleDialogError -> toast + fallback aside panel inside dialog, reuses server error HTML and
+  htmx.process. Set htmx.config.timeout=7000 so offline/slow doesn't hang.
+
+Resilience I1: hx-indicator #global-spinner on tr and View button, global timeout, indicator wiring.
+
+Readability/Reliability: extract _DIALOG_ID/_DIALOG_TARGET/_CLOSE_ATTRS, _BASE_BADGE/_BADGE_COLORS,
+  split server_drawer 210 lines into _drawer_header/_drawer_metadata/_drawer_actions/_tool_panel,
+  fix nested role dialog -> region inside native dialog, delegate stopPropagation via single
+  document click listener (survives #server-table-body swaps), dedup openDialog/clearDialog helpers,
+  isEmpty robust via childElementCount, documented delays.
+
+Tests: add 7 hardening tests for dialog contract (layout has dialog no drawer, row targets dialog +
+  indicator, drawer returns aside region, dialog.js resilient tokens, detail panel, close clears, no
+  inline onclick) -> 188 passed, ruff clean.
+
+- **dashboard**: Migrate drawer to native dialog with vendored style
+  ([`129654b`](https://github.com/deuriib/mcp-gateway/commit/129654be5fc196da06dde0f694f3f8f39483e2ac))
+
+Drawer inline was rendered at page bottom (screenshot shandcn below footer, truncated) instead of
+  overlay — broke UX and a11y. Replace div#drawer fixed overlay with native <dialog
+  id=server-dialog> using existing Tailwind vendored style (backdrop blur, shadow-xl, border-l).
+
+- views.py: hx-target #drawer -> #server-dialog, remove inline onclick stopPropagation (CSP
+  default-src 'self'), drawer_error/ server_drawer now return aside only, layout hosts <dialog> +
+  script /static/dialog.js external - static/dialog.js: showModal/close, backdrop click, ESC cancel,
+  htmx:afterSwap/afterSettle open/close, delegated stopPropagation for row buttons without inline
+  handlers - static/tailwind.css: vendor missing utilities for dialog (m-0 p-0 max-w-none w-screen
+  h-screen backdrop:* open:flex etc) <7.6KB, htmx 2.3KB, dialog 2.8KB, no Node
+
+Verified 181/181 pytest, ruff ok, layout contains <dialog> and no id=drawer, /static/dialog.js
+  served with showModal.
+
+
 ## v0.7.1 (2026-08-25)
 
 ### Chores
