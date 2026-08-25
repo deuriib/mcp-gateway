@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import shlex
 import sys
 from collections.abc import AsyncIterator
@@ -585,15 +586,70 @@ def inspect(name: str) -> None:
         sys.exit(1)
 
 
+def _resolve_log_level(explicit: str | None) -> str:
+    if explicit:
+        return explicit.lower()
+    for key in ("MCP_GWAY_LOG_LEVEL", "LOG_LEVEL"):
+        val = os.environ.get(key)
+        if val:
+            v = val.strip().lower()
+            if v in ("trace", "debug", "info", "warning", "warn", "error", "critical"):
+                return "warning" if v == "warn" else v
+    env = (
+        (
+            os.environ.get("MCP_GWAY_ENV")
+            or os.environ.get("ENV")
+            or os.environ.get("ENVIRONMENT")
+            or os.environ.get("APP_ENV")
+            or ""
+        )
+        .strip()
+        .lower()
+    )
+    if env in ("production", "prod", "prd", "prodution"):
+        return "warning"
+    if env in ("staging", "stage", "stg"):
+        return "info"
+    if env in ("test", "testing"):
+        return "warning"
+    if env in ("development", "dev", "local", "develop"):
+        if os.environ.get("DEBUG", "").lower() in ("1", "true", "yes"):
+            return "debug"
+        return "info"
+    if os.environ.get("DEBUG", "").lower() in ("1", "true", "yes"):
+        return "debug"
+    return "info"
+
+
 @main.command()
 @click.option("--host", default="127.0.0.1", help="Bind host")
 @click.option("--port", default=8080, type=int, help="Bind port")
-def serve(host: str, port: int) -> None:
+@click.option(
+    "--log-level",
+    type=click.Choice(
+        ["trace", "debug", "info", "warning", "error", "critical"], case_sensitive=False
+    ),
+    default=None,
+    help="Log level (overrides MCP_GWAY_LOG_LEVEL/LOG_LEVEL and MCP_GWAY_ENV)",
+)
+def serve(host: str, port: int, log_level: str | None) -> None:
     """Start the gateway server."""
-    import os
     import time
 
     import uvicorn
+
+    resolved_level = _resolve_log_level(log_level)
+    _py_level = {
+        "trace": logging.DEBUG,
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+        "critical": logging.CRITICAL,
+    }.get(resolved_level, logging.INFO)
+    logging.getLogger("mcp_gway").setLevel(_py_level)
+    logging.getLogger("uvicorn.error").setLevel(_py_level)
+    logging.getLogger("uvicorn.access").setLevel(_py_level)
 
     allowed_remote = os.environ.get("MCP_GWAY_ALLOW_REMOTE") == "1"
     is_loopback = host in ("127.0.0.1", "::1", "localhost")
@@ -657,10 +713,31 @@ def serve(host: str, port: int) -> None:
         click.echo(
             f"  {_c(f'{glyph_warn} exposed on non-loopback', fg='yellow', bold=True)} {_c(f'-- dashboard reachable at {host}', dim=True)} {_c('(MCP_GWAY_ALLOW_REMOTE=1)', dim=True)}"
         )
+    env_hint = (
+        os.environ.get("MCP_GWAY_ENV")
+        or os.environ.get("ENV")
+        or os.environ.get("ENVIRONMENT")
+        or os.environ.get("APP_ENV")
+        or ""
+    ).strip()
+    if env_hint or resolved_level != "info":
+        parts = []
+        if env_hint:
+            parts.append(f"env {env_hint.lower()}")
+        if resolved_level != "info":
+            parts.append(f"log {resolved_level}")
+        if parts:
+            click.echo(f"  {_c(' · '.join(parts), dim=True)}")
     click.echo(f"  {_c('Press Ctrl+C to stop', dim=True)}")
     click.echo("")
 
-    uvicorn.run(gateway.app, host=host, port=port, log_level="info")
+    uvicorn.run(
+        gateway.app,
+        host=host,
+        port=port,
+        log_level=resolved_level,
+        access_log=resolved_level in ("trace", "debug", "info"),
+    )
 
 
 async def _refresh_server(
