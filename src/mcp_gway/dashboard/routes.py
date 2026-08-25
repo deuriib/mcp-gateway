@@ -10,9 +10,15 @@ from starlette.staticfiles import StaticFiles
 from mcp_gway.dashboard.api import (
     handle_create,
     handle_dashboard,
+    handle_dashboard_close,
+    handle_dashboard_server_detail,
     handle_dashboard_servers,
+    handle_delete,
     handle_get,
     handle_list,
+    handle_patch,
+    handle_refresh,
+    handle_reveal,
 )
 from mcp_gway.registry import Registry
 
@@ -23,9 +29,17 @@ def get_dashboard_routes(registry: Registry) -> list[Route | Mount]:
     return [
         Route("/dashboard", handle_dashboard, methods=["GET"]),
         Route("/dashboard/servers", handle_dashboard_servers, methods=["GET"]),
+        Route(
+            "/dashboard/servers/{name}", handle_dashboard_server_detail, methods=["GET"]
+        ),
+        Route("/dashboard/close", handle_dashboard_close, methods=["GET"]),
         Route("/api/servers", handle_list, methods=["GET"]),
         Route("/api/servers/{name}", handle_get, methods=["GET"]),
         Route("/api/servers", handle_create, methods=["POST"]),
+        Route("/api/servers/{name}", handle_patch, methods=["PATCH"]),
+        Route("/api/servers/{name}", handle_delete, methods=["DELETE"]),
+        Route("/api/servers/{name}/refresh", handle_refresh, methods=["POST"]),
+        Route("/api/servers/{name}/reveal", handle_reveal, methods=["POST"]),
         Mount(
             "/static",
             app=StaticFiles(directory=str(static_dir)),

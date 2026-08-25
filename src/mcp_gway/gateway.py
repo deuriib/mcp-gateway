@@ -10,13 +10,23 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from starlette.applications import Starlette
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
 from mcp_gway import __version__
 from mcp_gway.code_mode import CodeMode
+from mcp_gway.dashboard.routes import get_dashboard_routes
 from mcp_gway.registry import Registry
+
+
+class _CSPMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        return response
+
 
 CODE_MODE_TOOLS = [
     {
@@ -84,8 +94,7 @@ class Gateway:
         self.host = host
         self.code_mode = CodeMode(registry)
         self._sessions: dict[str, SessionInfo] = {}
-        from mcp_gway.dashboard.routes import get_dashboard_routes
-
+        registry.ensure()
         dashboard_routes = get_dashboard_routes(registry)
         self.app = Starlette(
             routes=[
@@ -96,6 +105,7 @@ class Gateway:
                 *dashboard_routes,
             ]
         )
+        self.app.add_middleware(_CSPMiddleware)
         self.app.state.registry = registry  # type: ignore[attr-defined]
         self.app.state.dashboard_host = host  # type: ignore[attr-defined]
 
@@ -177,9 +187,27 @@ class Gateway:
 
     async def _mcp_post(self, request: Request) -> JSONResponse:
         session_id = request.query_params.get("session_id")
-        body = await request.json()
+        body = await self._read_limited_json(request)
+        if isinstance(body, JSONResponse):
+            return body
         response = await self._handle_post(body, session_id=session_id)
         return JSONResponse(response)
+
+    async def _read_limited_json(
+        self, request: Request
+    ) -> dict[str, Any] | JSONResponse:
+        clen = request.headers.get("content-length")
+        if clen and clen.isdigit() and int(clen) > 1_048_576:
+            return JSONResponse({"detail": "payload too large"}, status_code=413)
+        body = b""
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > 1_048_576:
+                return JSONResponse({"detail": "payload too large"}, status_code=413)
+        try:
+            return json.loads(body.decode("utf-8") if body else "{}")
+        except Exception:
+            return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
 
     def _handle_method(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         if method == "initialize":

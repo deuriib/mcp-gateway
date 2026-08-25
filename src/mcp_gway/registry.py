@@ -106,6 +106,23 @@ class Registry:
         self.servers_dir = Path(servers_dir)
         self.servers_dir.mkdir(parents=True, exist_ok=True)
 
+    def ensure(self) -> None:
+        self.servers_dir.mkdir(parents=True, exist_ok=True)
+
+    def patch_enabled(self, name: str, enabled: bool) -> None:
+        cfg = self.get_config(name)
+        cfg.enabled = enabled
+        json_path = self._safe_path(name, ".json")
+        if json_path.exists():
+            try:
+                data = json.loads(json_path.read_text(encoding="utf-8"))
+                data["enabled"] = enabled
+                self._atomic_write_text(json_path, json.dumps(data, indent=2))
+                return
+            except Exception:  # noqa: BLE001
+                pass
+        self.add(cfg, [])
+
     def _safe_path(self, name: str, suffix: str) -> Path:
         _validate_safe_name(name)
         p = self.servers_dir / f"{name}{suffix}"
