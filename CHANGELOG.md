@@ -1,6 +1,188 @@
 # CHANGELOG
 
 
+## v0.7.1 (2026-08-25)
+
+### Chores
+
+- **release**: Expand semantic-release triggers to automate patch releases
+  ([`abf3beb`](https://github.com/deuriib/mcp-gateway/commit/abf3beb218b7250c041e4e9186ff3c6c8a8ec35b))
+
+Expand patch_tags from [fix, perf] to include refactor, docs, build, chore, style, test, ci, revert
+  so workflow_run Tests + python-semantic-release triggers automated patch on any conventional
+  commit. Add revert to allowed_tags for completeness. Keeps minor_tags=[feat] and BREAKING
+  CHANGE->major intact to preserve semver; hybrid workflow push v* + workflow_run Tests +
+  concurrency:release prevents duplicate versions. No Node, pure ruff/uv.
+
+### Documentation
+
+- **dashboard**: Sync v0.7.0 GA specs and polish dashboard bottom UI
+  ([`23c6f8b`](https://github.com/deuriib/mcp-gateway/commit/23c6f8b017dcf701d48814b9ddc851a3e5b615c9))
+
+Sync AGENTS.md, README.md and SPEC-UI-001 with shipped v0.7.0 GA so docs match code and close the
+  SBTDD verification gate (Registry single source, htpy+htmx bounded context, local-first 127.0.0.1,
+  masking ***).
+
+Polish src/mcp_gway/dashboard/views.py bottom area: sticky table header, action group
+  (View/Toggle/Delete) with hx-* handlers, footer, drawer/header and spacing refinements with
+  transition/shadow polish for visual completeness. No logic change, only presentation.
+
+Verified: ruff check/format pass, 181 pytest pass, dashboard SSR/API intact. Keeps history atomic
+  before push per CEO GO.
+
+
+## v0.7.0 (2026-08-25)
+
+### Bug Fixes
+
+- **dashboard**: P0 refuter fixes - form double-read, htmx load, payload OOM, hide 405 actions
+  ([`1dad496`](https://github.com/deuriib/mcp-gateway/commit/1dad49629a15da5ac2cdce49ce293a4cfb4f00ad))
+
+- api.handle_create: check Content-Type before consuming body; Content-Length pre-check before read
+  prevents OOM; JSON branch reads body only when application/json else uses form without prior
+  body() to avoid empty form (fixes H-01). Enforce 413 for both branches.
+
+- htmx.min.js stub: add DOMContentLoaded loader for hx-trigger load so GET /dashboard/servers
+  auto-fetches; support hx-swap outerHTML, keep <20KB, no Node.
+
+- views.server_row: hide Wave1-unimplemented hx-delete/hx-patch (would 405); Wave1 demo shows only
+  inspect. Keeps js handlers for Wave2.
+
+- local gating: retain MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD default 1 (dashboard allows local unless
+  0) - documented.
+
+Verified: ruff clean, 171 pytest green, manual form hx POST 201, content-length 413.
+
+- **security**: P0 hardening for dashboard and registry (BR-UI-003/004/009, HC-03/05, EC-01..04,
+  AC-09)
+  ([`c3216df`](https://github.com/deuriib/mcp-gateway/commit/c3216dff0268b7c346d61d217e648d72bf42ee44))
+
+- models: strict regex ^[A-Za-z_][A-Za-z0-9_]{0,63}$ + reserved (con,prn,aux,nul,com1-9,lpt1-9) +
+  reject / \ . .. and < > ; ensures ../../evil, /absolute, a/b, .. etc 400 - registry: _safe_path
+  with regex + resolve().is_relative_to() defense-in-depth, atomic write via .tmp replace, guard all
+  servers_dir usages - oauth: FileTokenStorage validates server_name with same regex and traversal
+  check - dashboard/api: html.escape for all toasts/detail, form vs json content-type handling,
+  payload limit 1M ->413, semaphore(3) for discovery, validate via MCPServerConfig before existence,
+  generic validation_error without secret leak, delegate to Registry only, local via dashboard gated
+  by env - dashboard/views: urllib.parse.quote for detail/delete URLs, htpy auto-escape kept -
+  cli/gateway: serve defaults 127.0.0.1, gate non-loopback behind MCP_GWAY_ALLOW_REMOTE=1 else exit
+  2, X-Warning header for non-loopback - tests: existing 171 green, manual curl checks for
+  traversal, XSS, form hx, masking ***
+
+### Chores
+
+- Add pre-commit hook enforcing ruff check+format locally
+  ([`1eee823`](https://github.com/deuriib/mcp-gateway/commit/1eee82390a89d3194187759dd58cd18ae9f7c696))
+
+Prevent future CI failures like run 32782781915 where ruff F401+I001 blocked pipeline and caused
+  Release skip. Add deterministic local gate so git commit fails fast if lint not clean - haces las
+  cosas con excelencia desde el commit 1.
+
+- .pre-commit-config.yaml pinned to astral-sh/ruff-pre-commit v0.16.4 with ruff --fix and
+  ruff-format plus hygiene hooks (trailing-whitespace, end-of-file-fixer, check-yaml,
+  check-added-large-files) - pyproject.toml dev group adds pre-commit>=4.0.0 - AGENTS.md documents
+  uv run pre-commit install and run --all-files with CI parity ruff commands - Fix trailing
+  whitespace in spec uncovered by new hook - Verified: uv run pre-commit run --all-files, ruff
+  check/format, and pytest 152 passed exit 0
+
+- Sync uv.lock to 0.6.0
+  ([`2963e8b`](https://github.com/deuriib/mcp-gateway/commit/2963e8b72b1b63019c964b299d2abaf1411ad5fc))
+
+Co-authored-by: Vasquez <deuriib@gmail.com>
+
+- **ci**: Bump workflows to latest Node24 (checkout v7, setup-python v7, setup-uv v10)
+  ([`a407e8f`](https://github.com/deuriib/mcp-gateway/commit/a407e8f29e2f79f24dfd17d4ddeef2d8fecc851b))
+
+Opcion B (latest estable) sobre A (minimo). CTO pidio explicitamente B: llevar todo a latest Node24
+  nativo con security hardening y sin warnings Node20. Preserva logica de jobs, solo bump de tags.
+
+Bumps: - actions/checkout@v5.0.1 -> @v7.0.1 (latest Node24 immutable, publicado 20-jul-2026, ESM,
+  fix SHA-256 repos y fork-PR blocking; action.yml using: node24 verificado) -
+  actions/setup-python@v6.3.0 -> @v7.0.0 (latest Node24 ESM, publicado 20-jul-2026; action.yml
+  using: node24 verificado) - astral-sh/setup-uv@v7.0.0 -> @v10.0.1 immutable via SHA
+  20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1 (latest Node24 immutable desde v8.0.0,
+  publicado 14-ago-2026; action.yml using: node24 verificado; SHA pin es ideal immutable, tag
+  @v10.0.1 tambien immutable)
+
+Trade-offs vs A: - A = higiene minima (primer major Node24: checkout v5, setup-python v6, setup-uv
+  v7) minimo bump, minimo riesgo. - B = latest estable: mas fixes/security hardening (checkout v7
+  SHA-256 + ESM + allow-unsafe-pr-checkout), setup-python v7 ESM, setup-uv v10 ultimas
+  features/perf. Mayor churn de major pero still Node24 native y elimina deuda futura. Elegido por
+  decision explicita CTO.
+
+Compatibilidad runner: - checkout@v7 y setup-python@v7 (ESM) requieren runner >=v2.327.1.
+  ubuntu-latest actual es v2.330+ -> OK.
+
+Breakings documentados (no mitigados, comportamiento seguro deseado): - setup-uv@v10: enable-cache
+  auto ahora deshabilita cache en workflow_run y release (seguridad #984). Nuestro release.yml es
+  workflow_run -> cache se deshabilitara por defecto. Es el comportamiento seguro deseado, no se
+  hace override. - checkout@v7: nuevo allow-unsafe-pr-checkout=false bloquea checkout de fork PR en
+  workflow_run/pull_request_target. Nuestro release.yml corre sobre workflow_run de Tests en
+  main/master (no fork) -> sin impacto, pero documentado.
+
+No toca semver, no toca uv.lock, no mezcla otros chores. Tags completos pinned para
+  reproducibilidad.
+
+Validacion local: - uv run ruff check src/ tests/ -> All checks passed - uv run ruff format --check
+  src/ tests/ -> 25 files already formatted - uv run pytest -v -> 152 passed - python yaml.safe_load
+  ambos workflows -> YAML valid OK - grep confirma solo v7.0.1/v7.0.0/v10.0.1 (SHA), sin
+  v5.0.1/v6.3.0/v7.0.0 residuales
+
+- **ci**: Hybrid release workflow for v0.7.0 GA
+  ([`b45dbc0`](https://github.com/deuriib/mcp-gateway/commit/b45dbc0cf23734bd7af9c79b9899aafa15c406a0))
+
+- **ci**: Migrate workflows from Node20 to Node24 native
+  ([`a3b78ee`](https://github.com/deuriib/mcp-gateway/commit/a3b78ee9d70c73febc9615c337be23d2ce0d2e6d))
+
+GitHub deprecated Node20 (EOL Apr 2026, runners default Node24 since 2026-06-16). Workflows
+  test.yml/release.yml used checkout@v4, setup-python@v5 and setup-uv@v4 (all Node20) causing
+  'Node.js 20 is deprecated' warnings. FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 only masks.
+
+Migrate to minimal native Node24 majors (higiene minima, no logic change): - actions/checkout@v4 ->
+  @v5.0.1 (first Node24; v5.0.1 chosen over v6.1.0/ v7.0.1 which are also Node24 to minimize major
+  bump; v5.1.0 also Node24 but v5.0.1 matches ticket example and is stable patch) -
+  actions/setup-python@v5 (Node20) -> @v6.3.0 (first Node24 major is v6; ticket incorrectly says @v5
+  is Node24 - corrected: v5=Node20, v6=Node24; v6.3.0 is latest v6 patch for fixes, verified
+  v6.0.0..v6.3.0 and v7.0.0 all Node24; v7 exists but v6 is minimal) - astral-sh/setup-uv@v4
+  (Node20) -> @v7.0.0 (v5/v6 still Node20, v7 first Node24; verified v4/v5/v6=Node20,
+  v7.0.0/v7.6.0/v10.0.1=Node24; v7.0.0 is minimal Node24, v7.6.0+ also Node24 but minimal chosen)
+
+Verified python-semantic-release@v9 uses: docker and pypa/gh-action-pypi-publish@release/v1 uses:
+  composite (no Node, no change).
+
+Compatibility: Node24 requires runner >=2.327.1, ubuntu-latest cumple. Tags pinned con version
+  completa para reproducibilidad.
+
+Evidencia action.yml using: node24 consultada: - checkout@v5.0.1, v6.0.3, v7.0.0 -> node24 -
+  setup-python@v5 -> node20, @v6.3.0/@v7.0.0 -> node24 - setup-uv@v4/v5/v6 -> node20, @v7.0.0 ->
+  node24 - psr@v9 -> docker, pypi-publish@release/v1 -> composite
+
+Validacion local: uv run ruff check/format OK, pytest 152 passed, YAML syntax OK, grep sin
+  checkout@v4/setup-python@v5/setup-uv@v4, solo Node24.
+
+- **release**: Bump version 0.6.0 -> 0.7.0 for GA
+  ([`5f96c44`](https://github.com/deuriib/mcp-gateway/commit/5f96c449005a366e77cccc98759131662802a961))
+
+### Documentation
+
+- Promote OpenCode remote/local as primary, deprecate http/stdio/sse, document pre-commit
+  ([`e4a6745`](https://github.com/deuriib/mcp-gateway/commit/e4a6745f3bac834916671e5058e097dfd97906c1))
+
+- README: primary remote/local examples with --header/--oauth/--timeout/--enabled/--env/--cwd,
+  deprecated http/stdio/sse section kept for compat, Commands table updated to remote|local, Options
+  table expanded to 12+ flags including --args/--tools/--oauth-port (deprecated compat noted),
+  refresh/serve signatures clarified, registry description corrected to .pyi signatures + .json
+  config, Development reflects uv sync --all-groups and pre-commit hygiene hooks (6 hooks) -
+  AGENTS.md: CLI primary remote/local with full options pointer, deprecated note, Development with
+  pre-commit, registry pattern updated - Fixes reliability findings F-01/F-02/F-03/F-11/F-12/F-13;
+  --docs-url marked as deprecated not persisted per refuter
+
+### Features
+
+- **dashboard**: Management MCPs dashboard GA
+  ([`e1d52eb`](https://github.com/deuriib/mcp-gateway/commit/e1d52ebc6c101bde6fa408c8fb88b3e4eac862b1))
+
+
 ## v0.6.0 (2026-08-25)
 
 ### Bug Fixes
