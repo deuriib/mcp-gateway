@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.8.0 (2026-08-25)
+
+### Features
+
+- **dashboard**: Swiss minimal redesign with micro-interactions for lazy-person UX
+  ([`333180b`](https://github.com/deuriib/mcp-gateway/commit/333180b8da6c451d87a6d99cc5919a5b07d6bee7))
+
+Redesign dashboard under ui-ux-pro-max minimalism-and-swiss-style: header glass + stats grid, row
+  stagger 28ms with reduced-motion, badges with dot/status, filter, progressive disclosure form,
+  drawer and empty state polish. Vendored Tailwind expanded to 14KB covering new utilities while
+  staying local-first and <100KB. 188 tests pass, ruff clean.
+
+
 ## v0.7.2 (2026-08-25)
 
 ### Bug Fixes
