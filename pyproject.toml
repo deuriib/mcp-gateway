@@ -33,9 +33,9 @@ match = "(main|master)"
 match_source = true
 
 [tool.semantic_release.commit_parser_options]
-allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"]
 minor_tags = ["feat"]
-patch_tags = ["fix", "perf"]
+patch_tags = ["fix", "perf", "refactor", "docs", "build", "chore", "style", "test", "ci", "revert"]
 
 [tool.ruff.lint]
 ignore = [
