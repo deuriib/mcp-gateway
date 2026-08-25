@@ -591,6 +591,7 @@ def inspect(name: str) -> None:
 def serve(host: str, port: int) -> None:
     """Start the gateway server."""
     import os
+    import time
 
     import uvicorn
 
@@ -603,14 +604,63 @@ def serve(host: str, port: int) -> None:
         )
         sys.exit(2)
     registry = _get_registry()
+    from mcp_gway import __version__
     from mcp_gway.gateway import Gateway
 
     if not is_loopback:
         logger = logging.getLogger(__name__)
         logger.warning("dashboard exposed on non-loopback host %s", host)
+    t0 = time.monotonic()
     gateway = Gateway(registry, host=host)
-    click.echo(f"Starting MCP Gateway on {host}:{port}")
-    uvicorn.run(gateway.app, host=host, port=port)
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+
+    names = registry.list()
+    n = len(names)
+    if n == 0:
+        server_line = "no servers yet — add one with `mcp-gway add`"
+    elif n == 1:
+        server_line = "1 server aggregated"
+    else:
+        server_line = f"{n} servers aggregated"
+
+    base_url = f"http://{host}:{port}"
+    is_tty = sys.stdout.isatty()
+
+    def _c(text: str, **kwargs: object) -> str:
+        return click.style(text, **kwargs) if is_tty else text  # type: ignore[arg-type]
+
+    glyph_tri = ">" if sys.platform == "win32" else "▲"
+    glyph_arr = "->" if sys.platform == "win32" else "→"
+    glyph_warn = "!" if sys.platform == "win32" else "⚠"
+
+    click.echo("")
+    click.echo(
+        f"{_c(glyph_tri, fg='cyan', bold=True)} {_c('MCP Gateway', bold=True)} {_c(f'v{__version__}', fg='cyan')}  {_c('·', dim=True)} {_c('ready in', dim=True)} {_c(f'{elapsed_ms}ms', fg='green')}"
+    )
+    click.echo(
+        f"  {_c('Listening on', dim=True)} {_c(base_url, fg='cyan', underline=True)}  {_c('·', dim=True)} {server_line}"
+    )
+    label_w = 9
+    click.echo(
+        f"  {_c('Dashboard'.ljust(label_w), dim=True)} {_c(glyph_arr, dim=True)} {_c(f'{base_url}/dashboard', fg='cyan')}"
+    )
+    click.echo(
+        f"  {_c('MCP'.ljust(label_w), dim=True)} {_c(glyph_arr, dim=True)} {_c(f'{base_url}/mcp', fg='cyan')}"
+    )
+    click.echo(
+        f"  {_c('Health'.ljust(label_w), dim=True)} {_c(glyph_arr, dim=True)} {_c(f'{base_url}/health', fg='cyan')}"
+    )
+    click.echo(
+        f"  {_c('Code Mode', fg='green')} {_c('·', dim=True)} local-first {_c('·', dim=True)} CSP enabled"
+    )
+    if not is_loopback:
+        click.echo(
+            f"  {_c(f'{glyph_warn} exposed on non-loopback', fg='yellow', bold=True)} {_c(f'-- dashboard reachable at {host}', dim=True)} {_c('(MCP_GWAY_ALLOW_REMOTE=1)', dim=True)}"
+        )
+    click.echo(f"  {_c('Press Ctrl+C to stop', dim=True)}")
+    click.echo("")
+
+    uvicorn.run(gateway.app, host=host, port=port, log_level="info")
 
 
 async def _refresh_server(
