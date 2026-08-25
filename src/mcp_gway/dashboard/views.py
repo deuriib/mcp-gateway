@@ -17,7 +17,7 @@ _CLOSE_ATTRS: dict[str, str] = {
     "hx-swap": "innerHTML",
 }
 _BASE_BADGE = (
-    "inline-flex items-center justify-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium leading-none "
+    "inline-flex items-center justify-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium leading-none "
     "transition-colors duration-200"
 )
 _BADGE_COLORS: dict[str, str] = {
@@ -143,7 +143,6 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
     )
     return htpy.tr(
         class_="group transition-all duration-200 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 animate-row",
-        style=f"animation-delay:{idx * 28}ms",
         **{
             "hx-get": detail_url,
             "hx-target": _DIALOG_TARGET,
@@ -738,6 +737,77 @@ def _footer() -> Any:
     ]
 
 
+def base_layout(
+    *, title: str = "MCP Gateway Dashboard", content: Any, extra_head: Any = None
+) -> Any:
+    return htpy.html[
+        htpy.head[
+            htpy.meta(charset="utf-8"),
+            htpy.meta(name="viewport", content="width=device-width, initial-scale=1"),
+            htpy.meta(name="color-scheme", content="light"),
+            htpy.title[title],
+            htpy.link(rel="stylesheet", href="/static/tailwind.css"),
+            htpy.script(src="/static/htmx.min.js")[[]],
+            htpy.script(src="/static/dialog.js")[[]],
+            htpy.script(src="/static/dashboard.js")[[]],
+            extra_head if extra_head is not None else htpy.fragment[[]],
+        ],
+        htpy.body(
+            class_="bg-slate-50 text-slate-900 antialiased min-h-screen flex flex-col overflow-y-auto selection:bg-slate-900 selection:text-white"
+        )[content],
+    ]
+
+
+def navbar(*, healthy: int, total: int, health_badge: Any) -> Any:
+    return htpy.header(
+        class_="sticky top-0 z-20 backdrop-blur-xl bg-white/75 border-b border-slate-200"
+    )[
+        htpy.div(
+            class_="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4"
+        )[
+            htpy.div(class_="flex items-center gap-3 min-w-0")[
+                htpy.span(
+                    class_="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm"
+                )[_icon("layers", cls="h-5 w-5")],
+                htpy.div(class_="min-w-0")[
+                    htpy.h1(
+                        class_="text-sm font-semibold tracking-tight text-slate-900 leading-none"
+                    )["MCP Gateway"],
+                    htpy.p(class_="text-xs text-slate-500 hidden sm:block")[
+                        "Local dashboard • single process"
+                    ],
+                ],
+                htpy.span(
+                    class_="hidden md:inline-flex items-center rounded-full bg-slate-900 text-white px-2.5 py-0.5 text-xs font-medium tracking-wide"
+                )["v0.7.0"],
+            ],
+            htpy.div(class_="flex items-center gap-2 sm:gap-3")[
+                htpy.div(
+                    class_="hidden sm:flex items-center gap-2 rounded-full bg-white border border-slate-200 px-3 py-1.5 shadow-sm"
+                )[
+                    htpy.span(
+                        class_="h-2 w-2 rounded-full bg-emerald-500 animate-pulse",
+                        aria_hidden="true",
+                    )[[]],
+                    htpy.span(class_="text-xs font-medium tabular-nums text-slate-700")[
+                        f"{healthy}/{total} healthy" if total else "0 servers"
+                    ],
+                ],
+                health_badge,
+                htpy.span(
+                    id="global-spinner",
+                    class_="htmx-indicator inline-flex items-center gap-1.5 text-xs text-slate-500",
+                )[
+                    htpy.span(
+                        class_="h-3 w-3 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900"
+                    )[[]],
+                    htpy.span(class_="hidden sm:inline")["Loading…"],
+                ],
+            ],
+        ],
+    ]
+
+
 def _stats(servers: list[dict[str, Any]]) -> Any:
     healthy = sum(
         1 for s in servers if s.get("enabled", True) and s.get("tool_count", 0) > 0
@@ -759,7 +829,7 @@ def _stats(servers: list[dict[str, Any]]) -> Any:
         "Disabled": (str(disabled), f"{disabled} off"),
         "Unreachable": (str(unreachable), "0 tools"),
     }
-    return htpy.div(class_="grid grid-cols-2 lg:grid-cols-4 gap-3")[
+    return htpy.div(class_="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4")[
         *[
             htpy.div(
                 class_="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-200 group"
@@ -842,85 +912,15 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
         else badge("unreachable" if healthy == 0 else "healthy")
     )
 
-    return htpy.html[
-        htpy.head[
-            htpy.meta(charset="utf-8"),
-            htpy.meta(name="viewport", content="width=device-width, initial-scale=1"),
-            htpy.meta(name="color-scheme", content="light"),
-            htpy.title["MCP Gateway Dashboard"],
-            htpy.link(rel="stylesheet", href="/static/tailwind.css"),
-            htpy.script(src="/static/htmx.min.js")[[]],
-            htpy.script(src="/static/dialog.js")[[]],
-            htpy.script(src="/static/dashboard.js")[[]],
-            htpy.style[
-                Markup("""
-@keyframes rowIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-.animate-row{animation:rowIn 320ms cubic-bezier(.16,1,.3,1) both}
-@media (prefers-reduced-motion: reduce){.animate-row{animation:none!important}}
-.htmx-indicator{opacity:0;transition:opacity 200ms}
-.htmx-request .htmx-indicator,.htmx-request.htmx-indicator{opacity:1}
-::selection{background:#0F172A;color:#fff}
-""")
-            ],
-        ],
-        htpy.body(
-            class_="bg-slate-50 text-slate-900 antialiased min-h-screen flex flex-col overflow-y-auto selection:bg-slate-900 selection:text-white"
-        )[
-            htpy.header(
-                class_="sticky top-0 z-20 backdrop-blur-xl bg-white/75 border-b border-slate-200"
-            )[
-                htpy.div(
-                    class_="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4"
-                )[
-                    htpy.div(class_="flex items-center gap-3 min-w-0")[
-                        htpy.span(
-                            class_="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm"
-                        )[_icon("layers", cls="h-5 w-5")],
-                        htpy.div(class_="min-w-0")[
-                            htpy.h1(
-                                class_="text-sm font-semibold tracking-tight text-slate-900 leading-none"
-                            )["MCP Gateway"],
-                            htpy.p(class_="text-xs text-slate-500 hidden sm:block")[
-                                "Local dashboard • single process"
-                            ],
-                        ],
-                        htpy.span(
-                            class_="hidden md:inline-flex items-center rounded-full bg-slate-900 text-white px-2.5 py-0.5 text-xs font-medium tracking-wide"
-                        )["v0.7.0"],
-                    ],
-                    htpy.div(class_="flex items-center gap-2 sm:gap-3")[
-                        htpy.div(
-                            class_="hidden sm:flex items-center gap-2 rounded-full bg-white border border-slate-200 px-3 py-1.5 shadow-sm"
-                        )[
-                            htpy.span(
-                                class_="h-2 w-2 rounded-full bg-emerald-500 animate-pulse",
-                                aria_hidden="true",
-                            )[[]],
-                            htpy.span(
-                                class_="text-xs font-medium tabular-nums text-slate-700"
-                            )[f"{healthy}/{total} healthy" if total else "0 servers"],
-                        ],
-                        health_badge,
-                        htpy.span(
-                            id="global-spinner",
-                            class_="htmx-indicator inline-flex items-center gap-1.5 text-xs text-slate-500",
-                        )[
-                            htpy.span(
-                                class_="h-3 w-3 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900"
-                            )[[]],
-                            htpy.span(class_="hidden sm:inline")["Loading…"],
-                        ],
-                    ],
-                ],
-            ],
+    return base_layout(
+        content=[
+            navbar(healthy=healthy, total=total, health_badge=health_badge),
             htpy.div(
-                class_="max-w-6xl mx-auto px-4 pt-8 pb-12 flex-1 flex flex-col min-h-0 w-full gap-8"
+                class_="max-w-6xl mx-auto px-4 pt-10 pb-12 flex-1 flex flex-col min-h-0 w-full gap-8"
             )[
                 warning,
                 _stats(servers),
-                htpy.main(
-                    class_="flex-1 flex flex-col space-y-6 min-h-0 gap-6 pb-6 overflow-visible"
-                )[
+                htpy.main(class_="flex-1 flex flex-col gap-8 pb-6 overflow-visible")[
                     htpy.div(
                         class_="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden transition-shadow duration-200 hover:shadow-md flex flex-col",
                     )[
@@ -974,4 +974,4 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
             ],
             _footer(),
         ],
-    ]
+    )
