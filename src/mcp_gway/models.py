@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import uuid
 from enum import Enum
 from typing import Any, Literal
 
@@ -123,6 +124,17 @@ class OAuthConfig(BaseModel):
     clientSecret: str | None = None
     scope: str | None = None
 
+    @field_validator("clientId")
+    @classmethod
+    def validate_client_id(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        try:
+            uuid_obj = uuid.UUID(v)
+            return str(uuid_obj)
+        except Exception:
+            return str(uuid.uuid4())
+
 
 class MCPServerConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -150,6 +162,35 @@ class MCPServerConfig(BaseModel):
 
     # Internal: resolved after connection test, stored in JSON
     resolved_transport: Literal["sse", "streamable-http", "http"] | None = None
+
+    @field_validator("oauth", mode="before")
+    @classmethod
+    def validate_oauth(cls, v: Any) -> Any:
+        if v is None or v is False:
+            return v
+        if v is True:
+            return {"clientId": str(uuid.uuid4())}
+        if isinstance(v, dict):
+            if not v.get("clientId"):
+                v = dict(v)
+                v["clientId"] = str(uuid.uuid4())
+            else:
+                try:
+                    uuid.UUID(str(v["clientId"]))
+                except Exception:
+                    v = dict(v)
+                    v["clientId"] = str(uuid.uuid4())
+            return v
+        if isinstance(v, OAuthConfig):
+            if not v.clientId:
+                v.clientId = str(uuid.uuid4())
+            else:
+                try:
+                    uuid.UUID(v.clientId)
+                except Exception:
+                    v.clientId = str(uuid.uuid4())
+            return v
+        return v
 
     def model_post_init(self, __context: Any) -> None:
         if self.type == "local":

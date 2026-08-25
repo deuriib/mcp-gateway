@@ -129,13 +129,14 @@ def test_remote_with_headers():
 
 
 def test_remote_with_oauth_object():
+    cid = "550e8400-e29b-41d4-a716-446655440000"
     config = MCPServerConfig(
         name="myserver",
         type="remote",
         url="https://mcp.example.com/mcp",
-        oauth=OAuthConfig(clientId="id", clientSecret="secret"),
+        oauth=OAuthConfig(clientId=cid, clientSecret="secret"),
     )
-    assert config.oauth.clientId == "id"
+    assert config.oauth.clientId == cid
 
 
 def test_remote_with_oauth_false():
@@ -166,3 +167,29 @@ def test_local_with_cwd():
         cwd="/path/to/workdir",
     )
     assert config.cwd == "/path/to/workdir"
+
+
+def test_oauth_client_id_auto_uuid():
+    import uuid
+
+    cfg = MCPServerConfig(
+        name="s", type="remote", url="https://x", oauth={"clientId": "not-a-uuid"}
+    )
+    assert cfg.oauth.clientId != "not-a-uuid"
+    uuid.UUID(cfg.oauth.clientId)
+
+    cfg2 = MCPServerConfig(
+        name="s2", type="remote", url="https://x", oauth={"scope": "openid"}
+    )
+    assert cfg2.oauth.clientId is not None
+    uuid.UUID(cfg2.oauth.clientId)
+
+
+def test_oauth_client_id_valid_uuid_kept():
+    import uuid
+
+    cid = str(uuid.uuid4())
+    cfg = MCPServerConfig(
+        name="s3", type="remote", url="https://x", oauth=OAuthConfig(clientId=cid)
+    )
+    assert cfg.oauth.clientId == cid

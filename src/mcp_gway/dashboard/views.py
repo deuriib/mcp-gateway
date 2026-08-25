@@ -341,6 +341,41 @@ def add_form() -> Any:
                     "Executed locally — ensure trusted command"
                 ],
             ],
+            htpy.div(
+                class_="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/50"
+            )[
+                htpy.input(
+                    type="checkbox",
+                    id="field-oauth",
+                    name="oauth_enabled",
+                    value="true",
+                    class_="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-2 focus:ring-slate-900",
+                ),
+                htpy.div(class_="flex flex-col")[
+                    htpy.label(
+                        for_="field-oauth",
+                        class_="text-sm font-medium text-slate-700 cursor-pointer",
+                    )["Enable OAuth (dynamic UUID client)"],
+                    htpy.p(class_="text-xs text-slate-500")[
+                        "Checked = OAuth, unchecked = headers"
+                    ],
+                ],
+            ],
+            htpy.div(id="group-oauth", class_="hidden")[
+                htpy.label(
+                    class_="block text-xs font-medium text-slate-600 mb-1.5",
+                    for_="field-oauth-scope",
+                )["OAuth Scope (optional)"],
+                htpy.input(
+                    id="field-oauth-scope",
+                    name="oauth_scope",
+                    placeholder="openid profile email",
+                    class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-all duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 hover:border-slate-300 min-h-11",
+                ),
+                htpy.p(class_="mt-1 text-xs text-slate-400")[
+                    "Dynamic client_id auto-generated as UUID"
+                ],
+            ],
             htpy.details(
                 class_="group rounded-xl border border-slate-200 bg-slate-50/50 open:bg-white transition-colors duration-200"
             )[
@@ -969,7 +1004,6 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
                 htpy.div(
                     id="toast",
                     class_="fixed top-4 right-4 z-50 space-y-2 max-w-sm",
-                    **{"hx-swap-oob": "true"},
                 )[[]],
             ],
             _footer(),

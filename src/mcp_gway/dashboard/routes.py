@@ -16,6 +16,8 @@ from mcp_gway.dashboard.api import (
     handle_delete,
     handle_get,
     handle_list,
+    handle_oauth_start,
+    handle_oauth_status,
     handle_patch,
     handle_refresh,
     handle_reveal,
@@ -41,6 +43,8 @@ def get_dashboard_routes(registry: Registry) -> list[Route | Mount]:
         Route("/api/servers/{name}", handle_delete, methods=["DELETE"]),
         Route("/api/servers/{name}/refresh", handle_refresh, methods=["POST"]),
         Route("/api/servers/{name}/reveal", handle_reveal, methods=["POST"]),
+        Route("/api/servers/{name}/oauth/start", handle_oauth_start, methods=["POST"]),
+        Route("/api/servers/{name}/oauth/status", handle_oauth_status, methods=["GET"]),
         Mount(
             "/static",
             app=StaticFiles(directory=str(static_dir)),

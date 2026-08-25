@@ -30,6 +30,7 @@ h1,h2,h3,p{margin:0}
 .bg-gray-100{background-color:#f3f4f6}
 .bg-green-100{background-color:#dcfce7}
 .bg-yellow-100{background-color:#fef9c3}
+.bg-blue-50{background-color:#eff6ff}
 .bg-blue-600{background-color:#2563eb}
 .bg-indigo-600{background-color:#4f46e5}
 .bg-transparent{background-color:transparent}
@@ -59,6 +60,7 @@ h1,h2,h3,p{margin:0}
 .text-amber-700{color:#b45309}
 .text-amber-600{color:#d97706}
 .text-amber-800{color:#92400e}
+.text-amber-900{color:#78350f}
 .text-red-600{color:#dc2626}
 .text-red-700{color:#b91c1c}
 .text-red-800{color:#991b1b}
@@ -69,6 +71,8 @@ h1,h2,h3,p{margin:0}
 .text-gray-500{color:#6b7280}
 .text-green-800{color:#166534}
 .text-blue-600{color:#2563eb}
+.text-blue-700{color:#1d4ed8}
+.text-blue-800{color:#1e40af}
 .text-yellow-700{color:#a16207}
 /* borders */
 .border{border-width:1px}
@@ -84,6 +88,7 @@ h1,h2,h3,p{margin:0}
 .border-amber-500{border-color:#f59e0b}
 .border-red-200{border-color:#fecaca}
 .border-red-300{border-color:#fca5a5}
+.border-blue-200{border-color:#bfdbfe}
 .border-sky-200{border-color:#bae6fd}
 .border-zinc-200{border-color:#e4e4e7}
 .border-yellow-500{border-color:#eab308}

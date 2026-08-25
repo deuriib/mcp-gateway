@@ -227,3 +227,30 @@ async def test_close_clears_dialog(gateway: Gateway) -> None:
 def test_no_inline_onclick() -> None:
     views_src = Path("src/mcp_gway/dashboard/views.py").read_text(encoding="utf-8")
     assert "onclick" not in views_src.lower()
+
+
+def test_add_form_has_oauth_checkbox() -> None:
+    from mcp_gway.dashboard.views import add_form
+
+    html = str(add_form())
+    assert 'id="field-oauth"' in html
+    assert 'name="oauth_enabled"' in html
+    assert "Enable OAuth" in html
+    assert 'id="group-oauth"' in html
+    assert 'name="oauth_scope"' in html
+    assert "Dynamic client_id auto-generated as UUID" in html
+
+
+def test_dashboard_js_has_oauth_and_reset() -> None:
+    js = Path("src/mcp_gway/dashboard/static/dashboard.js").read_text(encoding="utf-8")
+    assert "syncOAuth" in js
+    assert "setupOAuth" in js
+    assert "setupFormReset" in js
+    assert "setupVisualFeedback" in js
+    assert "form.reset()" in js
+    assert "field-oauth" in js
+
+    htmx = Path("src/mcp_gway/dashboard/static/htmx.min.js").read_text(encoding="utf-8")
+    assert "X-Toast" in htmx
+    assert "X-OAuth-Required" in htmx
+    assert "form.reset()" in htmx or "t.reset()" in htmx

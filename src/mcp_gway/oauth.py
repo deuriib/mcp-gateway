@@ -8,6 +8,7 @@ import json
 import re
 import secrets
 import string
+import uuid
 import webbrowser
 from pathlib import Path
 from typing import Any
@@ -180,10 +181,29 @@ class OAuthCallbackServer:
             writer.close()
 
     async def start(self) -> None:
-        """Start the local callback server."""
-        self._server = await asyncio.start_server(
-            self._handle_request, "127.0.0.1", self._port
-        )
+        """Start the local callback server, trying next ports if busy."""
+        last_exc = None
+        for try_port in [self._port, self._port + 1, self._port + 2, 0]:
+            try:
+                self._server = await asyncio.start_server(
+                    self._handle_request, "127.0.0.1", try_port
+                )
+                if try_port == 0 and self._server.sockets:
+                    self._port = self._server.sockets[0].getsockname()[1]
+                elif try_port != self._port:
+                    self._port = try_port
+                return
+            except OSError as e:
+                last_exc = e
+                if (
+                    getattr(e, "winerror", None) == 10048
+                    or "already in use" in str(e).lower()
+                    or "address already in use" in str(e).lower()
+                ):
+                    continue
+                raise
+        if last_exc:
+            raise last_exc
 
     async def wait_for_callback(self, timeout: float = 300.0) -> dict[str, str] | None:
         """Wait for the OAuth callback."""
@@ -327,8 +347,8 @@ async def run_oauth_flow(
     callback_server = OAuthCallbackServer(port=callback_port)
     await callback_server.start()
 
-    # Dynamic client registration (RFC 7591)
-    client_id = "mcp-gway"
+    # Dynamic client registration (RFC 7591) - client_id must be valid UUID when dynamic
+    client_id = str(uuid.uuid4())
     client_secret = None
 
     if registration_endpoint:
@@ -460,3 +480,187 @@ async def get_authenticated_client(server_name: str) -> httpx2.AsyncClient | Non
             headers={"Authorization": f"Bearer {tokens.access_token}"}
         )
     return None
+
+
+_pending_oauth_flows: dict[str, dict[str, Any]] = {}
+
+
+async def initiate_web_oauth(
+    server_url: str,
+    server_name: str,
+    client_metadata: OAuthClientMetadata | None = None,
+    callback_port: int = 8989,
+) -> tuple[str | None, str | None]:
+    """Initiate OAuth flow for web dashboard - returns auth URL without blocking.
+
+    Starts the callback server and registration, builds the auth URL, and
+    launches a background task to wait for the callback and complete the flow.
+
+    Returns (auth_url, error) - one will be set.
+    """
+    _validate_server_name(server_name)
+    storage = FileTokenStorage(server_name)
+
+    existing_tokens = await storage.get_tokens()
+    if existing_tokens and existing_tokens.access_token:
+        return None, "Already authenticated"
+
+    metadata = await discover_oauth_metadata(server_url)
+    if not metadata:
+        return None, "Could not discover OAuth metadata"
+
+    auth_endpoint = metadata.get("authorization_endpoint")
+    token_endpoint = metadata.get("token_endpoint")
+    registration_endpoint = metadata.get("registration_endpoint")
+
+    if not auth_endpoint or not token_endpoint:
+        return None, "Missing authorization or token endpoint"
+
+    code_verifier, code_challenge = generate_pkce()
+    state = secrets.token_urlsafe(32)
+
+    callback_server = OAuthCallbackServer(port=callback_port)
+    try:
+        await callback_server.start()
+    except Exception as e:
+        return None, f"Could not start callback server: {e}"
+
+    client_id = str(uuid.uuid4())
+    client_secret = None
+
+    if registration_endpoint:
+        try:
+            async with httpx2.AsyncClient() as http:
+                reg_request = {
+                    "client_name": "MCP Gateway",
+                    "redirect_uris": [callback_server.callback_url],
+                    "grant_types": ["authorization_code", "refresh_token"],
+                    "response_types": ["code"],
+                    "token_endpoint_auth_method": "none",
+                }
+                reg_response = await http.post(
+                    registration_endpoint,
+                    json=reg_request,
+                    headers={"Content-Type": "application/json"},
+                )
+                if reg_response.status_code in (200, 201):
+                    reg_data = reg_response.json()
+                    client_id = reg_data.get("client_id", client_id)
+                    client_secret = reg_data.get("client_secret")
+                    try:
+                        await storage.set_client_info(
+                            OAuthClientInformationFull(
+                                client_id=client_id,
+                                client_secret=client_secret,
+                                **{
+                                    k: v
+                                    for k, v in reg_data.items()
+                                    if k not in ("client_id", "client_secret")
+                                },
+                            )
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    if client_metadata and client_metadata.scope:
+        scope = client_metadata.scope
+    else:
+        scope = "openid profile email"
+
+    auth_params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": callback_server.callback_url,
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "scope": scope,
+    }
+
+    auth_url = f"{auth_endpoint}?{urlencode(auth_params)}"
+
+    _pending_oauth_flows[server_name] = {
+        "server_url": server_url,
+        "state": state,
+        "code_verifier": code_verifier,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "token_endpoint": token_endpoint,
+        "callback_server": callback_server,
+        "storage": storage,
+    }
+
+    import asyncio as _asyncio
+
+    _asyncio.create_task(_complete_web_oauth(server_name))
+
+    return auth_url, None
+
+
+async def _complete_web_oauth(server_name: str) -> None:
+    flow = _pending_oauth_flows.get(server_name)
+    if not flow:
+        return
+    callback_server: OAuthCallbackServer = flow["callback_server"]
+    storage: FileTokenStorage = flow["storage"]
+    try:
+        result = await callback_server.wait_for_callback(timeout=300.0)
+        if not result or not result.get("code"):
+            _pending_oauth_flows.pop(server_name, None)
+            return
+        if result.get("state") != flow["state"]:
+            _pending_oauth_flows.pop(server_name, None)
+            return
+
+        token_data = {
+            "grant_type": "authorization_code",
+            "code": result["code"],
+            "redirect_uri": callback_server.callback_url,
+            "code_verifier": flow["code_verifier"],
+            "client_id": flow["client_id"],
+        }
+        if flow["client_secret"]:
+            token_data["client_secret"] = flow["client_secret"]
+
+        async with httpx2.AsyncClient() as http:
+            resp = await http.post(
+                flow["token_endpoint"],
+                data=token_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                tokens = OAuthToken(
+                    access_token=data.get("access_token", ""),
+                    token_type=data.get("token_type", "Bearer"),
+                    refresh_token=data.get("refresh_token"),
+                    expires_in=data.get("expires_in"),
+                )
+                await storage.set_tokens(tokens)
+                try:
+                    from pathlib import Path as _Path
+
+                    from mcp_gway.cli import _discover_tools as _cli_discover
+                    from mcp_gway.registry import Registry
+
+                    reg = Registry(
+                        servers_dir=_Path.home() / ".config" / "mcp-gway" / "servers"
+                    )
+                    cfg = reg.get_config(server_name)
+                    tools = await _cli_discover(cfg, force_auth=True)
+                    if tools:
+                        reg.update(server_name, tools)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    finally:
+        _pending_oauth_flows.pop(server_name, None)
+
+
+def get_pending_oauth_status(server_name: str) -> str:
+    if server_name in _pending_oauth_flows:
+        return "pending"
+    return "none"

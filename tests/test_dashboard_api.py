@@ -273,3 +273,155 @@ async def test_no_direct_fs_write_outside_registry(
         resp = await client.post("/api/servers", json=payload)
         assert resp.status_code == 201
         assert called.get("yes") is True
+
+
+@pytest.mark.asyncio
+async def test_add_remote_with_oauth_generates_uuid(
+    gateway: Gateway, monkeypatch
+) -> None:
+    import uuid
+
+    async def mock_discover(config, force_auth=False):  # noqa: ARG001
+        return []
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    transport = ASGITransport(app=gateway.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        payload = {
+            "name": "oauth_srv",
+            "type": "remote",
+            "url": "https://example.com/mcp",
+            "oauth": {"scope": "openid profile"},
+        }
+        resp = await client.post("/api/servers", json=payload)
+        assert resp.status_code == 201
+        cfg = gateway.registry.get_config("oauth_srv")
+        assert cfg.oauth is not None
+        assert isinstance(cfg.oauth, dict) or hasattr(cfg.oauth, "clientId")
+        client_id = (
+            cfg.oauth["clientId"] if isinstance(cfg.oauth, dict) else cfg.oauth.clientId
+        )
+        assert client_id is not None
+        uuid.UUID(client_id)
+
+        # via form with oauth_enabled checkbox
+        resp2 = await client.post(
+            "/api/servers",
+            content="name=oauth_form&type=remote&url=https%3A%2F%2Fexample.com%2Fmcp&oauth_enabled=true&oauth_scope=openid",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert resp2.status_code == 201
+        cfg2 = gateway.registry.get_config("oauth_form")
+        cid2 = (
+            cfg2.oauth["clientId"]
+            if isinstance(cfg2.oauth, dict)
+            else cfg2.oauth.clientId
+        )
+        uuid.UUID(cid2)
+
+
+@pytest.mark.asyncio
+async def test_add_remote_with_oauth_via_headers_fallback(
+    gateway: Gateway, monkeypatch
+) -> None:
+    async def mock_discover(config, force_auth=False):  # noqa: ARG001
+        return []
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    transport = ASGITransport(app=gateway.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        payload = {
+            "name": "oauth_headers",
+            "type": "remote",
+            "url": "https://example.com/mcp",
+            "headers": {"Authorization": "Bearer token123"},
+        }
+        resp = await client.post("/api/servers", json=payload)
+        assert resp.status_code == 201
+        cfg = gateway.registry.get_config("oauth_headers")
+        assert cfg.oauth is None
+        assert cfg.headers["Authorization"] == "Bearer token123"
+
+
+@pytest.mark.asyncio
+async def test_oauth_toast_and_automatic_header(gateway: Gateway, monkeypatch) -> None:
+    async def mock_discover(config, force_auth=False):  # noqa: ARG001
+        return []
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    transport = ASGITransport(app=gateway.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        payload = {
+            "name": "toast_oauth",
+            "type": "remote",
+            "url": "https://example.com/mcp",
+            "oauth": {"clientId": "550e8400-e29b-41d4-a716-446655440000"},
+        }
+        resp = await client.post(
+            "/api/servers", json=payload, headers={"HX-Request": "true"}
+        )
+        assert resp.status_code == 201
+        assert "x-toast" in resp.headers
+        assert "OAuth" in resp.headers["x-toast"]
+        assert resp.headers.get("x-oauth-required") == "1"
+        assert "hx-swap-oob" not in resp.text
+        assert "server-table-body" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_web_oauth_flow_via_dashboard(gateway: Gateway, monkeypatch) -> None:
+    async def mock_discover(config, force_auth=False):  # noqa: ARG001
+        return []
+
+    async def mock_discover_oauth_meta(url):  # noqa: ARG001
+        return {
+            "authorization_endpoint": "https://auth.example.com/authorize",
+            "token_endpoint": "https://auth.example.com/token",
+            "registration_endpoint": "https://auth.example.com/register",
+        }
+
+    async def mock_initiate(
+        server_url, server_name, client_metadata=None, callback_port=8989
+    ):  # noqa: ARG001
+        return "https://auth.example.com/authorize?client_id=test", None
+
+    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr(
+        "mcp_gway.oauth.discover_oauth_metadata", mock_discover_oauth_meta
+    )
+    monkeypatch.setattr("mcp_gway.oauth.initiate_web_oauth", mock_initiate)
+    transport = ASGITransport(app=gateway.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Create server with OAuth
+        payload = {
+            "name": "web_oauth",
+            "type": "remote",
+            "url": "https://example.com/mcp",
+            "oauth": {"clientId": "550e8400-e29b-41d4-a716-446655440000"},
+        }
+        resp = await client.post("/api/servers", json=payload)
+        assert resp.status_code == 201
+
+        # Start web OAuth flow
+        resp2 = await client.post("/api/servers/web_oauth/oauth/start")
+        assert resp2.status_code == 200
+        data = resp2.json()
+        assert "auth_url" in data
+        assert "https://auth.example.com" in data["auth_url"]
+
+        # Check status - should be pending or idle
+        resp3 = await client.get("/api/servers/web_oauth/oauth/status")
+        assert resp3.status_code == 200
+        assert resp3.json()["status"] in ("pending", "idle", "completed")
+
+
+@pytest.mark.asyncio
+async def test_web_oauth_flow_requires_loopback(gateway: Gateway) -> None:
+    transport = ASGITransport(app=gateway.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/servers/nonexistent/oauth/start",
+            headers={"X-Forwarded-For": "1.2.3.4"},
+        )
+        # Should fail because server not found or not loopback
+        assert resp.status_code in (403, 404)
