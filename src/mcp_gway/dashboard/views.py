@@ -8,23 +8,41 @@ from typing import Any
 
 import htpy
 
+_DIALOG_ID = "server-dialog"
+_DIALOG_TARGET = f"#{_DIALOG_ID}"
+_CLOSE_ATTRS: dict[str, str] = {
+    "hx-get": "/dashboard/close",
+    "hx-target": _DIALOG_TARGET,
+    "hx-swap": "innerHTML",
+}
+_BASE_BADGE = (
+    "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium "
+    "transition-colors duration-150"
+)
+_BADGE_COLORS: dict[str, str] = {
+    "healthy": "bg-green-100 text-green-800",
+    "disabled": "bg-gray-100 text-gray-600",
+    "unreachable": "bg-amber-100 text-amber-800",
+}
+
 
 def badge(state: str | bool) -> Any:
     if isinstance(state, bool):
         state = "healthy" if state else "disabled"
     normalized = str(state).lower()
     if normalized == "healthy":
-        cls = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 transition-colors duration-150"
+        color = _BADGE_COLORS["healthy"]
         label = "healthy"
     elif normalized == "disabled":
-        cls = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 transition-colors duration-150"
+        color = _BADGE_COLORS["disabled"]
         label = "disabled"
     elif normalized == "unreachable":
-        cls = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 transition-colors duration-150"
+        color = _BADGE_COLORS["unreachable"]
         label = "unreachable"
     else:
-        cls = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 transition-colors duration-150"
+        color = _BADGE_COLORS["disabled"]
         label = normalized
+    cls = f"{_BASE_BADGE} {color}"
     return htpy.span(class_=cls)[label]
 
 
@@ -71,7 +89,12 @@ def server_row(server: dict[str, Any]) -> Any:
     toggle_label = "Disable" if enabled else "Enable"
     return htpy.tr(
         class_="transition-colors duration-150 hover:bg-slate-50 cursor-pointer group",
-        **{"hx-get": detail_url, "hx-target": "#server-dialog", "hx-swap": "innerHTML"},
+        **{
+            "hx-get": detail_url,
+            "hx-target": _DIALOG_TARGET,
+            "hx-swap": "innerHTML",
+            "hx-indicator": "#global-spinner",
+        },
     )[
         htpy.td(class_="px-4 py-3 font-mono text-sm text-slate-900")[name],
         htpy.td(class_="px-4 py-3 text-sm text-slate-700")[
@@ -87,8 +110,9 @@ def server_row(server: dict[str, Any]) -> Any:
                     aria_label=f"View {name}",
                     **{
                         "hx-get": detail_url,
-                        "hx-target": "#server-dialog",
+                        "hx-target": _DIALOG_TARGET,
                         "hx-swap": "innerHTML",
+                        "hx-indicator": "#global-spinner",
                     },
                 )["View"],
                 htpy.button(
@@ -256,14 +280,10 @@ def drawer_error(message: str, status: int = 404) -> Any:
         if status >= 500
         else "bg-amber-100 border border-amber-200 text-amber-800 p-4 rounded"
     )
-    close_attrs = {
-        "hx-get": "/dashboard/close",
-        "hx-target": "#server-dialog",
-        "hx-swap": "innerHTML",
-    }
+    # native <dialog> already provides dialog semantics; inner panel uses region to avoid nested dialog roles
     return htpy.aside(
         class_="relative w-full max-w-md bg-white shadow-xl h-full overflow-y-auto ml-auto transform transition-all duration-300 translate-x-0 p-6 border-l border-slate-200",
-        role="dialog",
+        role="region",
         aria_label="Error",
     )[
         htpy.div(class_="flex items-center justify-between mb-4")[
@@ -271,42 +291,31 @@ def drawer_error(message: str, status: int = 404) -> Any:
             htpy.button(
                 class_="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-150",
                 aria_label="Close",
-                **close_attrs,
+                **_CLOSE_ATTRS,
             )["\u00d7"],
         ],
         htpy.div(class_=cls)[message],
     ]
 
 
-def server_drawer(
-    server: dict[str, Any],
-    pyi_content: str,
-    truncated: bool,
-    warning_banner: bool = False,
-) -> Any:
-    name = server.get("name", "")
+def _drawer_header(name: str) -> Any:
+    return htpy.div(
+        class_="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white sticky top-0 z-10"
+    )[
+        htpy.h2(class_="text-lg font-semibold text-slate-900")[name],
+        htpy.button(
+            class_="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-150",
+            aria_label="Close",
+            **_CLOSE_ATTRS,
+        )["\u00d7"],
+    ]
+
+
+def _drawer_metadata(server: dict[str, Any]) -> Any:
     typ = server.get("type", "")
     timeout = server.get("timeout", 5000)
     enabled = server.get("enabled", True)
     tool_count = server.get("tool_count", 0)
-    quoted = urllib.parse.quote(name, safe="")
-    if not enabled:
-        state = "disabled"
-    elif isinstance(tool_count, int) and tool_count == 0:
-        state = "unreachable"
-    else:
-        state = "healthy"
-    toggle_val = not enabled
-    toggle_label = "Disable" if enabled else "Enable"
-    patch_url = f"/api/servers/{quoted}"
-    refresh_url = f"/api/servers/{quoted}/refresh"
-    reveal_url = f"/api/servers/{quoted}/reveal"
-    delete_url = f"/api/servers/{quoted}"
-    close_attrs = {
-        "hx-get": "/dashboard/close",
-        "hx-target": "#server-dialog",
-        "hx-swap": "innerHTML",
-    }
     url_val = server.get("url")
     command_val = server.get("command")
     if isinstance(command_val, list):
@@ -329,163 +338,182 @@ def server_drawer(
         if isinstance(env_val, dict)
         else ("***" if env_val else "")
     )
+    return htpy.dl(class_="space-y-3 text-sm")[
+        htpy.div(class_="flex justify-between")[
+            htpy.dt(class_="text-slate-500")["Type"],
+            htpy.dd(class_="font-medium text-slate-900")[
+                typ.upper() if isinstance(typ, str) else str(typ)
+            ],
+        ],
+        htpy.div(class_="flex justify-between")[
+            htpy.dt(class_="text-slate-500")["Timeout"],
+            htpy.dd(class_="font-mono text-slate-900")[f"{timeout}ms"],
+        ],
+        htpy.div(class_="flex justify-between")[
+            htpy.dt(class_="text-slate-500")["Tools"],
+            htpy.dd(class_="font-mono text-slate-900")[str(tool_count)],
+        ],
+        htpy.div(class_="flex justify-between")[
+            htpy.dt(class_="text-slate-500")["Enabled"],
+            htpy.dd(class_="font-mono text-slate-900")[str(enabled).lower()],
+        ],
+        (
+            htpy.div(class_="flex flex-col gap-1")[
+                htpy.dt(class_="text-slate-500")["URL"],
+                htpy.dd(class_="font-mono text-slate-900 break-all")[str(url_val)],
+            ]
+            if url_val
+            else htpy.fragment[[]]
+        ),
+        (
+            htpy.div(class_="flex flex-col gap-1")[
+                htpy.dt(class_="text-slate-500")["Command"],
+                htpy.dd(class_="font-mono text-slate-900 break-all")[command_str],
+            ]
+            if command_str
+            else htpy.fragment[[]]
+        ),
+        (
+            htpy.div(class_="flex flex-col gap-1")[
+                htpy.dt(class_="text-slate-500")["Resolved Transport"],
+                htpy.dd(class_="font-mono text-slate-900")[str(resolved)],
+            ]
+            if resolved
+            else htpy.fragment[[]]
+        ),
+        (
+            htpy.div(class_="flex flex-col gap-1")[
+                htpy.dt(class_="text-slate-500")["CWD"],
+                htpy.dd(class_="font-mono text-slate-900 break-all")[str(cwd_val)],
+            ]
+            if cwd_val
+            else htpy.fragment[[]]
+        ),
+        (
+            htpy.div(class_="flex flex-col gap-1")[
+                htpy.dt(class_="text-slate-500")["Headers"],
+                htpy.dd(
+                    class_="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200 overflow-auto"
+                )[headers_text],
+            ]
+            if headers_val is not None
+            else htpy.fragment[[]]
+        ),
+        (
+            htpy.div(class_="flex flex-col gap-1")[
+                htpy.dt(class_="text-slate-500")["Environment"],
+                htpy.dd(
+                    class_="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200 overflow-auto"
+                )[env_text],
+            ]
+            if env_val is not None
+            else htpy.fragment[[]]
+        ),
+    ]
+
+
+def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
+    name = server.get("name", "")
+    enabled = server.get("enabled", True)
+    quoted = urllib.parse.quote(name, safe="")
+    toggle_val = not enabled
+    toggle_label = "Disable" if enabled else "Enable"
+    patch_url = f"/api/servers/{quoted}"
+    refresh_url = f"/api/servers/{quoted}/refresh"
+    reveal_url = f"/api/servers/{quoted}/reveal"
+    delete_url = f"/api/servers/{quoted}"
+    return htpy.div(class_="flex flex-wrap gap-2 pt-2")[
+        htpy.button(
+            class_="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 hover:shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-150",
+            **{
+                "hx-patch": patch_url,
+                "hx-vals": json.dumps({"enabled": toggle_val}),
+                "hx-headers": '{"Content-Type":"application/json"}',
+                "hx-target": _DIALOG_TARGET,
+                "hx-swap": "innerHTML",
+            },
+        )[toggle_label],
+        htpy.button(
+            class_="inline-flex items-center rounded-md bg-white border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-150",
+            **{
+                "hx-post": refresh_url,
+                "hx-target": "#toast",
+                "hx-swap": "innerHTML",
+            },
+        )["Refresh"],
+        htpy.button(
+            class_="inline-flex items-center rounded-md bg-white border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed",
+            **(
+                {
+                    "hx-post": reveal_url,
+                    "hx-target": "#toast",
+                    "hx-swap": "innerHTML",
+                    "disabled": "disabled",
+                    "title": "Reveal disabled on non-loopback",
+                }
+                if warning_banner
+                else {
+                    "hx-post": reveal_url,
+                    "hx-target": "#toast",
+                    "hx-swap": "innerHTML",
+                }
+            ),
+        )["Reveal"],
+        htpy.button(
+            class_="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 hover:shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-150",
+            **{
+                "hx-delete": delete_url,
+                "hx-confirm": f"Delete server '{name}'? This cannot be undone.",
+                "hx-target": "#server-table-body",
+                "hx-swap": "outerHTML",
+            },
+        )["Delete"],
+    ]
+
+
+def _tool_panel(tool_count: Any, pyi_content: str, truncated: bool) -> Any:
+    return htpy.div(class_="pt-4 border-t border-slate-200")[
+        htpy.h3(class_="text-sm font-semibold text-slate-900 mb-2")[
+            f"Tool signatures ({tool_count})"
+        ],
+        htpy.pre(
+            class_="max-h-64 overflow-auto bg-slate-50 p-3 text-xs font-mono border border-slate-200 rounded"
+        )[pyi_content or "(no tools)"],
+        (
+            htpy.p(class_="text-xs text-amber-600 mt-1")["truncated (50KB limit)"]
+            if truncated
+            else htpy.fragment[[]]
+        ),
+    ]
+
+
+def server_drawer(
+    server: dict[str, Any],
+    pyi_content: str,
+    truncated: bool,
+    warning_banner: bool = False,
+) -> Any:
+    name = server.get("name", "")
+    tool_count = server.get("tool_count", 0)
+    enabled = server.get("enabled", True)
+    if not enabled:
+        state = "disabled"
+    elif isinstance(tool_count, int) and tool_count == 0:
+        state = "unreachable"
+    else:
+        state = "healthy"
+    # native <dialog> provides dialog role; inner aside uses region to avoid nested dialog
     return htpy.aside(
         class_="relative w-full max-w-md bg-white shadow-xl h-full overflow-y-auto ml-auto transform transition-all duration-300 translate-x-0 border-l border-slate-200",
-        role="dialog",
+        role="region",
         aria_label=f"Details for {name}",
     )[
-        htpy.div(
-            class_="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white sticky top-0 z-10"
-        )[
-            htpy.h2(class_="text-lg font-semibold text-slate-900")[name],
-            htpy.button(
-                class_="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-150",
-                aria_label="Close",
-                **close_attrs,
-            )["\u00d7"],
-        ],
+        _drawer_header(name),
         htpy.div(class_="px-6 py-4 space-y-4")[
             htpy.div(class_="flex items-center gap-2")[badge(state)],
-            htpy.dl(class_="space-y-3 text-sm")[
-                htpy.div(class_="flex justify-between")[
-                    htpy.dt(class_="text-slate-500")["Type"],
-                    htpy.dd(class_="font-medium text-slate-900")[
-                        typ.upper() if isinstance(typ, str) else str(typ)
-                    ],
-                ],
-                htpy.div(class_="flex justify-between")[
-                    htpy.dt(class_="text-slate-500")["Timeout"],
-                    htpy.dd(class_="font-mono text-slate-900")[f"{timeout}ms"],
-                ],
-                htpy.div(class_="flex justify-between")[
-                    htpy.dt(class_="text-slate-500")["Tools"],
-                    htpy.dd(class_="font-mono text-slate-900")[str(tool_count)],
-                ],
-                htpy.div(class_="flex justify-between")[
-                    htpy.dt(class_="text-slate-500")["Enabled"],
-                    htpy.dd(class_="font-mono text-slate-900")[str(enabled).lower()],
-                ],
-                (
-                    htpy.div(class_="flex flex-col gap-1")[
-                        htpy.dt(class_="text-slate-500")["URL"],
-                        htpy.dd(class_="font-mono text-slate-900 break-all")[
-                            str(url_val)
-                        ],
-                    ]
-                    if url_val
-                    else htpy.fragment[[]]
-                ),
-                (
-                    htpy.div(class_="flex flex-col gap-1")[
-                        htpy.dt(class_="text-slate-500")["Command"],
-                        htpy.dd(class_="font-mono text-slate-900 break-all")[
-                            command_str
-                        ],
-                    ]
-                    if command_str
-                    else htpy.fragment[[]]
-                ),
-                (
-                    htpy.div(class_="flex flex-col gap-1")[
-                        htpy.dt(class_="text-slate-500")["Resolved Transport"],
-                        htpy.dd(class_="font-mono text-slate-900")[str(resolved)],
-                    ]
-                    if resolved
-                    else htpy.fragment[[]]
-                ),
-                (
-                    htpy.div(class_="flex flex-col gap-1")[
-                        htpy.dt(class_="text-slate-500")["CWD"],
-                        htpy.dd(class_="font-mono text-slate-900 break-all")[
-                            str(cwd_val)
-                        ],
-                    ]
-                    if cwd_val
-                    else htpy.fragment[[]]
-                ),
-                (
-                    htpy.div(class_="flex flex-col gap-1")[
-                        htpy.dt(class_="text-slate-500")["Headers"],
-                        htpy.dd(
-                            class_="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200 overflow-auto"
-                        )[headers_text],
-                    ]
-                    if headers_val is not None
-                    else htpy.fragment[[]]
-                ),
-                (
-                    htpy.div(class_="flex flex-col gap-1")[
-                        htpy.dt(class_="text-slate-500")["Environment"],
-                        htpy.dd(
-                            class_="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200 overflow-auto"
-                        )[env_text],
-                    ]
-                    if env_val is not None
-                    else htpy.fragment[[]]
-                ),
-            ],
-            htpy.div(class_="flex flex-wrap gap-2 pt-2")[
-                htpy.button(
-                    class_="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 hover:shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-150",
-                    **{
-                        "hx-patch": patch_url,
-                        "hx-vals": json.dumps({"enabled": toggle_val}),
-                        "hx-headers": '{"Content-Type":"application/json"}',
-                        "hx-target": "#server-dialog",
-                        "hx-swap": "innerHTML",
-                    },
-                )[toggle_label],
-                htpy.button(
-                    class_="inline-flex items-center rounded-md bg-white border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-150",
-                    **{
-                        "hx-post": refresh_url,
-                        "hx-target": "#toast",
-                        "hx-swap": "innerHTML",
-                    },
-                )["Refresh"],
-                htpy.button(
-                    class_="inline-flex items-center rounded-md bg-white border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed",
-                    **(
-                        {
-                            "hx-post": reveal_url,
-                            "hx-target": "#toast",
-                            "hx-swap": "innerHTML",
-                            "disabled": "disabled",
-                            "title": "Reveal disabled on non-loopback",
-                        }
-                        if warning_banner
-                        else {
-                            "hx-post": reveal_url,
-                            "hx-target": "#toast",
-                            "hx-swap": "innerHTML",
-                        }
-                    ),
-                )["Reveal"],
-                htpy.button(
-                    class_="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 hover:shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-150",
-                    **{
-                        "hx-delete": delete_url,
-                        "hx-confirm": f"Delete server '{name}'? This cannot be undone.",
-                        "hx-target": "#server-table-body",
-                        "hx-swap": "outerHTML",
-                    },
-                )["Delete"],
-            ],
-            htpy.div(class_="pt-4 border-t border-slate-200")[
-                htpy.h3(class_="text-sm font-semibold text-slate-900 mb-2")[
-                    f"Tool signatures ({tool_count})"
-                ],
-                htpy.pre(
-                    class_="max-h-64 overflow-auto bg-slate-50 p-3 text-xs font-mono border border-slate-200 rounded"
-                )[pyi_content or "(no tools)"],
-                (
-                    htpy.p(class_="text-xs text-amber-600 mt-1")[
-                        "truncated (50KB limit)"
-                    ]
-                    if truncated
-                    else htpy.fragment[[]]
-                ),
-            ],
+            _drawer_metadata(server),
+            _drawer_actions(server, warning_banner),
+            _tool_panel(tool_count, pyi_content, truncated),
         ],
     ]
 
@@ -592,7 +620,7 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
                     )[table],
                     add_form(),
                     htpy.dialog(
-                        id="server-dialog",
+                        id=_DIALOG_ID,
                         class_="m-0 p-0 max-w-none w-screen h-screen max-h-none bg-transparent backdrop:bg-slate-900/30 backdrop:backdrop-blur-sm open:flex open:justify-end border-0",
                     )[[]],
                 ],

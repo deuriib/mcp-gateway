@@ -124,3 +124,106 @@ def test_no_jinja_import() -> None:
     views_src = Path("src/mcp_gway/dashboard/views.py").read_text(encoding="utf-8")
     assert "jinja" not in views_src.lower()
     assert "htpy" in views_src.lower()
+
+
+def test_layout_has_dialog() -> None:
+    html = str(layout([]))
+    assert '<dialog id="server-dialog"' in html
+    assert 'id="drawer"' not in html
+    assert "/static/dialog.js" in html
+    assert "backdrop:bg-slate-900/30" in html
+
+
+def test_server_row_targets_dialog() -> None:
+    from mcp_gway.dashboard.views import server_row
+
+    html = str(
+        server_row(
+            {
+                "name": "demo",
+                "type": "remote",
+                "enabled": True,
+                "tool_count": 2,
+                "timeout": 5000,
+            }
+        )
+    )
+    assert 'hx-target="#server-dialog"' in html
+    assert 'hx-indicator="#global-spinner"' in html
+
+
+def test_drawer_returns_aside_region() -> None:
+    from mcp_gway.dashboard.views import drawer_error, server_drawer
+
+    err_html = str(drawer_error("not found", status=404))
+    assert "<aside" in err_html
+    assert 'role="region"' in err_html
+    assert 'role="dialog"' not in err_html
+
+    drawer_html = str(
+        server_drawer(
+            {
+                "name": "x",
+                "type": "remote",
+                "enabled": True,
+                "tool_count": 1,
+                "timeout": 5000,
+            },
+            "def foo(): pass",
+            False,
+        )
+    )
+    assert "<aside" in drawer_html
+    assert 'role="region"' in drawer_html
+    assert 'role="dialog"' not in drawer_html
+
+
+@pytest.mark.asyncio
+async def test_dialog_js_served_and_resilient(gateway: Gateway) -> None:
+    transport = ASGITransport(app=gateway.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/static/dialog.js")
+        assert resp.status_code == 200
+        text = resp.text
+        assert "showModal" in text
+        assert "htmx:responseError" in text
+        assert "htmx:sendError" in text
+        assert "htmx:timeout" in text
+        assert "DIALOG_ID" in text
+        assert "openDialog" in text
+        assert "handleDialogError" in text
+
+
+@pytest.mark.asyncio
+async def test_detail_renders_inside_dialog_panel(
+    gateway: Gateway, registry: Registry
+) -> None:
+    from mcp_gway.models import MCPServerConfig, ToolInfo
+
+    cfg = MCPServerConfig(
+        name="detail_srv", type="remote", url="https://example.com/mcp"
+    )
+    registry.add(cfg, [ToolInfo(name="foo")])
+    transport = ASGITransport(app=gateway.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/dashboard/servers/detail_srv")
+        assert resp.status_code == 200
+        text = resp.text
+        assert "<aside" in text
+        assert 'role="region"' in text
+        assert ('hx-target="#server-dialog"' in text) or ("fixed inset" not in text)
+        assert "fixed inset-0" not in text
+
+
+@pytest.mark.asyncio
+async def test_close_clears_dialog(gateway: Gateway) -> None:
+    transport = ASGITransport(app=gateway.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/dashboard/close")
+        assert resp.status_code == 200
+        assert resp.text == ""
+
+
+def test_no_inline_onclick() -> None:
+    views_src = Path("src/mcp_gway/dashboard/views.py").read_text(encoding="utf-8")
+    assert "onclick" not in views_src.lower()
