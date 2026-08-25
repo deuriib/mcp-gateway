@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.9.1 (2026-08-25)
+
+### Bug Fixes
+
+- **dashboard**: Filter, type toggle, hover, pill centering, tooltips and spacing
+  ([`bca81a6`](https://github.com/deuriib/mcp-gateway/commit/bca81a608b63c6c482d0f87edb4cc76cc55f1ed8))
+
+- Extract inline script to vendored dashboard.js to fix CSP blocking (filter by name and
+  remote/local toggle now work, re-hydrates on htmx:load) - Fix table row buttons blocked by capture
+  stopPropagation in dialog.js (remove capture listener) - Fix search icon alignment (inset-y-0 flex
+  centering vs translate) - Fix stats cards too close to header (pt-8 gap-8) - Fix healthy pill
+  centering and size (justify-center gap-1 px-2 leading-none) - Fix row hover missing
+  (hover:bg-slate-50 vs purged /80) - Add native tooltips via title on
+  View/Toggle/Delete/Refresh/Reveal/Copy/Close for accessibility
+
+
 ## v0.9.0 (2026-08-25)
 
 ### Chores
