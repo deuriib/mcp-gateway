@@ -17,6 +17,7 @@ h1,h2,h3,p{margin:0}
 .bg-black{background-color:#000}
 .bg-emerald-50{background-color:#ecfdf5}
 .bg-emerald-100{background-color:#d1fae5}
+.bg-emerald-500{background-color:#00bc7d}
 .bg-amber-50{background-color:#fffbeb}
 .bg-amber-100{background-color:#fef3c7}
 .bg-red-50{background-color:#fef2f2}
@@ -116,6 +117,7 @@ h1,h2,h3,p{margin:0}
 .p-4{padding:1rem}
 .p-5{padding:1.25rem}
 .p-6{padding:1.5rem}
+.px-1{padding-top:0.25rem;padding-bottom:0.25rem}
 .px-2{padding-left:0.5rem;padding-right:0.5rem}
 .px-2\.5{padding-left:0.625rem;padding-right:0.625rem}
 .px-3{padding-left:0.75rem;padding-right:0.75rem}

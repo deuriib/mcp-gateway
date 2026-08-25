@@ -185,7 +185,7 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
         htpy.td(class_="px-4 py-3.5")[
             htpy.div(class_="flex items-center gap-1 justify-end")[
                 htpy.button(
-                    class_="inline-flex items-center justify-center rounded-full bg-white border border-slate-200 h-9 px-3 text-xs font-medium text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-1 transition-all duration-200 h-9",
+                    class_="inline-flex cursor-pointer items-center justify-center rounded-full bg-white border border-slate-200 h-9 px-3 text-xs font-medium text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-1 transition-all duration-200 h-9",
                     aria_label=f"View {name}",
                     title=f"View details for {name}",
                     **{
@@ -196,7 +196,7 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
                     },
                 )["View"],
                 htpy.button(
-                    class_="hidden sm:inline-flex items-center justify-center rounded-full bg-white border border-slate-200 h-9 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 h-9",
+                    class_="hidden sm:inline-flex cursor-pointer items-center justify-center rounded-full bg-white border border-slate-200 h-9 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 h-9",
                     aria_label=f"{toggle_label} {name}",
                     title=f"{toggle_label} server {name}",
                     **{
@@ -208,7 +208,7 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
                     },
                 )[toggle_label],
                 htpy.button(
-                    class_="inline-flex items-center justify-center rounded-full bg-white border border-slate-200 h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200",
+                    class_="inline-flex items-center cursor-pointer justify-center rounded-full bg-white border border-slate-200 h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200",
                     aria_label=f"Delete {name}",
                     title=f"Delete server {name}",
                     **{
@@ -217,7 +217,7 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
                         "hx-target": "#server-table-body",
                         "hx-swap": "outerHTML",
                     },
-                )[htpy.span(aria_hidden="true")["×"]],
+                )[htpy.span(aria_hidden="true")["X"]],
             ]
         ],
     ]
@@ -389,7 +389,7 @@ def add_form() -> Any:
             htpy.div(class_="flex flex-wrap items-center gap-3 pt-2")[
                 htpy.button(
                     type="submit",
-                    class_="inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-black hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 transition-all duration-200 min-h-11",
+                    class_="inline-flex items-center justify-center cursor-pointer gap-2 rounded-full bg-slate-900 px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-black hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 transition-all duration-200 min-h-11",
                 )[
                     _icon("plus", cls="h-4 w-4"),
                     "Add Server",
@@ -461,11 +461,11 @@ def _drawer_header(name: str) -> Any:
             ],
         ],
         htpy.button(
-            class_="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition-colors duration-200",
+            class_="flex h-9 w-9 shrink-0 items-center justify-center cursor-pointer rounded-full bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition-colors duration-200",
             aria_label="Close",
             title="Close drawer",
             **_CLOSE_ATTRS,
-        )["×"],
+        )["X"],
     ]
 
 
@@ -499,7 +499,7 @@ def _drawer_metadata(server: dict[str, Any]) -> Any:
 
     def kv(label: str, value: str, mono: bool = True, break_all: bool = False) -> Any:
         return htpy.div(
-            class_="flex items-center justify-between gap-4 py-2.5 border-b border-slate-50 last:border-0"
+            class_="flex items-center justify-between gap-4 py-2.5 px-3 border-b border-slate-50 last:border-0"
         )[
             htpy.dt(class_="text-xs font-medium tracking-wide text-slate-500 shrink-0")[
                 label
@@ -606,7 +606,7 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
     delete_url = f"/api/servers/{quoted}"
     return htpy.div(class_="flex flex-wrap gap-2")[
         htpy.button(
-            class_="inline-flex items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-black hover:shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11",
+            class_="inline-flex items-center justify-center cursor-pointer rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-black hover:shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11",
             aria_label=toggle_label,
             title=f"{toggle_label} server {name}" if name else toggle_label,
             **{
@@ -618,7 +618,7 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
             },
         )[toggle_label],
         htpy.button(
-            class_="inline-flex items-center justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11",
+            class_="inline-flex items-center justify-center cursor-pointer rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11",
             aria_label="Refresh tools",
             title="Refresh tool list from server",
             **{
@@ -628,7 +628,7 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
             },
         )["Refresh"],
         htpy.button(
-            class_="inline-flex items-center justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-11",
+            class_="inline-flex items-center cursor-pointer justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-11",
             aria_label="Reveal secrets",
             **(
                 {
@@ -648,7 +648,7 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
             ),
         )["Reveal"],
         htpy.button(
-            class_="inline-flex items-center justify-center rounded-full bg-white border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 min-h-11",
+            class_="inline-flex items-center justify-center rounded-full cursor-pointer bg-white border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 min-h-11",
             aria_label=f"Delete {name}",
             title=f"Delete server {name}",
             **{
@@ -709,7 +709,7 @@ def server_drawer(
     else:
         state = "healthy"
     return htpy.aside(
-        class_="relative w-full max-w-md bg-white shadow-2xl h-full overflow-y-auto ml-auto transform transition-all duration-300 translate-x-0 border-l border-slate-200 flex flex-col",
+        class_="relative w-full max-w-md bg-white shadow-2xl h-full rounded-xl overflow-y-auto ml-auto transform transition-all duration-300 translate-x-0 border-l border-slate-200 flex flex-col",
         role="region",
         aria_label=f"Details for {name}",
     )[
