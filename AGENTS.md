@@ -20,7 +20,7 @@
 ```
 src/mcp_gway/
 ├── __init__.py          # Package version
-├── models.py            # Pydantic models (MCPClientConfig, ToolInfo, ConnectionType)
+├── models.py            # Pydantic models (MCPServerConfig OpenCode + MCPClientConfig deprecated compat, ToolInfo, ConnectionType)
 ├── registry.py          # .pyi file CRUD (servers/ directory)
 ├── sandbox.py           # Starlark sandbox (hermetic execution)
 ├── server_proxy.py      # MCP server wrapper for sandbox
@@ -44,20 +44,24 @@ tests/
 
 ```bash
 # Development
-uv sync                                 # Install dependencies
+uv sync --all-groups                     # Install dependencies (dev group includes pre-commit)
 uv run pre-commit install                # Install git hooks (once per clone)
 uv run pre-commit run --all-files        # Run hooks on all files
 uv run pytest -v                         # Run tests
 uv run ruff check src/ tests/            # Lint (CI parity)
 uv run ruff format --check src/ tests/   # Format check (CI parity)
 
-# CLI
-mcp-gway add <name> --type <http|stdio|sse|streamable-http> [--url <url>] [--command <cmd>]
+# CLI — OpenCode format (primary)
+mcp-gway add <name> --type remote --url <url> [--header "KEY=VALUE"] [--oauth-client-id ID] [--oauth-client-secret SECRET] [--oauth-scope SCOPE] [--timeout 5000] [--enabled] [--oauth-port 8989]
+mcp-gway add <name> --type local --command "npx -y my-mcp" [--env KEY=VALUE] [--cwd /path] [--args '["..."]' (deprecated compat)] [--tools "*"]
+# Full options: see README.md Options table (12+ flags: --type/--url/--command/--header/--env/--cwd/--oauth-* /--timeout/--enabled/--tools/--args/--docs-url)
+# Deprecated (still works, use remote/local instead):
+# mcp-gway add <name> --type <http|stdio|sse|streamable-http> [...]
 mcp-gway remove <name>
 mcp-gway list
 mcp-gway inspect <name>
-mcp-gway refresh [<name>] [--auth]
-mcp-gway serve [--port 8080]
+mcp-gway refresh [<name>] [--auth] [--oauth-port <port>]
+mcp-gway serve [--host 0.0.0.0] [--port 8080]
 ```
 
 ## Code Conventions
@@ -84,9 +88,8 @@ mcp-gway serve [--port 8080]
 
 ## Key Patterns
 
-### Registry (.pyi files)
-- Each server has a `.pyi` file in `servers/`
-- Contains tool signatures and metadata as comments
+### Registry (.pyi + .json)
+- `.pyi` = signatures only; `servers/*.json` = OpenCode config (type/url/command etc). Legacy `#` comments only for fallback migration.
 - Used by Code Mode to discover available tools
 
 ### OAuth Flow
