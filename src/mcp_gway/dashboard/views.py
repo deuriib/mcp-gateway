@@ -824,10 +824,10 @@ def _stats(servers: list[dict[str, Any]]) -> Any:
         "Unreachable": ("bg-amber-50 text-amber-600", "alert"),
     }
     vals = {
-        "Total": (str(total), f"{total} servers"),
-        "Healthy": (str(healthy), f"{healthy}/{total} ok"),
-        "Disabled": (str(disabled), f"{disabled} off"),
-        "Unreachable": (str(unreachable), "0 tools"),
+        "Total": (str(total), ""),
+        "Healthy": (str(healthy), ""),
+        "Disabled": (str(disabled), ""),
+        "Unreachable": (str(unreachable), ""),
     }
     return htpy.div(class_="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4")[
         *[

@@ -12,6 +12,7 @@ h1,h2,h3,p{margin:0}
 .bg-white{background-color:#fff}
 .bg-slate-50{background-color:#f8fafc}
 .bg-slate-100{background-color:#f1f5f9}
+.bg-slate-400{background-color:#94A3B8}
 .bg-slate-900{background-color:#0f172a}
 .bg-slate-800{background-color:#1e293b}
 .bg-black{background-color:#000}
@@ -20,6 +21,7 @@ h1,h2,h3,p{margin:0}
 .bg-emerald-500{background-color:#00bc7d}
 .bg-amber-50{background-color:#fffbeb}
 .bg-amber-100{background-color:#fef3c7}
+.bg-amber-500{background-color:#fe9a00}
 .bg-red-50{background-color:#fef2f2}
 .bg-red-100{background-color:#fee2e2}
 .bg-sky-50{background-color:#f0f9ff}
