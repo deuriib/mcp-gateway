@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.9.0 (2026-08-25)
+
+### Chores
+
+- **lock**: Sync uv.lock to 0.8.0
+  ([`9aaef3f`](https://github.com/deuriib/mcp-gateway/commit/9aaef3fbd2643edbfb6bf3b9678d7fe8f301ef8b))
+
+Match pyproject.toml and src/mcp_gway/__init__.py after 0.8.0 semantic release; previous lock at
+  0.7.1 causing inconsistent build metadata.
+
+### Features
+
+- **dashboard**: Expose dashboard at root path
+  ([`7686d48`](https://github.com/deuriib/mcp-gateway/commit/7686d4855c165474047147ce3452f45fcaca181e))
+
+Serve the same SSR dashboard on both root and dashboard via handle_dashboard alias. Keeps
+  local-first gating, CSP and X-Warning behaviour identical so index path fulfils product
+  requirement that root must load the dashboard, not 404. Single handler reuse avoids duplication
+  and preserves bounded-context purity.
+
+
 ## v0.8.0 (2026-08-25)
 
 ### Features
