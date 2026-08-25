@@ -1,3 +1,3 @@
 """MCP Gateway CLI — manage MCP servers with Code Mode support."""
 
-__version__ = "0.9.1"
+__version__ = "1.0.0"

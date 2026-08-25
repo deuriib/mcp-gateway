@@ -78,7 +78,7 @@ Tests: add 7 hardening tests for dialog contract (layout has dialog no drawer, r
   ([`129654b`](https://github.com/deuriib/mcp-gateway/commit/129654be5fc196da06dde0f694f3f8f39483e2ac))
 
 Drawer inline was rendered at page bottom (screenshot shandcn below footer, truncated) instead of
-  overlay — broke UX and a11y. Replace div#drawer fixed overlay with native <dialog
+  overlay â€” broke UX and a11y. Replace div#drawer fixed overlay with native <dialog
   id=server-dialog> using existing Tailwind vendored style (backdrop blur, shadow-xl, border-l).
 
 - views.py: hx-target #drawer -> #server-dialog, remove inline onclick stopPropagation (CSP
@@ -288,7 +288,7 @@ Validacion local: uv run ruff check/format OK, pytest 152 passed, YAML syntax OK
   ([`426ff62`](https://github.com/deuriib/mcp-gateway/commit/426ff62ded5e24a854f337371f3673ffcf86f777))
 
 Unblocks CI run 32782781915 which failed on ruff check (F401 in conftest.py:9, I001 in
-  test_transport.py:3) causing Release 32782803712 to skip. No functional change — 152 tests pass,
+  test_transport.py:3) causing Release 32782803712 to skip. No functional change â€” 152 tests pass,
   ruff check/format clean.
 
 ### Chores
@@ -382,7 +382,7 @@ Previously, executeToolCode ran code in an empty sandbox with no access to MCP s
 - Use Self type for __aenter__/__aiter__ (ruff PYI034)
   ([`349986e`](https://github.com/deuriib/mcp-gateway/commit/349986e3f36378616d7cdfefb97097b1ccd1e78b))
 
-- Windows stdio transport — command resolution, noise filter, env passthrough
+- Windows stdio transport â€” command resolution, noise filter, env passthrough
   ([`c4c2a69`](https://github.com/deuriib/mcp-gateway/commit/c4c2a69ee120a02a729a2bf2dad1f54628f2f221))
 
 - Add stdio_transport.py: resolve_windows_command prefers .exe over .cmd/.bat to bypass cmd.exe
