@@ -27,6 +27,7 @@ def get_dashboard_routes(registry: Registry) -> list[Route | Mount]:
     static_dir = Path(__file__).parent / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
     return [
+        Route("/", handle_dashboard, methods=["GET"]),
         Route("/dashboard", handle_dashboard, methods=["GET"]),
         Route("/dashboard/servers", handle_dashboard_servers, methods=["GET"]),
         Route(
