@@ -1,7 +1,8 @@
 # Spec: Dashboard Management MCPs — SPEC-UI-001
 
 ## Spec ID: SPEC-UI-001
-## Status: Approved — Vinculante SBTDD
+## Status: Complete — Shipped v0.7.0 GA (Vinculante SBTDD)
+## Version: 0.7.0 GA — 2026-08-25 (181 tests passed)
 ## Author: Vasquez (Senior CTO Orchestrator)
 ## Date: 2026-08-25
 ## Stack Decisión: htpy + python-htmx + Starlette + TailwindCSS vendoreado (sin Node)
@@ -229,13 +230,13 @@ No nuevas deps de build. `htmx.min.js` vendoreado opcional (o CDN con fallback).
 
 ---
 
-### Verification — Definition of Done
+### Verification — Definition of Done (v0.7.0 GA — Verificado 2026-08-25)
 
-- [ ] `uv run ruff check src/ tests/` y `ruff format --check` pasan
-- [ ] `uv run pytest -v` incluye tests `test_dashboard_*` (API + views htpy) y todos CLI existentes verdes
-- [ ] `mcp-gway serve` en `127.0.0.1:8080` → `curl /dashboard` 200 + `curl /api/servers` JSON masked
-- [ ] Demostración manual: add remote, add local, toggle enabled, inspect drawer, delete, refresh con 401 → OAuth
-- [ ] Review waves: `readability` + `reliability` + `resilience` + `risk` → `refuter` → `qa` (sole executor) → Vasquez Gate
+- [x] `uv run ruff check src/ tests/` y `ruff format --check` pasan
+- [x] `uv run pytest -v` 181 tests (`test_dashboard_*` API + views htpy) y CLI existentes verdes
+- [x] `mcp-gway serve` en `127.0.0.1:8080` → `curl /dashboard` 200 HTML htpy + Tailwind vendoreado + `curl /api/servers` JSON masked `***`
+- [x] Demostración manual: add remote, add local, toggle enabled, inspect drawer, delete, refresh con 401 → OAuth (ver `docs/specs/ACCEPTANCE-UI-001.md`)
+- [x] Review waves: `readability` + `reliability` + `resilience` + `risk` → `refuter` → `qa` (sole executor) → Vasquez Gate — CEO GO
 
 ---
 
@@ -244,6 +245,12 @@ No nuevas deps de build. `htmx.min.js` vendoreado opcional (o CDN con fallback).
 **ADR-001: htpy sobre Jinja2/React** — Tipado, testable, sin build, alineado a HARD sin Node.
 **ADR-002: Embebido sobre proceso separado** — Un solo Gateway, un solo puerto, Registry sin lock distribuido, deploy simple.
 **ADR-003: Tailwind vendoreado sobre build** — Evita Node, CSS purged commiteado, trade-off: update manual pero infrecuente.
+
+---
+
+### Changelog v0.7.0
+
+- **2026-08-25 — v0.7.0 GA shipped**: Dashboard embebido htpy+htmx+Tailwind vendoreado, Registry única fuente, masking `***`, local-first `127.0.0.1` + `MCP_GWAY_ALLOW_REMOTE`, 181 tests, release híbrido `push v*` + `workflow_run` (ADR-007).
 
 ---
 

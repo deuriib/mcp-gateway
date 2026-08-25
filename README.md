@@ -4,12 +4,13 @@
 [![Python](https://img.shields.io/pypi/pyversions/mcp-gway)](https://pypi.org/project/mcp-gway/)
 [![License](https://img.shields.io/pypi/l/mcp-gway)](https://github.com/deuriib/mcp-gateway/blob/main/LICENSE)
 
-A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) servers behind a single HTTP/SSE endpoint with **Code Mode** — reducing LLM input token usage by up to 92% when using multiple MCP servers.
+A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) servers behind a single HTTP/SSE endpoint with **Code Mode** — reducing LLM input token usage by up to 92% when using multiple MCP servers. **v0.7.0 GA** adds a local-first **Dashboard** (Python `htpy` + `python-htmx` + Tailwind vendoreado, sin Node).
 
 ## Features
 
 - **Multi-Server Aggregation** — Connect to multiple MCP servers (HTTP, SSE, Stdio, Streamable HTTP) and expose them through a single endpoint
 - **Code Mode** — 4 meta-tools that let LLMs discover and use tools dynamically without loading all schemas upfront
+- **Dashboard (v0.7.0)** — Local-first UI en `http://127.0.0.1:8080/dashboard` para listar/agregar/inspeccionar/enable-disable/remover/refrescar servers. SSR con `htpy`, mutaciones `htmx`, Tailwind vendoreado (<100KB), sin `package.json` ni build Node. Registry única fuente, masking `***` obligatorio.
 - **OAuth 2.0 Support** — Built-in OAuth flow with dynamic client registration (RFC 7591) and token storage
 - **Hermetic Sandbox** — Starlark-based sandbox for safe code execution
 - **MCP Protocol Compliant** — Works with Claude Desktop, Cursor, and any MCP-compatible client
@@ -52,9 +53,11 @@ mcp-gway add filesystem --type local --command "npx -y @anthropic/mcp-filesystem
 mcp-gway add tools --type local --command "python -m my_mcp_server" --env MY_VAR=value --cwd /path/to/workdir
 mcp-gway add tools --type local --command "npx -y my-mcp" --env KEY=VALUE --env OTHER=123 --cwd /tmp/workdir
 
-# List and serve
+# List and serve (local-first)
 mcp-gway list
-mcp-gway serve --port 8080
+mcp-gway serve --port 8080              # bindea 127.0.0.1 por defecto
+mcp-gway serve --host 127.0.0.1 --port 8080
+open http://127.0.0.1:8080/dashboard
 ```
 
 ### Deprecated Format (still works)
@@ -68,6 +71,103 @@ mcp-gway add filesystem --type stdio --command npx --args '["-y", "@anthropic/mc
 mcp-gway add supabase --type streamable-http --url https://mcp.supabase.com/mcp
 mcp-gway add legacy --type sse --url https://example.com/sse
 ```
+
+## Dashboard — Local-First SSR (htpy)
+
+> **Stack:** `htpy` + `python-htmx` + TailwindCSS vendoreado en `src/mcp_gway/dashboard/static/` (<100KB + <20KB). **Sin Node**, sin `package.json`, sin build. Todo HTML tipado en Python; Registry es única fuente (dashboard nunca toca FS directo).
+
+Un solo proceso `Gateway(registry, host)` monta dashboard embebido: `GET /dashboard` (SSR) + `GET /api/servers` (JSON) sobre el mismo `Starlette` que sirve `/mcp` y `/health`.
+
+### Routes
+
+| Method | Path | Response | Nota |
+|--------|------|----------|------|
+| `GET` | `/dashboard` | HTML `htpy.layout` (`max-w-6xl mx-auto` + Tailwind + `htmx.min.js`) | banner ámbar si host != loopback |
+| `GET` | `/dashboard/servers` | Fragmento `<tbody id="server-table-body">` | `hx-get` polling |
+| `GET` | `/dashboard/servers/{name}` | Drawer `server_drawer` con firmas `tools` (truncado >50KB) | |
+| `GET` | `/dashboard/close` | Vacía drawer | |
+| `GET` | `/static/tailwind.css` | CSS vendoreado | sin CDN |
+| `GET` | `/static/htmx.min.js` | htmx vendoreado | |
+| `GET` | `/api/servers` | `200 [{name,type,enabled,tool_count,url\|command,timeout}]` | secrets `***` |
+| `GET` | `/api/servers/{name}` | `200 {config,pyi_content,truncated}` | secrets `***` |
+| `POST` | `/api/servers` | `201` + `tools/list` discovery (timeout + `streamable-http→sse→http`); `409` si existe | `tools=[]` + toast si falla |
+| `PATCH` | `/api/servers/{name}` | `{"enabled":bool}` → badge `disabled`/`healthy`/`unreachable` | vía `Registry.patch_enabled` |
+| `DELETE` | `/api/servers/{name}` | `204` (idempotente, borra `*.json`+`*.pyi`+`tokens/`) | |
+| `POST` | `/api/servers/{name}/refresh` | `202 {status:"refreshing"}` background no bloqueante | `409` si disabled |
+| `POST` | `/api/servers/{name}/reveal` | `200 {headers\|oauth\|environment}` | solo `127.0.0.1` POST, rate-limit 5/min, `403` si no loopback |
+
+Content negotiation: `HX-Request: true` → `text/html` fragment (swap); sin header → `application/json`. CSP `default-src 'self'` en todas las respuestas.
+
+### curl Examples
+
+```bash
+# Serve local-first
+mcp-gway serve --port 8080 &
+curl -s http://127.0.0.1:8080/dashboard | head -n 20        # 200 HTML htpy
+curl -s http://127.0.0.1:8080/api/servers | jq                # secrets masked ***
+
+# Add remote (JSON)
+curl -X POST http://127.0.0.1:8080/api/servers \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"gh","type":"remote","url":"https://example.com/mcp"}'  # 201 {name,tool_count}
+
+# Add local (form, htmx)
+curl -X POST http://127.0.0.1:8080/api/servers \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'name=echo_srv&type=local&command=echo+hi&cwd=/tmp'
+
+# Fragment htmx (polling tabla)
+curl -H "HX-Request: true" http://127.0.0.1:8080/dashboard/servers          # <tbody>
+
+# Inspect + reveal
+curl -s http://127.0.0.1:8080/api/servers/gh | jq               # masked
+curl -X POST http://127.0.0.1:8080/api/servers/gh/reveal \
+  -H 'Content-Type: application/json' -d '{"field":"headers"}' | jq  # solo loopback POST
+
+# Toggle / refresh / delete
+curl -X PATCH http://127.0.0.1:8080/api/servers/gh \
+  -H 'Content-Type: application/json' -d '{"enabled":false}' | jq
+curl -X POST http://127.0.0.1:8080/api/servers/gh/refresh | jq   # 202 background, health <50ms
+curl -X DELETE http://127.0.0.1:8080/api/servers/gh              # 204
+```
+
+### HTMX Examples
+
+```html
+<!-- Add: form SSR + hx-post swap tabla -->
+<form hx-post="/api/servers" hx-target="#server-table-body" hx-swap="outerHTML" hx-indicator="#add-spinner">
+  <input name="name" required /><select name="type"><option>remote</option><option>local</option></select>
+  <input name="url" /><input name="command" /><button>Add</button>
+</form>
+
+<!-- Inspect: click fila abre drawer -->
+<tr hx-get="/dashboard/servers/gh" hx-target="#drawer" hx-swap="innerHTML"><td>gh</td></tr>
+
+<!-- Toggle / Refresh / Delete con confirm -->
+<button hx-patch="/api/servers/gh" hx-vals='{"enabled":false}' hx-target="#drawer">Disable</button>
+<button hx-post="/api/servers/gh/refresh" hx-target="#toast">Refresh</button>
+<button hx-delete="/api/servers/gh" hx-confirm="Delete gh?" hx-target="#server-table-body" hx-swap="outerHTML">Delete</button>
+```
+
+### Local-First Security
+
+```bash
+# Default seguro — solo loopback
+mcp-gway serve --port 8080            # bindea 127.0.0.1
+
+# Exponer en 0.0.0.0 requiere opt-in explícito
+MCP_GWAY_ALLOW_REMOTE=1 mcp-gway serve --host 0.0.0.0 --port 8080
+# └─ log warning "dashboard exposed on non-loopback"
+# └─ header X-Warning: exposed + banner ámbar en UI + botón Reveal deshabilitado
+
+# Sin opt-in → error controlado
+mcp-gway serve --host 0.0.0.0
+# Error: binding to non-loopback host '0.0.0.0' requires MCP_GWAY_ALLOW_REMOTE=1
+# exit 2
+```
+
+- Masking `***` obligatorio: `GET /api/servers`, `GET /api/servers/{name}`, `GET /dashboard` nunca exponen `headers`/`oauth.clientSecret`/`environment` reales.
+- Reveal solo `POST /api/servers/{name}/reveal` desde `127.0.0.1`, rate-limit 5/min, audit log sin valor, `403` si no loopback, `405` si GET.
 
 ## Connect from Claude Desktop
 
@@ -93,7 +193,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 | `mcp-gway list` | List all connected servers |
 | `mcp-gway inspect` | Show tool signatures for a server |
 | `mcp-gway refresh [<name>] [--auth] [--oauth-port <port>]` | Refresh connection and re-discover tools |
-| `mcp-gway serve [--host <host>] [--port <port>]` | Start the gateway server |
+| `mcp-gway serve [--host 127.0.0.1] [--port <port>]` | Start gateway (MCP + Dashboard). Default `127.0.0.1`; `0.0.0.0` necesita `MCP_GWAY_ALLOW_REMOTE=1` |
 
 > **Backward compat:** `mcp-gway add --type http|stdio|sse|streamable-http` still works (deprecated). `http`/`sse`/`streamable-http` → `remote` (with `resolved_transport` cached), `stdio` → `local`. Use `remote`/`local` going forward.
 
@@ -150,9 +250,19 @@ uv run pre-commit install  # once per clone — hooks already configured in .pre
 
 # Run checks
 uv run pre-commit run --all-files  # ruff + ruff-format + hygiene (trailing-whitespace, end-of-file-fixer, check-yaml, check-added-large-files)
-uv run pytest -v
+uv run pytest -v  # 181 tests v0.7.0 — incluye test_dashboard_views + test_dashboard_api
 uv run ruff check src/ tests/
 uv run ruff format --check src/ tests/
+
+# Verification Dashboard (sin Node, sin build)
+uv run pytest tests/test_dashboard_views.py tests/test_dashboard_api.py -v  # masking, HX-Request, reveal, refresh, local gating
+curl -s http://127.0.0.1:8080/dashboard | grep -q '<table' && echo "dashboard ok"
+curl -s http://127.0.0.1:8080/api/servers | jq 'map(select(.headers))'       # *** masked
+curl -H "HX-Request: true" http://127.0.0.1:8080/dashboard/servers | head   # fragment tbody
+
+# Local-first check
+mcp-gway serve --host 0.0.0.0 2>&1 | grep -q "requires MCP_GWAY_ALLOW_REMOTE" && echo "gate ok"
+MCP_GWAY_ALLOW_REMOTE=1 mcp-gway serve --host 0.0.0.0 --port 8081 & curl -s -D - http://127.0.0.1:8081/dashboard | grep -qi X-Warning
 ```
 
 Pre-commit is already in place (`.pre-commit-config.yaml` — `ruff` v0.16.4, `ruff-format`, `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-added-large-files`).
@@ -160,32 +270,43 @@ Pre-commit is already in place (`.pre-commit-config.yaml` — `ruff` v0.16.4, `r
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    MCP Gateway                          │
-├─────────────────────────────────────────────────────────┤
-│  CLI (click)     │  HTTP/SSE Server (Starlette)        │
-│  - add           │  - POST /mcp (JSON-RPC)             │
-│  - remove        │  - GET /mcp (SSE stream)            │
-│  - list          │  - POST /mcp/messages               │
-│  - refresh       │                                     │
-├─────────────────────────────────────────────────────────┤
-│  Code Mode (4 meta-tools)     │  Starlark Sandbox      │
-│  - listToolFiles               │  - Hermetic execution  │
-│  - readToolFile                │  - Server injection    │
-│  - getToolDocs                 │                        │
-│  - executeToolCode             │                        │
-├─────────────────────────────────────────────────────────┤
-│  Registry                      │  OAuth2 (RFC 7591)     │
-│  - servers/*.pyi = signatures  │  - Dynamic registration│
-│  - servers/*.json = config     │  - Token storage       │
-│  - legacy # comments fallback  │                        │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                        MCP Gateway v0.7.0 GA                         │
+├──────────────────────────────────────────────────────────────────────┤
+│  CLI (click)              │  Gateway (Starlette + uvicorn, CSP)      │
+│  - add remote/local       │  - POST /mcp (JSON-RPC)                  │
+│  - remove/inspect/list    │  - GET  /mcp (SSE endpoint event)        │
+│  - refresh --auth         │  - POST /mcp/messages?session_id=...     │
+│  - serve --host 127.0.0.1 │  - GET  /health                          │
+│  (local-first default)    │                                          │
+├───────────────────────────┼──────────────────────────────────────────┤
+│  Dashboard (htpy+htmx, vendoreado)                                    │
+│  SSR: GET /dashboard, /dashboard/servers, /dashboard/servers/{name}   │
+│  API: GET/POST /api/servers, PATCH/DELETE /api/servers/{name},        │
+│       POST /api/servers/{name}/refresh (202 background), /reveal      │
+│  Static: /static/tailwind.css (<100KB) + /static/htmx.min.js (<20KB) │
+│  Content-negotiation HX-Request + masking *** + rate-limit reveal      │
+├──────────────────────────────────────────────────────────────────────┤
+│  Code Mode (4 meta-tools)      │  Starlark Sandbox                    │
+│  - listToolFiles               │  - Hermetic execution                │
+│  - readToolFile                │  - Server injection                  │
+│  - getToolDocs                 │                                      │
+│  - executeToolCode             │                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  Registry (única fuente)       │  OAuth2 (RFC 7591, reutilizado)      │
+│  - servers/*.pyi = signatures  │  - Dynamic registration              │
+│  - servers/*.json = config     │  - PKCE + FileTokenStorage           │
+│  - last-write-wins, atómico    │  - tokens/ no expuesto vía API       │
+└──────────────────────────────────────────────────────────────────────┘
          │                │                │
     ┌────┴────┐      ┌────┴────┐      ┌────┴────┐
     │ Server1 │      │ Server2 │      │ Server3 │
-    │ (HTTP)  │      │ (SSE)   │      │ (Stdio) │
+    │ (remote)│      │ (local) │      │ (remote)│
     └─────────┘      └─────────┘      └─────────┘
 ```
+
+- **Sin Node** en runtime ni CI: Tailwind + htmx vendoreados commit, `ruff` único linter, `uv_build` backend.
+- **Release híbrido** (ADR-007): `push tags v*` → `uv build` + `pypi-publish` (GA `v0.7.0` tag manual) + `workflow_run Tests completed` → `python-semantic-release@v9` para `fix/perf` patches auto. `concurrency: release`, `fetch-depth:0`, `[tool.semantic_release]` sync `pyproject.toml` + `__init__.py`.
 
 ## License
 
