@@ -1,6 +1,58 @@
 # CHANGELOG
 
 
+## v0.6.0 (2026-08-25)
+
+### Bug Fixes
+
+- Address final review critical findings
+  ([`1341949`](https://github.com/deuriib/mcp-gateway/commit/13419499769f593c902dcf0bba7f0e11016b9237))
+
+- **cli**: Correct timeout None guard ordering
+  ([`8b4c5e4`](https://github.com/deuriib/mcp-gateway/commit/8b4c5e49b121734b353c190e74cb8612051a1342))
+
+- **tests**: Remove unused StdioConfig and sort imports (F401, I001)
+  ([`426ff62`](https://github.com/deuriib/mcp-gateway/commit/426ff62ded5e24a854f337371f3673ffcf86f777))
+
+Unblocks CI run 32782781915 which failed on ruff check (F401 in conftest.py:9, I001 in
+  test_transport.py:3) causing Release 32782803712 to skip. No functional change — 152 tests pass,
+  ruff check/format clean.
+
+### Chores
+
+- Sync uv.lock to 0.5.2
+  ([`e195a1f`](https://github.com/deuriib/mcp-gateway/commit/e195a1fb01418a948635afcc6fb92e6bac15834c))
+
+### Documentation
+
+- Add OpenCode schema adoption spec and plan
+  ([`98b857f`](https://github.com/deuriib/mcp-gateway/commit/98b857fccfbce94c35b6d0a2d2837d7816229565))
+
+Co-Authored-By: Vasquez CTO <vasquez@mcp-gateway>
+
+### Features
+
+- **cli**: Integrate transport auto-detection
+  ([`6b9d1e6`](https://github.com/deuriib/mcp-gateway/commit/6b9d1e6594dffaec07d2c16756c508fdcdf7f9c7))
+
+- **cli**: Opencode-style options with backward compat
+  ([`69163bd`](https://github.com/deuriib/mcp-gateway/commit/69163bd5cca7de3119aeee86273b55652fe07526))
+
+- **models**: Add MCPServerConfig with OpenCode schema
+  ([`a1771f0`](https://github.com/deuriib/mcp-gateway/commit/a1771f048bfbfebbb45c14b6984c5f0a0d24d5bd))
+
+- **registry**: Opencode JSON format with auto-migration
+  ([`4489f97`](https://github.com/deuriib/mcp-gateway/commit/4489f9792c41969ef168419737c6289daf9fbd3f))
+
+- **transport**: Auto-detect streamable-http/sse/http
+  ([`50bd03e`](https://github.com/deuriib/mcp-gateway/commit/50bd03edbd163e9282aac9ca52201497f62451c4))
+
+### Refactoring
+
+- Update fixtures to MCPServerConfig and fix lint
+  ([`0fb1a32`](https://github.com/deuriib/mcp-gateway/commit/0fb1a321f715530a6a0673bf845e07fa6278b203))
+
+
 ## v0.5.2 (2026-08-24)
 
 ### Bug Fixes
