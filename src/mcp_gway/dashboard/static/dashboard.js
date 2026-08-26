@@ -135,6 +135,8 @@
       }
     }
     form.addEventListener("submit", function () {
+      var inp = form.querySelector('#field-name');
+      if(inp && inp.value) form.dataset.lastServerName = inp.value;
       var btn = form.querySelector('button[type="submit"]');
       if (btn && !btn.disabled) {
         btn.disabled = true;
@@ -384,13 +386,23 @@
       }
       if(oauthRequired === '1'){
         var serverName = null;
-        try{
-          var form=document.getElementById('add-form');
-          if(form){
-            var inp=form.querySelector('#field-name');
-            if(inp) serverName=inp.value;
-          }
-        }catch(_){}
+        try{ serverName = xhr.getResponseHeader('X-Server-Name'); }catch(_){}
+        if(!serverName || !serverName.trim()){
+          try{
+            var form=document.getElementById('add-form');
+            if(form){
+              var inp=form.querySelector('#field-name');
+              if(inp) serverName=inp.value;
+            }
+          }catch(_){}
+        }
+        // also try to capture from last submitted value stored on form dataset
+        if(!serverName || !serverName.trim()){
+          try{
+            var f2=document.getElementById('add-form');
+            if(f2 && f2.dataset.lastServerName) serverName=f2.dataset.lastServerName;
+          }catch(_){}
+        }
         if(serverName){
           (function(name){
             var toastEl3=document.getElementById('toast');
@@ -535,6 +547,78 @@
     });
   }
 
+  function setupDrawerOAuth(){
+    if(document.body.dataset.drawerOAuthBound) return;
+    document.body.dataset.drawerOAuthBound="1";
+    document.addEventListener('click', function(e){
+      var btn = e.target.closest('#oauth-btn');
+      if(!btn) return;
+      if(!btn.closest('aside')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var startUrl = btn.getAttribute('data-oauth-start-url');
+      var statusUrl = btn.getAttribute('data-oauth-status-url');
+      if(!startUrl) return;
+      btn.disabled=true; var orig=btn.textContent; btn.textContent='Starting…';
+      var toast=document.getElementById('toast');
+      function show(msg, err){
+        if(!toast) return;
+        var d=document.createElement('div');
+        d.className= err ? 'bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl shadow-sm text-sm' : 'bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-xl shadow-sm text-sm flex items-center gap-2';
+        d.setAttribute('role', err ? 'alert':'status'); d.textContent=msg; toast.appendChild(d);
+        setTimeout(function(){ if(toast.contains(d)) toast.removeChild(d); }, err?5000:8000);
+      }
+      show('Initiating OAuth…', false);
+      fetch(startUrl, {method:'POST', headers:{'HX-Request':'true'}})
+        .then(function(r){ return r.json().then(function(data){ return {status:r.status, data:data}; }); })
+        .then(function(res){
+          if(res.status===200 && res.data.auth_url){
+            show('Opening browser for authentication…', false);
+            window.open(res.data.auth_url, '_blank');
+            var attempts=0;
+            var fb=document.getElementById('drawer-feedback');
+            if(fb){ fb.innerHTML='<div class="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded-xl text-xs flex items-center gap-2"><span class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600"></span> Waiting for OAuth callback…</div>'; }
+            var interval=setInterval(function(){
+              attempts++;
+              if(attempts>60){ clearInterval(interval); show('OAuth timed out, try again', true); btn.disabled=false; btn.textContent=orig; if(fb) fb.innerHTML='<div class="bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-xl text-xs">Timed out — try again</div>'; return; }
+              fetch(statusUrl, {headers:{'HX-Request':'true'}})
+                .then(function(r3){ return r3.json(); })
+                .then(function(st){
+                  if(st.status==='completed'){
+                    clearInterval(interval);
+                    show('OAuth successful! Refreshing…', false);
+                    if(fb) fb.innerHTML='<div class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-2 rounded-xl text-xs">Authenticated — '+ (st.tool_count||0) +' tools</div>';
+                    btn.textContent='Authenticated ✓'; btn.disabled=true;
+                    var tbody=document.getElementById('server-table-body');
+                    if(tbody){
+                      fetch('/dashboard/servers', {headers:{'HX-Request':'true'}})
+                        .then(function(r4){ return r4.text(); })
+                        .then(function(html){
+                          var tmp=document.createElement('template'); tmp.innerHTML=html.trim();
+                          var newTbody=tmp.content.querySelector('#server-table-body');
+                          if(newTbody && tbody.parentNode) tbody.parentNode.replaceChild(newTbody, tbody);
+                          var newStats=tmp.content.querySelector('#dashboard-stats');
+                          if(newStats){ var cur=document.getElementById('dashboard-stats'); if(cur) cur.outerHTML=newStats.outerHTML; }
+                          if(window.htmx) htmx.process(document.body);
+                        });
+                    }
+                  }
+                }).catch(function(){});
+            }, 2000);
+          } else {
+            var errMsg=(res.data && res.data.detail) ? res.data.detail : 'OAuth failed to start';
+            show(errMsg, true);
+            var fb2=document.getElementById('drawer-feedback');
+            if(fb2) fb2.innerHTML='<div class="bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded-xl text-xs">'+ errMsg +'</div>';
+            btn.disabled=false; btn.textContent=orig;
+          }
+        }).catch(function(err){
+          show('OAuth error: '+err, true);
+          btn.disabled=false; btn.textContent=orig;
+        });
+    });
+  }
+
   function init() {
     setupType();
     setupOAuth();
@@ -547,6 +631,7 @@
     setupToastAutoHide();
     setupHeaderToast();
     setupRevealToggle();
+    setupDrawerOAuth();
     setupRefreshDone();
     setupTableStates();
     syncType();

@@ -383,7 +383,11 @@ async def test_web_oauth_flow_via_dashboard(gateway: Gateway, monkeypatch) -> No
         }
 
     async def mock_initiate(
-        server_url, server_name, client_metadata=None, callback_port=8989
+        server_url,
+        server_name,
+        client_metadata=None,
+        callback_port=8989,
+        oauth_config=None,
     ):  # noqa: ARG001
         return "https://auth.example.com/authorize?client_id=test", None
 

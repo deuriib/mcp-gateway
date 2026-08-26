@@ -96,7 +96,7 @@ class FileTokenStorage:
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         self._token_file.write_text(
-            json.dumps(tokens.model_dump(exclude_none=True), indent=2),
+            json.dumps(tokens.model_dump(mode="json", exclude_none=True), indent=2),
             encoding="utf-8",
         )
 
@@ -113,7 +113,9 @@ class FileTokenStorage:
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
         info_file = self._storage_dir / f"{self._token_file.stem}_client.json"
         info_file.write_text(
-            json.dumps(client_info.model_dump(exclude_none=True), indent=2),
+            json.dumps(
+                client_info.model_dump(mode="json", exclude_none=True), indent=2
+            ),
             encoding="utf-8",
         )
 
@@ -233,22 +235,56 @@ def generate_pkce() -> tuple[str, str]:
     return code_verifier, code_challenge
 
 
+def _parse_resource_metadata_url(www_auth: str) -> str | None:
+    """Extract resource_metadata URL from WWW-Authenticate header per RFC 8707."""
+    if not www_auth:
+        return None
+    m = re.search(r'resource_metadata\s*=\s*"([^"]+)"', www_auth)
+    if m:
+        return m.group(1)
+    m2 = re.search(r"resource_metadata\s*=\s*'([^']+)'", www_auth)
+    if m2:
+        return m2.group(1)
+    m3 = re.search(r"resource_metadata\s*=\s*([^\s,;]+)", www_auth)
+    if m3:
+        return m3.group(1).strip("\"'")
+    return None
+
+
 async def discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
     """Discover OAuth metadata from the server.
 
     First checks Protected Resource Metadata (RFC 8707) for the authorization server,
-    then discovers OAuth metadata from that server.
+    then discovers OAuth metadata from that server. Supports WWW-Authenticate
+    header with resource_metadata per MCP spec.
     """
-    async with httpx2.AsyncClient() as client:
+    async with httpx2.AsyncClient(timeout=8.0) as client:
+        # Step 0: Try WWW-Authenticate header from 401 as per MCP OAuth spec
+        prm_from_header: str | None = None
+        try:
+            resp = await client.get(server_url, follow_redirects=True)
+            if resp.status_code == 401:
+                www_auth = resp.headers.get("www-authenticate", "") or resp.headers.get(
+                    "WWW-Authenticate", ""
+                )
+                prm_from_header = _parse_resource_metadata_url(www_auth)
+        except Exception:  # noqa: S112
+            pass
+
         # Step 1: Try to get Protected Resource Metadata
         parsed = urlparse(server_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
         path = parsed.path or "/mcp"
 
-        prm_urls = [
-            f"{base_url}/.well-known/oauth-protected-resource{path}",
-            f"{base_url}/.well-known/oauth-protected-resource",
-        ]
+        prm_urls: list[str] = []
+        if prm_from_header:
+            prm_urls.append(prm_from_header)
+        prm_urls.extend(
+            [
+                f"{base_url}/.well-known/oauth-protected-resource{path}",
+                f"{base_url}/.well-known/oauth-protected-resource",
+            ]
+        )
 
         auth_server_url = None
         for url in prm_urls:
@@ -293,14 +329,21 @@ async def run_oauth_flow(
     client_metadata: OAuthClientMetadata | None = None,
     output_callback: Any = None,
     callback_port: int = 8989,
+    oauth_config: Any | None = None,
 ) -> httpx2.AsyncClient | None:
     """Run the full OAuth flow.
+
+    Supports both manual (pre-registered clientId/secret) and autodiscovery
+    (dynamic registration RFC 7591). If oauth_config contains a valid clientId,
+    manual mode is used and registration is skipped.
 
     Args:
         server_url: The MCP server URL
         server_name: Name of the server for storage
         client_metadata: Optional OAuth client metadata
         output_callback: Optional callback for output messages
+        callback_port: Local port for OAuth callback
+        oauth_config: Optional OAuthConfig dict/object with clientId/clientSecret/scope
 
     Returns:
         Authenticated httpx client or None if flow fails
@@ -343,15 +386,47 @@ async def run_oauth_flow(
     code_verifier, code_challenge = generate_pkce()
     state = secrets.token_urlsafe(32)
 
+    def _extract_credentials(cfg: Any) -> tuple[str | None, str | None, str | None]:
+        if cfg is None:
+            return None, None, None
+        if isinstance(cfg, dict):
+            return (
+                cfg.get("clientId") or cfg.get("client_id"),
+                cfg.get("clientSecret") or cfg.get("client_secret"),
+                cfg.get("scope"),
+            )
+        cid = getattr(cfg, "clientId", None) or getattr(cfg, "client_id", None)
+        csec = getattr(cfg, "clientSecret", None) or getattr(cfg, "client_secret", None)
+        sc = getattr(cfg, "scope", None)
+        return cid, csec, sc
+
+    oauth_cid, oauth_csec, oauth_scope = _extract_credentials(oauth_config)
+    # also consider client_metadata scope
+    meta_scope = getattr(client_metadata, "scope", None) if client_metadata else None
+    effective_scope = oauth_scope or meta_scope or "openid profile email"
+
+    is_manual = False
+    if oauth_cid:
+        try:
+            uuid.UUID(str(oauth_cid))
+            is_manual = True
+        except Exception:
+            oauth_cid = None
+
     # Start callback server
     callback_server = OAuthCallbackServer(port=callback_port)
     await callback_server.start()
 
-    # Dynamic client registration (RFC 7591) - client_id must be valid UUID when dynamic
-    client_id = str(uuid.uuid4())
-    client_secret = None
+    # Client credentials: manual takes precedence, else dynamic registration
+    if is_manual:
+        client_id = str(oauth_cid)
+        client_secret = oauth_csec
+        output_callback(f"Using pre-registered client: {client_id[:16]}... (manual)")
+    else:
+        client_id = str(uuid.uuid4())
+        client_secret = None
 
-    if registration_endpoint:
+    if not is_manual and registration_endpoint:
         output_callback("Registering OAuth client...")
         async with httpx2.AsyncClient() as http:
             reg_request = {
@@ -400,7 +475,7 @@ async def run_oauth_flow(
         "state": state,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
-        "scope": "openid profile email",
+        "scope": effective_scope,
     }
 
     auth_url = f"{auth_endpoint}?{urlencode(auth_params)}"
@@ -490,8 +565,12 @@ async def initiate_web_oauth(
     server_name: str,
     client_metadata: OAuthClientMetadata | None = None,
     callback_port: int = 8989,
+    oauth_config: Any | None = None,
 ) -> tuple[str | None, str | None]:
     """Initiate OAuth flow for web dashboard - returns auth URL without blocking.
+
+    Supports manual (pre-registered) vs autodiscovery (dynamic). If oauth_config
+    contains a valid clientId, manual mode is used.
 
     Starts the callback server and registration, builds the auth URL, and
     launches a background task to wait for the callback and complete the flow.
@@ -519,16 +598,46 @@ async def initiate_web_oauth(
     code_verifier, code_challenge = generate_pkce()
     state = secrets.token_urlsafe(32)
 
+    def _extract_credentials_web(cfg: Any) -> tuple[str | None, str | None, str | None]:
+        if cfg is None:
+            return None, None, None
+        if isinstance(cfg, dict):
+            return (
+                cfg.get("clientId") or cfg.get("client_id"),
+                cfg.get("clientSecret") or cfg.get("client_secret"),
+                cfg.get("scope"),
+            )
+        cid = getattr(cfg, "clientId", None) or getattr(cfg, "client_id", None)
+        csec = getattr(cfg, "clientSecret", None) or getattr(cfg, "client_secret", None)
+        sc = getattr(cfg, "scope", None)
+        return cid, csec, sc
+
+    oauth_cid, oauth_csec, oauth_scope = _extract_credentials_web(oauth_config)
+    meta_scope = getattr(client_metadata, "scope", None) if client_metadata else None
+    effective_scope = oauth_scope or meta_scope or "openid profile email"
+
+    is_manual = False
+    if oauth_cid:
+        try:
+            uuid.UUID(str(oauth_cid))
+            is_manual = True
+        except Exception:
+            oauth_cid = None
+
     callback_server = OAuthCallbackServer(port=callback_port)
     try:
         await callback_server.start()
     except Exception as e:
         return None, f"Could not start callback server: {e}"
 
-    client_id = str(uuid.uuid4())
-    client_secret = None
+    if is_manual:
+        client_id = str(oauth_cid)
+        client_secret = oauth_csec
+    else:
+        client_id = str(uuid.uuid4())
+        client_secret = None
 
-    if registration_endpoint:
+    if not is_manual and registration_endpoint:
         try:
             async with httpx2.AsyncClient() as http:
                 reg_request = {
@@ -564,10 +673,7 @@ async def initiate_web_oauth(
         except Exception:
             pass
 
-    if client_metadata and client_metadata.scope:
-        scope = client_metadata.scope
-    else:
-        scope = "openid profile email"
+    scope = effective_scope
 
     auth_params = {
         "response_type": "code",

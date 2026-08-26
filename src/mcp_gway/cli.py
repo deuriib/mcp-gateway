@@ -300,7 +300,7 @@ async def _discover_tools(
                     for t in result.tools
                 ]
     except Exception as e:
-        click.echo(f"Warning: Could not connect to server: {e}", err=True)
+        logging.getLogger(__name__).debug("Could not connect to server: %s", e)
         return []
 
 
@@ -475,7 +475,6 @@ def add(
     ):
         from mcp_gway.oauth import run_oauth_flow
 
-        click.echo("Connection failed. Trying OAuth authentication...")
         server_url = _get_config_url(config) or ""
         client_metadata = None
         if isinstance(config.oauth, OAuthConfig):
@@ -495,10 +494,11 @@ def add(
                 client_metadata=client_metadata,
                 output_callback=click.echo,
                 callback_port=oauth_port,
+                oauth_config=config.oauth,
             )
         )
         if client:
-            click.echo("Authentication successful. Discovering tools...")
+            click.echo("Authentication successful.")
             discovered = asyncio.run(_discover_tools(config, force_auth=True))
 
     if tools != "*":
@@ -755,11 +755,6 @@ async def _refresh_server(
     if not discovered and needs_auth:
         from mcp_gway.oauth import run_oauth_flow
 
-        if force_auth:
-            click.echo("Running OAuth authentication flow...")
-        else:
-            click.echo("Connection failed. Trying OAuth authentication...")
-
         server_url = _get_config_url(cfg) or ""
         client_metadata = None
         if isinstance(getattr(cfg, "oauth", None), OAuthConfig):
@@ -778,6 +773,7 @@ async def _refresh_server(
             client_metadata=client_metadata,
             output_callback=click.echo,
             callback_port=oauth_port,
+            oauth_config=getattr(cfg, "oauth", None),
         )
         if client:
             click.echo("Authentication successful. Discovering tools...")

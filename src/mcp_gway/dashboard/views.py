@@ -416,19 +416,48 @@ def add_form() -> Any:
                     ],
                 ],
             ],
-            htpy.div(id="group-oauth", class_="hidden")[
-                htpy.label(
-                    class_="block text-xs font-medium text-slate-600 mb-1.5",
-                    for_="field-oauth-scope",
-                )["OAuth Scope (optional)"],
-                htpy.input(
-                    id="field-oauth-scope",
-                    name="oauth_scope",
-                    placeholder="openid profile email",
-                    class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-all duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 hover:border-slate-300 min-h-11",
-                ),
-                htpy.p(class_="mt-1 text-xs text-slate-400")[
-                    "Dynamic client_id auto-generated as UUID"
+            htpy.div(id="group-oauth", class_="hidden space-y-3")[
+                htpy.div[
+                    htpy.label(
+                        class_="block text-xs font-medium text-slate-600 mb-1.5",
+                        for_="field-oauth-scope",
+                    )["OAuth Scope (optional)"],
+                    htpy.input(
+                        id="field-oauth-scope",
+                        name="oauth_scope",
+                        placeholder="openid profile email",
+                        class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-all duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 hover:border-slate-300 min-h-11",
+                    ),
+                ],
+                htpy.div(class_="grid grid-cols-1 md:grid-cols-2 gap-3")[
+                    htpy.div[
+                        htpy.label(
+                            class_="block text-xs font-medium text-slate-600 mb-1.5",
+                            for_="field-oauth-client-id",
+                        )["Client ID (manual, optional — UUID)"],
+                        htpy.input(
+                            id="field-oauth-client-id",
+                            name="oauth_client_id",
+                            placeholder="leave empty for autodiscovery",
+                            class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-mono transition-all duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 hover:border-slate-300 min-h-11",
+                        ),
+                    ],
+                    htpy.div[
+                        htpy.label(
+                            class_="block text-xs font-medium text-slate-600 mb-1.5",
+                            for_="field-oauth-client-secret",
+                        )["Client Secret (manual, optional)"],
+                        htpy.input(
+                            id="field-oauth-client-secret",
+                            name="oauth_client_secret",
+                            placeholder="leave empty if not required",
+                            type="password",
+                            class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-mono transition-all duration-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 hover:border-slate-300 min-h-11",
+                        ),
+                    ],
+                ],
+                htpy.p(class_="text-xs text-slate-400")[
+                    "Leave empty → autodiscovery (Dynamic client_id auto-generated as UUID + PKCE). Fill for pre-registered manual flow."
                 ],
             ],
             htpy.details(
@@ -867,6 +896,27 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
                     "data-reveal-url": reveal_url,
                 },
             )["Reveal"]
+    oauth_url = f"/api/servers/{quoted}/oauth/start"
+    oauth_btn = htpy.fragment[[]]
+    if server.get("oauth") and server.get("type") == "remote":
+        if warning_banner:
+            oauth_btn = htpy.button(
+                class_="inline-flex items-center cursor-pointer justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-11",
+                aria_label="Authenticate",
+                disabled="disabled",
+                title="OAuth disabled on non-loopback",
+            )["Authenticate"]
+        else:
+            oauth_btn = htpy.button(
+                id="oauth-btn",
+                class_="inline-flex items-center cursor-pointer justify-center rounded-full bg-blue-600 border border-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 hover:border-blue-700 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all duration-200 min-h-11",
+                aria_label="Authenticate with OAuth",
+                title="Start OAuth flow (autodiscovery or pre-registered)",
+                **{
+                    "data-oauth-start-url": oauth_url,
+                    "data-oauth-status-url": f"/api/servers/{quoted}/oauth/status",
+                },
+            )["Authenticate"]
     return htpy.div(class_="flex flex-wrap gap-2")[
         htpy.button(
             class_="inline-flex items-center justify-center cursor-pointer rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-black hover:shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11",
@@ -893,6 +943,7 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
             },
         )["Refresh"],
         reveal_btn,
+        oauth_btn,
         htpy.button(
             class_="inline-flex items-center justify-center rounded-full cursor-pointer bg-white border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 min-h-11",
             aria_label=f"Delete {name}",

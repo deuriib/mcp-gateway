@@ -31,6 +31,22 @@ _discovery_sem = asyncio.Semaphore(3)
 _reveal_attempts: dict[str, list[float]] = {}
 
 
+async def _maybe_detect_transport(config: MCPServerConfig) -> None:
+    if config.type != "remote" or not config.url:
+        return
+    if config.resolved_transport:
+        return
+    try:
+        from mcp_gway.transport import detect_transport
+
+        timeout = (config.timeout / 1000 + 2) if config.timeout else 7
+        detected = await asyncio.wait_for(detect_transport(config), timeout=timeout)
+        config.resolved_transport = detected  # type: ignore[assignment]
+        logger.info("detected transport %s for %s", detected, config.name)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("transport detection failed for %s: %s", config.name, e)
+
+
 def _e(s: str) -> str:
     return html.escape(s, quote=True)
 
@@ -812,6 +828,7 @@ async def _acquire_and_discover(config: MCPServerConfig) -> list[Any]:
             acquired = True
         except TimeoutError:
             raise ConnectionError("discovery saturated")
+        await _maybe_detect_transport(config)
         tools = await asyncio.wait_for(
             cli_discover(config),
             timeout=(config.timeout / 1000 + 1) if config.timeout else 6,
@@ -917,6 +934,7 @@ def _create_success_resp(
                         f"{config.name} --auth"
                     )
                     headers["X-OAuth-Required"] = "1"
+                    headers["X-Server-Name"] = config.name
                 else:
                     toast_msg = (
                         f"No tools discovered -- '{config.name}' saved but unreachable (401). "
@@ -1399,6 +1417,7 @@ async def _background_refresh(registry: Registry, name: str) -> None:
                 acquired = True
             except TimeoutError:
                 return
+            await _maybe_detect_transport(cfg)
             tools = await asyncio.wait_for(
                 cli_discover(cfg),
                 timeout=(cfg.timeout / 1000 + 1) if cfg.timeout else 6,
@@ -1456,7 +1475,7 @@ async def _background_oauth_flow(registry: Registry, name: str) -> None:
         if isinstance(cfg.oauth, OAuthConfig):
             scope_val = cfg.oauth.scope
         elif isinstance(cfg.oauth, dict):
-            scope_val = cfg.oauth.get("scope") or cfg.oauth.get("clientId")
+            scope_val = cfg.oauth.get("scope")
         if scope_val:
             try:
                 from mcp.shared.auth import OAuthClientMetadata
@@ -1473,6 +1492,7 @@ async def _background_oauth_flow(registry: Registry, name: str) -> None:
             client_metadata=client_metadata,
             output_callback=lambda msg: logger.info("oauth %s: %s", name, msg),
             callback_port=8989,
+            oauth_config=cfg.oauth,
         )
         if client:
             try:
@@ -1838,6 +1858,7 @@ async def handle_oauth_start(request: Request) -> JSONResponse:
         from mcp_gway.oauth import initiate_web_oauth
 
         scope = None
+        oauth_cfg_for_flow = cfg.oauth
         if isinstance(cfg.oauth, dict):
             scope = cfg.oauth.get("scope")
         elif hasattr(cfg.oauth, "scope"):
@@ -1853,7 +1874,10 @@ async def handle_oauth_start(request: Request) -> JSONResponse:
             except Exception:
                 pass
         auth_url, err = await initiate_web_oauth(
-            server_url=cfg.url or "", server_name=name, client_metadata=client_metadata
+            server_url=cfg.url or "",
+            server_name=name,
+            client_metadata=client_metadata,
+            oauth_config=oauth_cfg_for_flow,
         )
         if err:
             return JSONResponse({"detail": err}, status_code=400)
