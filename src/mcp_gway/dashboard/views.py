@@ -661,7 +661,6 @@ def _drawer_edit_form(server: dict[str, Any]) -> Any:
         cmd_str = " ".join(str(x) for x in cmd_val)
     else:
         cmd_str = str(cmd_val) if cmd_val else ""
-    cwd_val = server.get("cwd") or ""
     headers_val = ""
     env_val = ""
     if server.get("type") == "remote" and server.get("headers"):
@@ -741,17 +740,6 @@ def _drawer_edit_form(server: dict[str, Any]) -> Any:
                             name="command",
                             value=cmd_str,
                             placeholder="npx -y my-mcp",
-                            class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900",
-                        ),
-                        htpy.label(
-                            class_="block text-xs font-medium text-slate-600 mb-1 mt-3",
-                            for_="edit-cwd",
-                        )["CWD"],
-                        htpy.input(
-                            id="edit-cwd",
-                            name="cwd",
-                            value=cwd_val,
-                            placeholder="/path/to/workdir",
                             class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900",
                         ),
                     ]
