@@ -29,11 +29,15 @@ _BADGE_COLORS: dict[str, str] = {
     "healthy": "bg-emerald-50 border-emerald-200 text-emerald-700",
     "disabled": "bg-slate-100 border-slate-200 text-slate-600",
     "unreachable": "bg-amber-50 border-amber-200 text-amber-700",
+    "degraded": "bg-amber-50 border-amber-200 text-amber-700",
+    "not_ready": "bg-red-50 border-red-200 text-red-700",
 }
 _DOT_COLORS: dict[str, str] = {
     "healthy": "bg-emerald-500",
     "disabled": "bg-slate-400",
     "unreachable": "bg-amber-500",
+    "degraded": "bg-amber-500",
+    "not_ready": "bg-red-500",
 }
 
 
@@ -88,6 +92,169 @@ def badge(state: str | bool) -> Any:
             class_=f"h-1.5 w-1.5 rounded-full {dot} animate-pulse", aria_hidden="true"
         )[[]],
         label,
+    ]
+
+
+def health_badge(status: str | bool) -> Any:
+    if isinstance(status, bool):
+        status = "healthy" if status else "not_ready"
+    normalized = str(status).lower().strip().replace("-", "_").replace(" ", "_")
+    if normalized in ("ok", "ready", "alive", "healthy"):
+        normalized = "healthy"
+    elif normalized in ("degraded", "unreachable", "warning"):
+        normalized = "degraded"
+    elif normalized in ("not_ready", "disabled", "fail", "failed", "error", "notready"):
+        normalized = "not_ready"
+    if normalized == "healthy":
+        color = _BADGE_COLORS["healthy"]
+        dot = _DOT_COLORS["healthy"]
+        label = "healthy"
+    elif normalized == "degraded":
+        color = _BADGE_COLORS.get("degraded", _BADGE_COLORS["unreachable"])
+        dot = _DOT_COLORS.get("degraded", _DOT_COLORS["unreachable"])
+        label = "degraded"
+    elif normalized == "not_ready":
+        color = _BADGE_COLORS.get("not_ready", _BADGE_COLORS["disabled"])
+        dot = _DOT_COLORS.get("not_ready", _DOT_COLORS["disabled"])
+        label = "not_ready"
+    else:
+        color = _BADGE_COLORS.get(normalized, _BADGE_COLORS["disabled"])
+        dot = _DOT_COLORS.get(normalized, _DOT_COLORS["disabled"])
+        label = normalized
+    cls = f"{_BASE_BADGE} {color}"
+    return htpy.span(class_=cls, role="status", aria_label=f"status {label}")[
+        htpy.span(
+            class_=f"h-1.5 w-1.5 rounded-full {dot} animate-pulse", aria_hidden="true"
+        )[[]],
+        label,
+    ]
+
+
+def ops_card(
+    health: dict[str, Any] | None = None,
+    metrics_summary: dict[str, Any] | None = None,
+) -> Any:
+    health = health or {}
+    metrics_summary = metrics_summary or {}
+    status_raw = str(health.get("status", "ok"))
+    normalized = status_raw.lower().strip().replace("-", "_").replace(" ", "_")
+    if normalized in ("ok", "ready", "alive", "healthy"):
+        badge_status = "healthy"
+    elif normalized == "degraded":
+        badge_status = "degraded"
+    elif normalized in ("not_ready", "notready", "disabled", "fail", "error"):
+        badge_status = "not_ready"
+    else:
+        badge_status = normalized
+    uptime = health.get("uptime_seconds", 0)
+    version = health.get("version", _APP_VERSION)
+    checks = health.get("checks", {})
+    requests_total = metrics_summary.get("requests_total")
+    p95_ms = metrics_summary.get(
+        "p95_ms", metrics_summary.get("p95", metrics_summary.get("latency_p95_ms"))
+    )
+    if requests_total is None:
+        requests_total = metrics_summary.get("requestsTotal", "-")
+    if p95_ms is None:
+        p95_ms = "-"
+    checks_items: list[Any] = []
+    for k, v in checks.items():
+        checks_items.append(
+            htpy.div(
+                class_="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200"
+            )[
+                htpy.span(class_="text-xs font-medium text-slate-600")[k],
+                htpy.span(
+                    class_="text-xs font-mono "
+                    + (
+                        "text-emerald-700"
+                        if str(v) == "ok"
+                        else "text-amber-700"
+                        if str(v) == "degraded"
+                        else "text-slate-700"
+                    )
+                )[str(v)],
+            ]
+        )
+    return htpy.section(
+        id="ops-card",
+        aria_label="operational status",
+        class_="max-w-6xl mx-auto w-full rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden",
+        **{
+            "hx-get": "/api/health",
+            "hx-trigger": "every 15s",
+            "hx-swap": "outerHTML",
+            "hx-target": "#ops-card",
+        },
+    )[
+        htpy.div(class_="px-6 py-5 flex flex-col gap-4")[
+            htpy.div(class_="flex items-center justify-between gap-4")[
+                htpy.div(class_="flex items-center gap-3 min-w-0")[
+                    htpy.span(
+                        class_="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm"
+                    )[_icon("activity", cls="h-4 w-4"),],
+                    htpy.div(class_="min-w-0")[
+                        htpy.h2(
+                            class_="text-sm font-semibold tracking-tight text-slate-900 leading-none"
+                        )["Operational Status"],
+                        htpy.p(class_="text-xs text-slate-500 mt-1")[
+                            f"v{version} \u2022 Uptime {uptime}s"
+                        ],
+                    ],
+                ],
+                health_badge(badge_status),
+            ],
+            htpy.div(class_="grid grid-cols-2 lg:grid-cols-3 gap-3")[
+                htpy.div(
+                    class_="rounded-xl border border-slate-200 bg-slate-50/50 p-3"
+                )[
+                    htpy.div(
+                        class_="text-xs font-medium tracking-wide text-slate-500 uppercase"
+                    )["Requests"],
+                    htpy.div(
+                        class_="text-lg font-mono font-semibold text-slate-900 tabular-nums mt-1"
+                    )[str(requests_total)],
+                ],
+                htpy.div(
+                    class_="rounded-xl border border-slate-200 bg-slate-50/50 p-3"
+                )[
+                    htpy.div(
+                        class_="text-xs font-medium tracking-wide text-slate-500 uppercase"
+                    )["p95 Latency"],
+                    htpy.div(
+                        class_="text-lg font-mono font-semibold text-slate-900 tabular-nums mt-1"
+                    )[
+                        f"{p95_ms}ms"
+                        if isinstance(p95_ms, (int, float))
+                        or (isinstance(p95_ms, str) and p95_ms.isdigit())
+                        else str(p95_ms)
+                    ],
+                ],
+                htpy.div(
+                    class_="rounded-xl border border-slate-200 bg-slate-50/50 p-3"
+                )[
+                    htpy.div(
+                        class_="text-xs font-medium tracking-wide text-slate-500 uppercase"
+                    )["Uptime"],
+                    htpy.div(
+                        class_="text-lg font-mono font-semibold text-slate-900 tabular-nums mt-1"
+                    )[f"{uptime}s"],
+                ],
+            ],
+            htpy.div(class_="flex flex-col gap-2")[
+                htpy.p(
+                    class_="text-xs font-medium tracking-widest uppercase text-slate-500"
+                )["Checks"],
+                htpy.div(class_="grid grid-cols-1 sm:grid-cols-2 gap-2")[
+                    *checks_items
+                    if checks_items
+                    else [htpy.p(class_="text-xs text-slate-400")["No checks"]],
+                ],
+            ],
+            htpy.p(class_="text-xs text-slate-400")[
+                f"Uptime {uptime}s \u2022 last check just now"
+            ],
+        ],
     ]
 
 
@@ -1186,11 +1353,26 @@ def _stats(servers: list[dict[str, Any]]) -> Any:
     ]
 
 
-def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
+def layout(
+    servers: list[dict[str, Any]],
+    warning_banner: bool = False,
+    health: dict[str, Any] | None = None,
+    metrics_summary: dict[str, Any] | None = None,
+) -> Any:
     healthy = sum(
         1 for s in servers if s.get("enabled", True) and s.get("tool_count", 0) > 0
     )
     total = len(servers)
+    if health is None:
+        health = {
+            "status": "ok",
+            "checks": {"registry": "ok", "dashboard": "ok"},
+            "uptime_seconds": 0,
+            "version": _APP_VERSION,
+        }
+    if metrics_summary is None:
+        metrics_summary = {"requests_total": 0, "p95_ms": "-"}
+    ops = ops_card(health, metrics_summary)
     table = htpy.table(class_="min-w-full divide-y divide-slate-100")[
         htpy.thead(class_="bg-slate-50/80 backdrop-blur sticky top-0 z-10")[
             htpy.tr[
@@ -1238,7 +1420,7 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
         else htpy.fragment[[]]
     )
 
-    health_badge = (
+    navbar_badge = (
         badge("healthy")
         if total == 0 or healthy == total
         else badge("unreachable" if healthy == 0 else "healthy")
@@ -1246,11 +1428,12 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
 
     return base_layout(
         content=[
-            navbar(healthy=healthy, total=total, health_badge=health_badge),
+            navbar(healthy=healthy, total=total, health_badge=navbar_badge),
             htpy.div(
                 class_="max-w-6xl mx-auto px-4 pt-10 pb-12 flex-1 flex flex-col min-h-0 w-full gap-8"
             )[
                 warning,
+                ops,
                 _stats(servers),
                 htpy.main(class_="flex-1 flex flex-col gap-8 pb-6 overflow-visible")[
                     htpy.div(

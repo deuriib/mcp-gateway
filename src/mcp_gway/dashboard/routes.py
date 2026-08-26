@@ -8,6 +8,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from mcp_gway.dashboard.api import (
+    handle_api_health,
     handle_create,
     handle_dashboard,
     handle_dashboard_close,
@@ -37,6 +38,7 @@ def get_dashboard_routes(registry: Registry) -> list[Route | Mount]:
             "/dashboard/servers/{name}", handle_dashboard_server_detail, methods=["GET"]
         ),
         Route("/dashboard/close", handle_dashboard_close, methods=["GET"]),
+        Route("/api/health", handle_api_health, methods=["GET"]),
         Route("/api/servers", handle_list, methods=["GET"]),
         Route("/api/servers/{name}", handle_get, methods=["GET"]),
         Route("/api/servers", handle_create, methods=["POST"]),

@@ -250,12 +250,108 @@ def _drawer_feedback_html(msg: str, variant: str = "slate") -> str:
     return f"<div class='{cls} px-3 py-2 rounded-xl text-xs'>{_e(msg)}</div>"
 
 
+def _build_health_payload(request: Request) -> tuple[dict[str, Any], dict[str, Any]]:
+    registry: Registry = request.app.state.registry  # type: ignore[attr-defined]
+    gateway = getattr(request.app.state, "gateway", None)
+    start_time = (
+        getattr(gateway, "start_time", None)
+        if gateway is not None
+        else getattr(request.app.state, "start_time", None)
+    )
+    if start_time is None:
+        start_time = time.monotonic()
+    uptime = (
+        int(time.monotonic() - start_time)
+        if isinstance(start_time, (int, float))
+        else 0
+    )
+    try:
+        from mcp_gway.observability.health import check_registry, check_routes
+
+        reg_status, _ = check_registry(registry)
+        routes_status, _ = check_routes(request.app)
+    except Exception:
+        reg_status = "ok"
+        routes_status = "ok"
+    checks = {"registry": reg_status, "dashboard": routes_status}
+    status = "ok" if reg_status == "ok" and routes_status == "ok" else "degraded"
+    try:
+        from mcp_gway import __version__ as _ver
+    except Exception:
+        _ver = "0.0.0"
+    health: dict[str, Any] = {
+        "status": status,
+        "checks": checks,
+        "uptime_seconds": uptime,
+        "version": _ver,
+    }
+    metrics = getattr(request.app.state, "metrics", None)
+    metrics_summary: dict[str, Any] = {"requests_total": 0, "p95_ms": "-"}
+    if metrics is not None:
+        try:
+            with metrics._lock:  # type: ignore[attr-defined]
+                snapshot = dict(metrics._metrics)  # type: ignore[attr-defined]
+            if "http_requests_total" in snapshot:
+                data = snapshot["http_requests_total"]["data"]
+                metrics_summary["requests_total"] = sum(data.values())
+            if "http_request_duration_seconds" in snapshot:
+                hist = snapshot["http_request_duration_seconds"]
+                buckets: list[float] = hist.get("buckets", [])  # type: ignore[assignment]
+                data_hist: dict[Any, Any] = hist.get("data", {})  # type: ignore[assignment]
+                total_count = 0
+                agg_counts = [0] * len(buckets) if buckets else []
+                for entry in data_hist.values():
+                    bc = entry.get("bucket_counts", [])
+                    for i, c in enumerate(bc):
+                        if i < len(agg_counts):
+                            agg_counts[i] += int(c)
+                    total_count += int(entry.get("count", 0))
+                if total_count > 0 and agg_counts:
+                    target = int(total_count * 0.95)
+                    if target == 0:
+                        target = 1
+                    p95_val = None
+                    for i, cnt in enumerate(agg_counts):
+                        if cnt >= target:
+                            p95_val = buckets[i]
+                            break
+                    if p95_val is None:
+                        p95_val = buckets[-1] if buckets else 0
+                    metrics_summary["p95_ms"] = int(float(p95_val) * 1000)
+                elif total_count == 0:
+                    metrics_summary["p95_ms"] = "-"
+        except Exception:
+            pass
+    health["metrics_summary"] = metrics_summary
+    return health, metrics_summary
+
+
+async def handle_api_health(request: Request) -> JSONResponse | HTMLResponse:
+    health, metrics_summary = _build_health_payload(request)
+    if _is_htmx_request(request):
+        try:
+            from mcp_gway.dashboard.views import ops_card
+        except Exception:
+            return HTMLResponse("", headers=_csp_headers())
+        html = str(ops_card(health, metrics_summary))
+        return HTMLResponse(html, headers=_csp_headers())
+    return JSONResponse(health, headers=_csp_headers())
+
+
 async def handle_dashboard(request: Request) -> HTMLResponse:
     registry: Registry = request.app.state.registry  # type: ignore[attr-defined]
     host = getattr(request.app.state, "dashboard_host", "127.0.0.1")
     warning = host not in ("127.0.0.1", "::1", "localhost")
     servers = _collect_servers(registry)
-    html_content = str(layout(servers, warning_banner=warning))
+    health, metrics_summary = _build_health_payload(request)
+    html_content = str(
+        layout(
+            servers,
+            warning_banner=warning,
+            health=health,
+            metrics_summary=metrics_summary,
+        )
+    )
     headers: dict[str, str] = dict(_csp_headers())
     if warning:
         headers["X-Warning"] = "exposed"
