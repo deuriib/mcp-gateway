@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from typing import Any, Literal
+from urllib.parse import urlparse as _urlparse_for_validation
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -104,6 +105,20 @@ class MCPServerConfig(BaseModel):
 
     # Internal: resolved after connection test, stored in JSON
     resolved_transport: Literal["sse", "streamable-http", "http"] | None = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if "\r" in v or "\n" in v:
+            raise ValueError("url must not contain CR or LF")
+        parsed = _urlparse_for_validation(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("url must be http or https")
+        if not parsed.netloc:
+            raise ValueError("url must have host")
+        return v
 
     @field_validator("oauth", mode="before")
     @classmethod

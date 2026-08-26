@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 import click
 
-from mcp_gway.models import MCPServerConfig, OAuthConfig, ToolInfo
+from mcp_gway.models import MCPServerConfig, OAuthConfig, ToolInfo, _validate_name_value
 
 logger = logging.getLogger(__name__)
 
@@ -31,108 +31,163 @@ def _get_config_url(config: MCPServerConfig) -> str | None:
 
 
 @asynccontextmanager
-async def create_client_transport(
+async def _create_local_transport(
+    config: MCPServerConfig,
+) -> AsyncIterator[tuple[object, object]]:
+    from mcp import StdioServerParameters
+
+    from mcp_gway.stdio_transport import (
+        filtered_stdio_client,
+        resolve_windows_command,
+    )
+
+    cmd_list: list[str] | None = getattr(config, "command", None)
+    if not cmd_list:
+        raise ValueError("command required for local")
+    command = cmd_list[0]
+    args = cmd_list[1:] if len(cmd_list) > 1 else []
+    resolved = resolve_windows_command(command)
+    env_dict = getattr(config, "environment", None)
+    cwd = getattr(config, "cwd", None)
+    try:
+        params = StdioServerParameters(
+            command=resolved,
+            args=args,
+            env=env_dict,
+            cwd=cwd,
+        )
+    except TypeError:
+        params = StdioServerParameters(
+            command=resolved,
+            args=args,
+            env=env_dict,
+        )
+    async with filtered_stdio_client(server=params, on_noise=_default_on_noise) as (
+        read,
+        write,
+    ):
+        yield read, write
+
+
+@asynccontextmanager
+async def _create_remote_transport(
     config: MCPServerConfig, *, force_auth: bool = False
 ) -> AsyncIterator[tuple[object, object]]:
-    if config.type == "local":
-        from mcp import StdioServerParameters
+    url = config.url
+    if not url:
+        raise ValueError("url required for remote config")
+    resolved_transport = getattr(config, "resolved_transport", None)
+    headers = getattr(config, "headers", None)
+    if resolved_transport == "streamable-http":
+        from mcp.client.streamable_http import streamable_http_client
 
-        from mcp_gway.stdio_transport import (
-            filtered_stdio_client,
-            resolve_windows_command,
-        )
+        if force_auth:
+            from mcp_gway.oauth import get_authenticated_client
 
-        cmd_list: list[str] | None = getattr(config, "command", None)
-        if not cmd_list:
-            raise ValueError("command required for local")
-        command = cmd_list[0]
-        args = cmd_list[1:] if len(cmd_list) > 1 else []
-        resolved = resolve_windows_command(command)
-        env_dict = getattr(config, "environment", None)
-        cwd = getattr(config, "cwd", None)
-        try:
-            params = StdioServerParameters(
-                command=resolved,
-                args=args,
-                env=env_dict,
-                cwd=cwd,
-            )
-        except TypeError:
-            params = StdioServerParameters(
-                command=resolved,
-                args=args,
-                env=env_dict,
-            )
-        async with filtered_stdio_client(server=params, on_noise=_default_on_noise) as (
-            read,
-            write,
-        ):
-            yield read, write
-    else:
-        url = config.url
-        if not url:
-            raise ValueError("url required for remote config")
-        resolved_transport = getattr(config, "resolved_transport", None)
-        headers = getattr(config, "headers", None)
-        if resolved_transport == "streamable-http":
-            from mcp.client.streamable_http import streamable_http_client
-
-            if force_auth:
-                from mcp_gway.oauth import get_authenticated_client
-
-                http_client = await get_authenticated_client(config.name)
+            http_client = await get_authenticated_client(config.name)
+            try:
                 async with streamable_http_client(url, http_client=http_client) as (
                     read,
                     write,
                 ):
                     yield read, write
-            elif headers:
-                import httpx
+            finally:
+                if http_client is not None:
+                    try:
+                        await http_client.aclose()
+                    except Exception:
+                        pass
+        elif headers:
+            import httpx
 
-                async with httpx.AsyncClient(headers=headers) as hc:
-                    async with streamable_http_client(url, http_client=hc) as (
-                        read,
-                        write,
-                    ):
-                        yield read, write
-            else:
-                async with streamable_http_client(url) as (
+            async with httpx.AsyncClient(headers=headers) as hc:
+                async with streamable_http_client(url, http_client=hc) as (
                     read,
                     write,
                 ):
                     yield read, write
-        elif resolved_transport == "http":
-            from mcp.client.sse import sse_client
-
-            sse_headers = None
-            if force_auth:
-                from mcp_gway.oauth import get_authenticated_client
-
-                http_client = await get_authenticated_client(config.name)
-                sse_headers = http_client.headers if http_client else None
-            elif headers:
-                sse_headers = headers
-            async with sse_client(url, headers=sse_headers) as (
-                read,
-                write,
-            ):
-                yield read, write
         else:
-            from mcp.client.sse import sse_client
+            async with streamable_http_client(url) as (
+                read,
+                write,
+            ):
+                yield read, write
+    elif resolved_transport == "http":
+        from mcp.client.sse import sse_client
 
-            sse_headers = None
-            if force_auth:
-                from mcp_gway.oauth import get_authenticated_client
+        sse_headers = None
+        http_client = None
+        if force_auth:
+            from mcp_gway.oauth import get_authenticated_client
 
-                http_client = await get_authenticated_client(config.name)
-                sse_headers = http_client.headers if http_client else None
-            elif headers:
+            http_client = await get_authenticated_client(config.name)
+            sse_headers = http_client.headers if http_client else None
+            try:
+                async with sse_client(url, headers=sse_headers) as (
+                    read,
+                    write,
+                ):
+                    yield read, write
+            finally:
+                if http_client is not None:
+                    try:
+                        await http_client.aclose()
+                    except Exception:
+                        pass
+        else:
+            if headers:
                 sse_headers = headers
             async with sse_client(url, headers=sse_headers) as (
                 read,
                 write,
             ):
                 yield read, write
+    else:
+        from mcp.client.sse import sse_client
+
+        sse_headers = None
+        http_client = None
+        if force_auth:
+            from mcp_gway.oauth import get_authenticated_client
+
+            http_client = await get_authenticated_client(config.name)
+            sse_headers = http_client.headers if http_client else None
+            try:
+                async with sse_client(url, headers=sse_headers) as (
+                    read,
+                    write,
+                ):
+                    yield read, write
+            finally:
+                if http_client is not None:
+                    try:
+                        await http_client.aclose()
+                    except Exception:
+                        pass
+        else:
+            if headers:
+                sse_headers = headers
+            async with sse_client(url, headers=sse_headers) as (
+                read,
+                write,
+            ):
+                yield read, write
+
+
+@asynccontextmanager
+async def create_client_transport(
+    config: MCPServerConfig, *, force_auth: bool = False
+) -> AsyncIterator[tuple[object, object]]:
+    _validate_name_value(config.name)
+    if _is_local_config(config):
+        async with _create_local_transport(config) as (read, write):
+            yield read, write
+    else:
+        async with _create_remote_transport(config, force_auth=force_auth) as (
+            read,
+            write,
+        ):
+            yield read, write
 
 
 async def discover_tools(
@@ -146,22 +201,22 @@ async def discover_tools(
             timeout_sec = 5
         else:
             timeout_sec = raw_timeout / 1000
-        async with create_client_transport(config, force_auth=force_auth) as (
-            read,
-            write,
-        ):
-            async with ClientSession(read, write) as session:
-                async with asyncio.timeout(timeout_sec):
+        async with asyncio.timeout(timeout_sec):
+            async with create_client_transport(config, force_auth=force_auth) as (
+                read,
+                write,
+            ):
+                async with ClientSession(read, write) as session:
                     await session.initialize()
                     result = await session.list_tools()
-                return [
-                    ToolInfo(
-                        name=t.name,
-                        description=t.description or "",
-                        input_schema=t.input_schema,
-                    )
-                    for t in result.tools
-                ]
+                    return [
+                        ToolInfo(
+                            name=t.name,
+                            description=t.description or "",
+                            input_schema=t.input_schema,
+                        )
+                        for t in result.tools
+                    ]
     except Exception as e:
         logger.debug("Could not connect to server: %s", e)
         return []
@@ -202,6 +257,10 @@ async def refresh_server(
             oauth_config=getattr(cfg, "oauth", None),
         )
         if client:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
             click.echo("Authentication successful. Discovering tools...")
             discovered = await discover_tools(cfg, force_auth=True)
         else:

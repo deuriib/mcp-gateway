@@ -21,6 +21,71 @@ from mcp_gway.dashboard.routes import get_dashboard_routes
 from mcp_gway.registry import Registry
 
 
+class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        return response
+
+
+class _CSRFMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            path = request.url.path
+            if path.startswith(("/api/", "/dashboard")):
+                hx = request.headers.get("HX-Request") or request.headers.get(
+                    "hx-request"
+                )
+                origin = request.headers.get("origin") or request.headers.get("Origin")
+                referer = request.headers.get("referer") or request.headers.get(
+                    "Referer"
+                )
+                if hx == "true":
+                    pass
+                elif origin:
+                    try:
+                        from urllib.parse import urlparse
+
+                        o_host = urlparse(origin).hostname or ""
+                        req_host = request.url.hostname or ""
+                        host_hdr = request.headers.get("host", "")
+                        allowed = {req_host, host_hdr.split(":")[0] if host_hdr else ""}
+                        allowed.update(
+                            {"127.0.0.1", "localhost", "::1", "test", "testserver"}
+                        )
+                        if o_host and o_host not in allowed and o_host != req_host:
+                            return JSONResponse(
+                                {"detail": "CSRF check failed"}, status_code=403
+                            )
+                    except Exception:
+                        return JSONResponse(
+                            {"detail": "CSRF check failed"}, status_code=403
+                        )
+                elif referer:
+                    try:
+                        from urllib.parse import urlparse
+
+                        r_host = urlparse(referer).hostname or ""
+                        req_host = request.url.hostname or ""
+                        host_hdr = request.headers.get("host", "")
+                        allowed = {req_host, host_hdr.split(":")[0] if host_hdr else ""}
+                        allowed.update(
+                            {"127.0.0.1", "localhost", "::1", "test", "testserver"}
+                        )
+                        if r_host and r_host not in allowed and r_host != req_host:
+                            return JSONResponse(
+                                {"detail": "CSRF check failed"}, status_code=403
+                            )
+                    except Exception:
+                        return JSONResponse(
+                            {"detail": "CSRF check failed"}, status_code=403
+                        )
+                else:
+                    pass
+        return await call_next(request)
+
+
 class _CSPMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         response = await call_next(request)
@@ -38,6 +103,8 @@ class _CSPMiddleware(BaseHTTPMiddleware):
             )
         else:
             response.headers["Content-Security-Policy"] = "default-src 'self'"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
         return response
 
 
@@ -119,6 +186,8 @@ class Gateway:
             ]
         )
         self.app.add_middleware(_CSPMiddleware)
+        self.app.add_middleware(_SecurityHeadersMiddleware)
+        self.app.add_middleware(_CSRFMiddleware)
         self.app.state.registry = registry  # type: ignore[attr-defined]
         self.app.state.dashboard_host = host  # type: ignore[attr-defined]
 

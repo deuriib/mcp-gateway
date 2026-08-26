@@ -1192,21 +1192,10 @@ async def handle_patch(request: Request) -> JSONResponse | HTMLResponse:
             return _handle_validation_error(e, merged, request)
         except ValueError as e:
             return _handle_validation_error(e, merged, request)
-        # Persist: need to keep tools
+        # Persist: preserve real tool names via Registry method
         try:
-            tools = []
             try:
-                content = registry.read_pyi(name)
-                # keep existing tools count dummy, but preserve pyi by reusing registry.add with new config and existing tools list
-                # we have no tool objects, create empty ToolInfo list; _generate_pyi will rebuild but with empty — better fetch actual tools via parsing? For edit we preserve tool_count by reusing existing pyi tools count via dummy?
-                # Instead try to preserve existing pyi content by not overwriting? But registry.add will overwrite pyi with empty tools — we want to keep tools.
-                # So try to extract tools from pyi? Simpler: keep empty but tool_count will be 0 until refresh — acceptable for resilience.
-                # Better: try to keep previous tool count by not changing pyi if no discovery.
-                from mcp_gway.models import ToolInfo as _TI
-
-                # count def lines as dummy tools
-                cnt = content.count("def ")
-                tools = [_TI(name=f"tool_{i}", description="") for i in range(cnt)]
+                tools = registry.get_pyi_tools(name)
             except Exception:
                 tools = []
             registry.add(new_cfg, tools)  # type: ignore[arg-type]

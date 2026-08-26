@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import re
 import secrets
+import stat
 import string
 import uuid
 import webbrowser
@@ -14,48 +16,83 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
-_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
-_RESERVED_NAMES = {
-    "con",
-    "prn",
-    "aux",
-    "nul",
-    "com1",
-    "com2",
-    "com3",
-    "com4",
-    "com5",
-    "com6",
-    "com7",
-    "com8",
-    "com9",
-    "lpt1",
-    "lpt2",
-    "lpt3",
-    "lpt4",
-    "lpt5",
-    "lpt6",
-    "lpt7",
-    "lpt8",
-    "lpt9",
-}
+from mcp_gway.models import _validate_name_value
 
 
 def _validate_server_name(name: str) -> None:
-    if not name or "/" in name or "\\" in name or name in (".", ".."):
-        raise ValueError("Invalid server name")
-    if not name.isascii():
-        raise ValueError("Name must contain only ASCII characters")
-    if "-" in name or " " in name:
-        raise ValueError("Name cannot contain hyphens or spaces")
-    if name and name[0].isdigit():
-        raise ValueError("Name cannot start with a number")
-    if "<" in name or ">" in name:
-        raise ValueError("Name contains invalid characters")
-    if not _NAME_RE.match(name):
-        raise ValueError("Name must match ^[A-Za-z_][A-Za-z0-9_]{0,63}$")
-    if name.lower() in _RESERVED_NAMES:
-        raise ValueError("Name is reserved")
+    _validate_name_value(name)
+
+
+def _secure_atomic_write(path: Path, content: str) -> None:
+    if path.is_symlink():
+        raise ValueError("refusing to write through symlink")
+    try:
+        st = os.lstat(path) if path.exists() else None
+        if st is not None and stat.S_ISLNK(st.st_mode):
+            raise ValueError("refusing to write through symlink")
+    except ValueError:
+        raise
+    except Exception:
+        pass
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    if tmp.is_symlink():
+        raise ValueError("tmp path is symlink")
+    try:
+        st2 = os.lstat(tmp) if tmp.exists() else None
+        if st2 is not None and stat.S_ISLNK(st2.st_mode):
+            raise ValueError("tmp path is symlink")
+    except ValueError:
+        raise
+    except Exception:
+        pass
+    if tmp.exists():
+        try:
+            tmp.unlink()
+        except Exception:
+            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except Exception:
+                pass
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
+        raise
+    try:
+        os.chmod(tmp, 0o600)
+    except Exception:
+        pass
+    if path.is_symlink():
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
+        raise ValueError("refusing to replace symlink")
+    try:
+        st_final = os.lstat(path) if path.exists() else None
+        if st_final is not None and stat.S_ISLNK(st_final.st_mode):
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
+            raise ValueError("refusing to replace symlink")
+    except ValueError:
+        raise
+    except Exception:
+        pass
+    tmp.replace(path)
+    try:
+        os.chmod(path, 0o600)
+    except Exception:
+        pass
 
 
 import httpx2
@@ -95,10 +132,10 @@ class FileTokenStorage:
             return None
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
-        self._token_file.write_text(
-            json.dumps(tokens.model_dump(mode="json", exclude_none=True), indent=2),
-            encoding="utf-8",
+        content = json.dumps(
+            tokens.model_dump(mode="json", exclude_none=True), indent=2
         )
+        _secure_atomic_write(self._token_file, content)
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         info_file = self._storage_dir / f"{self._token_file.stem}_client.json"
@@ -112,12 +149,10 @@ class FileTokenStorage:
 
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
         info_file = self._storage_dir / f"{self._token_file.stem}_client.json"
-        info_file.write_text(
-            json.dumps(
-                client_info.model_dump(mode="json", exclude_none=True), indent=2
-            ),
-            encoding="utf-8",
+        content = json.dumps(
+            client_info.model_dump(mode="json", exclude_none=True), indent=2
         )
+        _secure_atomic_write(info_file, content)
 
 
 class OAuthCallbackServer:
