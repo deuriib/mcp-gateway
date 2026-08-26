@@ -156,7 +156,7 @@ CODE_MODE_TOOLS = [
     },
     {
         "name": "executeToolCode",
-        "description": "Run chain one or many tools together — just use call_tool() and put your answer in result.",
+        "description": "Run and chain one or many tools together — just use call_tool() and put your answer in result.",
         "inputSchema": {
             "type": "object",
             "properties": {
