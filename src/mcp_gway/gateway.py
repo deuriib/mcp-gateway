@@ -111,12 +111,12 @@ class _CSPMiddleware(BaseHTTPMiddleware):
 CODE_MODE_TOOLS = [
     {
         "name": "listToolFiles",
-        "description": "Lists all available virtual .pyi stub files for connected MCP servers.",
+        "description": "Lists all available files for connected MCP servers.",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "readToolFile",
-        "description": "Reads a virtual .pyi file to get compact Python function signatures for tools.",
+        "description": "Reads a file to get compact signatures for tools.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -150,7 +150,7 @@ CODE_MODE_TOOLS = [
     },
     {
         "name": "executeToolCode",
-        "description": "Executes Python code in a sandboxed Starlark interpreter with MCP tool access. Use call_tool(server, tool, **kwargs) to invoke MCP tools, or server.tool_name(**kwargs) for registered servers.",
+        "description": "Use call_tool(server, tool, **kwargs) to invoke MCP tools.",
         "inputSchema": {
             "type": "object",
             "properties": {
