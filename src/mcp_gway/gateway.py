@@ -18,6 +18,18 @@ from starlette.routing import Route
 from mcp_gway import __version__
 from mcp_gway.code_mode import CodeMode
 from mcp_gway.dashboard.routes import get_dashboard_routes
+from mcp_gway.observability.health import (
+    handle_health,
+    handle_live,
+    handle_metrics,
+    handle_ready,
+)
+from mcp_gway.observability.metrics import MetricsRegistry
+from mcp_gway.observability.middleware import (
+    CorrelationMiddleware,
+    LoggingMiddleware,
+    MetricsMiddleware,
+)
 from mcp_gway.registry import Registry
 
 
@@ -183,26 +195,80 @@ class Gateway:
         self.host = host
         self.code_mode = CodeMode(registry)
         self._sessions: dict[str, SessionInfo] = {}
+        self.start_time: float = time.monotonic()
+        self._last_loop_tick: float = time.monotonic()
+        self.metrics = MetricsRegistry()
+        # pre-register common metrics
+        self.metrics.counter(
+            "http_requests_total", "Total HTTP requests", ["method", "path", "status"]
+        )
+        self.metrics.histogram(
+            "http_request_duration_seconds", "HTTP request latency", ["path"]
+        )
+        self.metrics.counter(
+            "mcp_tool_calls_total",
+            "MCP tool call count by server/tool/status",
+            ["server", "tool", "status"],
+        )
+        self.metrics.histogram(
+            "discovery_duration_seconds", "Discovery latency", ["server"]
+        )
+        self.metrics.counter("sandbox_execute_total", "Sandbox executions", ["status"])
+        self.metrics.histogram(
+            "sandbox_duration_seconds", "Sandbox duration", ["status"]
+        )
+        self.metrics.counter(
+            "registry_operations_total", "Registry add/remove/update counts", ["op"]
+        )
+        self.metrics.gauge("gateway_sessions_active", "Current SSE sessions", [])
         registry.ensure()
+        try:
+            registry._metrics = self.metrics  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        try:
+            self.code_mode.sandbox._metrics = self.metrics  # type: ignore[attr-defined]
+        except Exception:
+            pass
         dashboard_routes = get_dashboard_routes(registry)
         self.app = Starlette(
             routes=[
                 Route("/health", self._health, methods=["GET"]),
+                Route("/ready", handle_ready, methods=["GET"]),
+                Route("/live", handle_live, methods=["GET"]),
+                Route("/metrics", handle_metrics, methods=["GET"]),
                 Route("/mcp", self._mcp_sse, methods=["GET"]),
                 Route("/mcp", self._mcp_post, methods=["POST"]),
                 Route("/mcp/messages", self._mcp_post, methods=["POST"]),
                 *dashboard_routes,
             ]
         )
+        # order outer→inner: Correlation→Metrics→Logging→CSP/Security/CSRF
+        # Starlette last added = outermost, so add innermost first
         self.app.add_middleware(_CSPMiddleware)
         self.app.add_middleware(_SecurityHeadersMiddleware)
         self.app.add_middleware(_CSRFMiddleware)
+        self.app.add_middleware(LoggingMiddleware)
+        self.app.add_middleware(MetricsMiddleware, registry=self.metrics)
+        self.app.add_middleware(CorrelationMiddleware)
         self.app.state.registry = registry  # type: ignore[attr-defined]
         self.app.state.dashboard_host = host  # type: ignore[attr-defined]
+        self.app.state.metrics = self.metrics  # type: ignore[attr-defined]
+        self.app.state.gateway = self  # type: ignore[attr-defined]
+        self.app.state.start_time = self.start_time  # type: ignore[attr-defined]
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._heartbeat())
+        except RuntimeError:
+            pass
 
     def _create_session(self, session_id: str) -> SessionInfo:
         info = SessionInfo(queue=asyncio.Queue())
         self._sessions[session_id] = info
+        try:
+            self.metrics.set("gateway_sessions_active", float(len(self._sessions)), {})
+        except Exception:
+            pass
         return info
 
     def cleanup_expired_sessions(self, max_idle_seconds: float = 300.0) -> int:
@@ -215,6 +281,13 @@ class Gateway:
         for sid in expired:
             info = self._sessions.pop(sid)
             info.queue.put_nowait(None)
+        if expired:
+            try:
+                self.metrics.set(
+                    "gateway_sessions_active", float(len(self._sessions)), {}
+                )
+            except Exception:
+                pass
         return len(expired)
 
     async def _handle_post(
@@ -248,8 +321,13 @@ class Gateway:
 
         return response
 
+    async def _heartbeat(self) -> None:
+        while True:
+            self._last_loop_tick = time.monotonic()
+            await asyncio.sleep(1)
+
     async def _health(self, request: Request) -> JSONResponse:
-        return JSONResponse({"status": "ok"})
+        return await handle_health(request)
 
     async def _mcp_sse(self, request: Request) -> StreamingResponse:
         session_id = str(uuid.uuid4())
@@ -265,6 +343,12 @@ class Gateway:
                     yield f"event: message\ndata: {json.dumps(msg)}\n\n"
             finally:
                 self._sessions.pop(session_id, None)
+                try:
+                    self.metrics.set(
+                        "gateway_sessions_active", float(len(self._sessions)), {}
+                    )
+                except Exception:
+                    pass
 
         return StreamingResponse(
             event_stream(),
@@ -316,22 +400,62 @@ class Gateway:
         raise ValueError(f"Unknown method: {method}")
 
     def _handle_tool_call(self, params: dict[str, Any]) -> dict[str, Any]:
+        import re
+
         name = params.get("name")
         arguments = params.get("arguments", {})
-        if name == "listToolFiles":
-            result = self.code_mode.list_tool_files()
-        elif name == "readToolFile":
-            result = self.code_mode.read_tool_file(
-                fileName=arguments["fileName"],
-                startLine=arguments.get("startLine"),
-                endLine=arguments.get("endLine"),
-            )
-        elif name == "getToolDocs":
-            result = self.code_mode.get_tool_docs(
-                server=arguments["server"], tool=arguments["tool"]
-            )
-        elif name == "executeToolCode":
-            result = self.code_mode.execute_tool_code(code=arguments["code"])
-        else:
-            raise ValueError(f"Unknown tool: {name}")
-        return {"content": [{"type": "text", "text": result}]}
+
+        # Instrumentation helper: sanitize labels
+        def _san(v: str) -> str:
+            s = re.sub(r"[^A-Za-z0-9_]", "_", v)[:32]
+            return s.strip("_") or "_other"
+
+        status = "ok"
+        server_label = "gateway"
+        tool_label = _san(str(name)) if name else "_other"
+        # For executeToolCode we could try to parse server from code, but keep gateway
+        try:
+            if name == "listToolFiles":
+                result = self.code_mode.list_tool_files()
+            elif name == "readToolFile":
+                result = self.code_mode.read_tool_file(
+                    fileName=arguments["fileName"],
+                    startLine=arguments.get("startLine"),
+                    endLine=arguments.get("endLine"),
+                )
+            elif name == "getToolDocs":
+                # server label from arguments
+                try:
+                    server_label = _san(str(arguments.get("server", "gateway")))
+                    tool_label = _san(str(arguments.get("tool", str(name))))
+                except Exception:
+                    pass
+                result = self.code_mode.get_tool_docs(
+                    server=arguments["server"], tool=arguments["tool"]
+                )
+            elif name == "executeToolCode":
+                result = self.code_mode.execute_tool_code(code=arguments["code"])
+            else:
+                status = "error"
+                raise ValueError(f"Unknown tool: {name}")
+            # success path
+            try:
+                self.metrics.inc(
+                    "mcp_tool_calls_total",
+                    {"server": server_label, "tool": tool_label, "status": status},
+                )
+            except Exception:
+                pass
+            return {"content": [{"type": "text", "text": result}]}
+        except Exception:
+            # record error if not already
+            if status != "error":
+                status = "error"
+                try:
+                    self.metrics.inc(
+                        "mcp_tool_calls_total",
+                        {"server": server_label, "tool": tool_label, "status": status},
+                    )
+                except Exception:
+                    pass
+            raise
