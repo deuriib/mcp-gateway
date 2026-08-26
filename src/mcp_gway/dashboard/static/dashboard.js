@@ -169,6 +169,161 @@
     });
   }
 
+  function setupGlobalErrorToast(){
+    if(document.body.dataset.globalErrorBound) return;
+    document.body.dataset.globalErrorBound="1";
+    document.addEventListener("htmx:responseError", function(e){
+      var xhr=e.detail && e.detail.xhr;
+      var target=e.detail && e.detail.target;
+      // if already has toast OOB, skip
+      if(xhr && xhr.responseText && xhr.responseText.indexOf("hx-swap-oob")!==-1) return;
+      if(xhr && xhr.responseText && xhr.responseText.indexOf("toast")!==-1) return;
+      if(!xhr || !xhr.status) return;
+      var toast=document.getElementById("toast");
+      if(!toast) return;
+      var msg="Request failed ("+xhr.status+")";
+      try{
+        var data=JSON.parse(xhr.responseText);
+        if(data.detail) msg=data.detail;
+        else if(data.message) msg=data.message;
+      }catch(_){
+        if(xhr.responseText && xhr.responseText.length<300) msg=xhr.responseText.trim().replace(/<[^>]*>/g,"").slice(0,200);
+      }
+      // also try to extract from drawer feedback if present
+      var drawerFb=document.getElementById("drawer-feedback");
+      if(target && (target.id==="drawer-feedback" || target.id==="drawer-reveal-output") && xhr.responseText){
+        // already swapped via handleSwap, dont duplicate
+        return;
+      }
+      var d=document.createElement("div");
+      d.className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl shadow-sm text-sm";
+      d.setAttribute("role","alert");
+      d.textContent=msg;
+      toast.appendChild(d);
+      setTimeout(function(){ if(toast.contains(d)) toast.removeChild(d); }, 5000);
+    });
+    document.addEventListener("htmx:sendError", function(e){
+      var toast=document.getElementById("toast");
+      if(!toast) return;
+      var d=document.createElement("div");
+      d.className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl shadow-sm text-sm";
+      d.setAttribute("role","alert");
+      d.textContent="Network error — check connection";
+      toast.appendChild(d);
+      setTimeout(function(){ if(toast.contains(d)) toast.removeChild(d); }, 5000);
+    });
+  }
+
+  function setupRevealVisibility(){
+    document.addEventListener("htmx:afterSwap", function(e){
+      var t=e.detail && e.detail.target;
+      if(t && t.id==="drawer-reveal-output"){
+        t.style.display="block";
+        t.classList.remove("hidden");
+        var fresh=document.getElementById("drawer-reveal-output");
+        if(fresh){
+          fresh.style.display="block";
+          fresh.classList.remove("hidden");
+          fresh.scrollIntoView({behavior:"smooth", block:"nearest"});
+        }
+      }
+      if(t && t.id==="drawer-feedback"){
+        t.scrollIntoView({behavior:"smooth", block:"nearest"});
+      }
+    });
+  }
+
+  function setupHeaderToast(){
+    if(document.body.dataset.headerToastBound) return;
+    document.body.dataset.headerToastBound="1";
+    document.addEventListener("htmx:afterRequest", function(e){
+      var xhr = e.detail && e.detail.xhr;
+      if(!xhr) return;
+      var toastMsg = null;
+      var oauthRequired = null;
+      try{ toastMsg = xhr.getResponseHeader('X-Toast'); }catch(_){}
+      try{ oauthRequired = xhr.getResponseHeader('X-OAuth-Required'); }catch(_){}
+      if(toastMsg){
+        var toastEl=document.getElementById('toast');
+        if(toastEl){
+          var d=document.createElement('div');
+          var isOAuth = oauthRequired === '1' || toastMsg.indexOf('OAuth') !== -1;
+          d.className=isOAuth ? 'bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-xl shadow-sm text-sm flex items-center gap-2' : 'bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl shadow-sm text-sm';
+          d.setAttribute('role', isOAuth ? 'status' : 'alert');
+          d.textContent=toastMsg;
+          toastEl.appendChild(d);
+          setTimeout(function(){ if(toastEl.contains(d)) toastEl.removeChild(d); }, isOAuth ? 8000 : 4500);
+        }
+      }
+      if(oauthRequired === '1'){
+        var serverName = null;
+        try{
+          var form=document.getElementById('add-form');
+          if(form){
+            var inp=form.querySelector('#field-name');
+            if(inp) serverName=inp.value;
+          }
+        }catch(_){}
+        if(serverName){
+          (function(name){
+            var toastEl3=document.getElementById('toast');
+            function showOAuthToast(msg, isError){
+              if(!toastEl3) return;
+              var d3=document.createElement('div');
+              d3.className= isError ? 'bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl shadow-sm text-sm' : 'bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-xl shadow-sm text-sm flex items-center gap-2';
+              d3.setAttribute('role', isError ? 'alert' : 'status');
+              d3.textContent=msg;
+              toastEl3.appendChild(d3);
+              setTimeout(function(){ if(toastEl3.contains(d3)) toastEl3.removeChild(d3); }, 8000);
+            }
+            showOAuthToast('Initiating OAuth for ' + name + '...', false);
+            fetch('/api/servers/' + encodeURIComponent(name) + '/oauth/start', {method:'POST', headers:{'HX-Request':'true'}})
+              .then(function(r2){ return r2.json().then(function(data2){ return {status:r2.status, data:data2}; }); })
+              .then(function(res){
+                if(res.status === 200 && res.data.auth_url){
+                  showOAuthToast('Opening browser for authentication...', false);
+                  window.open(res.data.auth_url, '_blank');
+                  var attempts=0;
+                  var interval=setInterval(function(){
+                    attempts++;
+                    if(attempts>60){ clearInterval(interval); showOAuthToast('OAuth timed out, try Refresh', true); return; }
+                    fetch('/api/servers/' + encodeURIComponent(name) + '/oauth/status', {headers:{'HX-Request':'true'}})
+                      .then(function(r3){ return r3.json(); })
+                      .then(function(st){
+                        if(st.status === 'completed'){
+                          clearInterval(interval);
+                          showOAuthToast('OAuth successful! Refreshing...', false);
+                          var tbody=document.getElementById('server-table-body');
+                          if(tbody){
+                            fetch('/dashboard/servers', {headers:{'HX-Request':'true'}})
+                              .then(function(r4){ return r4.text(); })
+                              .then(function(html){
+                                var tmp=document.createElement('template'); tmp.innerHTML=html.trim();
+                                var newTbody=tmp.content.querySelector('#server-table-body');
+                                if(newTbody && tbody.parentNode) tbody.parentNode.replaceChild(newTbody, tbody);
+                                var newStats=tmp.content.querySelector('#dashboard-stats');
+                                if(newStats){
+                                  var cur=document.getElementById('dashboard-stats');
+                                  if(cur) cur.outerHTML=newStats.outerHTML;
+                                }
+                              });
+                          }
+                        }
+                      }).catch(function(){});
+                  }, 2000);
+                } else {
+                  var errMsg = (res.data && res.data.detail) ? res.data.detail : 'OAuth failed to start';
+                  showOAuthToast(errMsg, true);
+                }
+              }).catch(function(err){
+                showOAuthToast('OAuth error: ' + err, true);
+              });
+          })(serverName);
+        }
+      }
+    });
+  }
+
   function init() {
     setupType();
     setupOAuth();
@@ -176,6 +331,9 @@
     setupCopy();
     setupFormReset();
     setupVisualFeedback();
+    setupGlobalErrorToast();
+    setupRevealVisibility();
+    setupHeaderToast();
     syncType();
     syncOAuth();
   }

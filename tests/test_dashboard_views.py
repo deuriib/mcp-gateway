@@ -28,7 +28,10 @@ def test_tailwind_vendored_no_node() -> None:
     assert css_path.stat().st_size < 100 * 1024
     htmx_path = Path("src/mcp_gway/dashboard/static/htmx.min.js")
     assert htmx_path.exists()
-    assert htmx_path.stat().st_size < 20 * 1024
+    assert htmx_path.stat().st_size < 100 * 1024
+    tailwind_js = Path("src/mcp_gway/dashboard/static/tailwindcss.min.js")
+    assert tailwind_js.exists()
+    assert tailwind_js.stat().st_size < 500 * 1024
     assert not Path("package.json").exists()
     assert not Path("node_modules").exists()
 
@@ -249,8 +252,9 @@ def test_dashboard_js_has_oauth_and_reset() -> None:
     assert "setupVisualFeedback" in js
     assert "form.reset()" in js
     assert "field-oauth" in js
+    assert "X-Toast" in js
+    assert "X-OAuth-Required" in js
 
     htmx = Path("src/mcp_gway/dashboard/static/htmx.min.js").read_text(encoding="utf-8")
-    assert "X-Toast" in htmx
-    assert "X-OAuth-Required" in htmx
-    assert "form.reset()" in htmx or "t.reset()" in htmx
+    assert "htmx" in htmx.lower()
+    assert len(htmx) > 10000

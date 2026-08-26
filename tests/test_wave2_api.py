@@ -148,4 +148,7 @@ async def test_csp_header(gateway: Gateway) -> None:
         r = await client.get("/health")
         assert r.headers.get("content-security-policy") == "default-src 'self'"
         r = await client.get("/dashboard")
-        assert r.headers.get("content-security-policy") == "default-src 'self'"
+        csp = r.headers.get("content-security-policy", "")
+        assert "default-src 'self'" in csp
+        assert "style-src" in csp
+        assert "'unsafe-inline'" in csp

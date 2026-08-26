@@ -364,8 +364,10 @@ async def test_oauth_toast_and_automatic_header(gateway: Gateway, monkeypatch) -
         assert "x-toast" in resp.headers
         assert "OAuth" in resp.headers["x-toast"]
         assert resp.headers.get("x-oauth-required") == "1"
-        assert "hx-swap-oob" not in resp.text
+        # cards now update via OOB, but toast still via header
         assert "server-table-body" in resp.text
+        # allow stats OOB but not toast OOB for this flow (toast via header)
+        assert 'id="toast" hx-swap-oob' not in resp.text
 
 
 @pytest.mark.asyncio

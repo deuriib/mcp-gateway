@@ -9,6 +9,11 @@ from typing import Any
 import htpy
 from markupsafe import Markup
 
+try:
+    from mcp_gway import __version__ as _APP_VERSION
+except Exception:
+    _APP_VERSION = "0.0.0"
+
 _DIALOG_ID = "server-dialog"
 _DIALOG_TARGET = f"#{_DIALOG_ID}"
 _CLOSE_ATTRS: dict[str, str] = {
@@ -142,23 +147,27 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
         else "bg-zinc-50 text-zinc-700 border-zinc-200"
     )
     return htpy.tr(
-        class_="group transition-all duration-200 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 animate-row",
+        class_="group transition-all duration-200 hover:bg-slate-50 border-b border-slate-100 last:border-0 animate-row",
         **{
-            "hx-get": detail_url,
-            "hx-target": _DIALOG_TARGET,
-            "hx-swap": "innerHTML",
-            "hx-indicator": "#global-spinner",
             "data-name": name.lower(),
         },
     )[
-        htpy.td(class_="px-4 py-3.5")[
+        htpy.td(
+            class_="px-4 py-3.5 cursor-pointer",
+            **{
+                "hx-get": detail_url,
+                "hx-target": _DIALOG_TARGET,
+                "hx-swap": "innerHTML",
+                "hx-indicator": "#global-spinner",
+            },
+        )[
             htpy.div(class_="flex items-center gap-3")[
                 htpy.span(
                     class_="hidden sm:flex h-8 w-8 items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-500 shadow-sm group-hover:border-slate-300 group-hover:shadow transition-all duration-200"
                 )[_icon("server", cls="h-4 w-4"),],
                 htpy.div(class_="flex flex-col")[
                     htpy.span(
-                        class_="font-mono text-sm font-medium tracking-tight text-slate-900"
+                        class_="font-mono text-sm font-medium tracking-tight text-slate-900 hover:text-slate-700"
                     )[name],
                     htpy.span(class_="text-xs text-slate-400 sm:hidden")[
                         f"{type_label} • {tool_count} tools"
@@ -205,6 +214,7 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
                         "hx-headers": '{"Content-Type":"application/json"}',
                         "hx-target": "#server-table-body",
                         "hx-swap": "outerHTML",
+                        "hx-indicator": "#global-spinner",
                     },
                 )[toggle_label],
                 htpy.button(
@@ -216,6 +226,7 @@ def server_row(server: dict[str, Any], idx: int = 0) -> Any:
                         "hx-confirm": f"Delete server '{name}'? This cannot be undone.",
                         "hx-target": "#server-table-body",
                         "hx-swap": "outerHTML",
+                        "hx-indicator": "#global-spinner",
                     },
                 )[htpy.span(aria_hidden="true")["X"]],
             ]
@@ -629,6 +640,170 @@ def _drawer_metadata(server: dict[str, Any]) -> Any:
     ]
 
 
+def _has_secrets(server: dict[str, Any]) -> bool:
+    return bool(
+        server.get("headers")
+        or server.get("environment")
+        or server.get("oauth")
+        or server.get("has_secrets")
+    )
+
+
+def _drawer_edit_form(server: dict[str, Any]) -> Any:
+    name = server.get("name", "")
+    quoted = urllib.parse.quote(name, safe="")
+    typ = server.get("type", "remote")
+    timeout = server.get("timeout", 5000)
+    url_val = server.get("url") or ""
+    cmd_val = server.get("command") or ""
+    if isinstance(cmd_val, list):
+        cmd_str = " ".join(str(x) for x in cmd_val)
+    else:
+        cmd_str = str(cmd_val) if cmd_val else ""
+    cwd_val = server.get("cwd") or ""
+    headers_val = ""
+    env_val = ""
+    if server.get("type") == "remote" and server.get("headers"):
+        try:
+            headers_val = json.dumps(server.get("headers"), indent=2)
+        except Exception:
+            headers_val = ""
+    if server.get("type") == "local" and server.get("environment"):
+        try:
+            env_val = json.dumps(server.get("environment"), indent=2)
+        except Exception:
+            env_val = ""
+    edit_url = f"/api/servers/{quoted}"
+    return htpy.details(
+        id="drawer-edit-details",
+        class_="group rounded-xl border border-slate-200 bg-slate-50/50 open:bg-white transition-colors duration-200",
+    )[
+        htpy.summary(
+            class_="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 hover:text-slate-900"
+        )[
+            htpy.span(class_="flex items-center gap-2")[
+                htpy.span(
+                    class_="text-slate-400 group-open:rotate-90 transition-transform duration-200"
+                )["›"],
+                "Edit server",
+            ],
+            htpy.span(class_="text-xs font-normal text-slate-400")["advanced"],
+        ],
+        htpy.form(
+            class_="px-4 pb-4 pt-1 space-y-3",
+            **{
+                "hx-patch": edit_url,
+                "hx-target": "#server-table-body",
+                "hx-swap": "outerHTML",
+                "hx-indicator": "#edit-spinner",
+            },
+        )[
+            htpy.input(type="hidden", name="_from_edit", value="true"),
+            htpy.input(type="hidden", name="type", value=typ),
+            htpy.div(class_="grid grid-cols-1 gap-3")[
+                htpy.div[
+                    htpy.label(
+                        class_="block text-xs font-medium text-slate-600 mb-1",
+                        for_="edit-timeout",
+                    )["Timeout (ms)"],
+                    htpy.input(
+                        id="edit-timeout",
+                        name="timeout",
+                        type="number",
+                        value=str(timeout),
+                        class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900",
+                    ),
+                ],
+                (
+                    htpy.div[
+                        htpy.label(
+                            class_="block text-xs font-medium text-slate-600 mb-1",
+                            for_="edit-url",
+                        )["URL (remote)"],
+                        htpy.input(
+                            id="edit-url",
+                            name="url",
+                            type="url",
+                            value=str(url_val),
+                            placeholder="https://example.com/mcp",
+                            class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900",
+                        ),
+                    ]
+                    if typ == "remote"
+                    else htpy.div[
+                        htpy.label(
+                            class_="block text-xs font-medium text-slate-600 mb-1",
+                            for_="edit-command",
+                        )["Command (local)"],
+                        htpy.input(
+                            id="edit-command",
+                            name="command",
+                            value=cmd_str,
+                            placeholder="npx -y my-mcp",
+                            class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900",
+                        ),
+                        htpy.label(
+                            class_="block text-xs font-medium text-slate-600 mb-1 mt-3",
+                            for_="edit-cwd",
+                        )["CWD"],
+                        htpy.input(
+                            id="edit-cwd",
+                            name="cwd",
+                            value=cwd_val,
+                            placeholder="/path/to/workdir",
+                            class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900",
+                        ),
+                    ]
+                ),
+                htpy.div[
+                    htpy.label(
+                        class_="block text-xs font-medium text-slate-600 mb-1",
+                        for_="edit-headers",
+                    )["Headers (JSON) — leave empty to keep masked"],
+                    htpy.textarea(
+                        id="edit-headers",
+                        name="headers",
+                        rows="2",
+                        placeholder='{"Authorization": "Bearer ***"}',
+                        class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900",
+                    )[headers_val],
+                ],
+                htpy.div[
+                    htpy.label(
+                        class_="block text-xs font-medium text-slate-600 mb-1",
+                        for_="edit-env",
+                    )["Environment (JSON) — leave empty to keep masked"],
+                    htpy.textarea(
+                        id="edit-env",
+                        name="environment",
+                        rows="2",
+                        placeholder='{"FOO": "***"}',
+                        class_="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900",
+                    )[env_val],
+                ],
+            ],
+            htpy.div(class_="flex items-center gap-2 pt-2")[
+                htpy.button(
+                    type="submit",
+                    class_="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-black active:scale-95 transition-all min-h-10",
+                )["Save changes"],
+                htpy.span(
+                    id="edit-spinner",
+                    class_="htmx-indicator inline-flex items-center gap-2 text-xs text-slate-500",
+                )[
+                    htpy.span(
+                        class_="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900"
+                    )[[]],
+                    "Saving…",
+                ],
+            ],
+            htpy.p(class_="text-xs text-slate-400")[
+                "Only filled JSON fields will be updated; empty keeps existing secrets."
+            ],
+        ],
+    ]
+
+
 def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
     name = server.get("name", "")
     enabled = server.get("enabled", True)
@@ -639,6 +814,28 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
     refresh_url = f"/api/servers/{quoted}/refresh"
     reveal_url = f"/api/servers/{quoted}/reveal"
     delete_url = f"/api/servers/{quoted}"
+    has_secret = _has_secrets(server)
+    reveal_btn = htpy.fragment[[]]
+    if has_secret:
+        if warning_banner:
+            reveal_btn = htpy.button(
+                class_="inline-flex items-center cursor-pointer justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-11",
+                aria_label="Reveal secrets",
+                disabled="disabled",
+                title="Reveal disabled on non-loopback",
+            )["Reveal"]
+        else:
+            reveal_btn = htpy.button(
+                class_="inline-flex items-center cursor-pointer justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11",
+                aria_label="Reveal secrets",
+                title="Reveal masked secrets (local only)",
+                **{
+                    "hx-post": reveal_url,
+                    "hx-target": "#drawer-reveal-output",
+                    "hx-swap": "outerHTML",
+                    "hx-indicator": "#reveal-spinner",
+                },
+            )["Reveal"]
     return htpy.div(class_="flex flex-wrap gap-2")[
         htpy.button(
             class_="inline-flex items-center justify-center cursor-pointer rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-black hover:shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11",
@@ -648,8 +845,9 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
                 "hx-patch": patch_url,
                 "hx-vals": json.dumps({"enabled": toggle_val}),
                 "hx-headers": '{"Content-Type":"application/json"}',
-                "hx-target": _DIALOG_TARGET,
-                "hx-swap": "innerHTML",
+                "hx-target": "#server-table-body",
+                "hx-swap": "outerHTML",
+                "hx-indicator": "#global-spinner",
             },
         )[toggle_label],
         htpy.button(
@@ -658,30 +856,12 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
             title="Refresh tool list from server",
             **{
                 "hx-post": refresh_url,
-                "hx-target": "#toast",
-                "hx-swap": "innerHTML",
+                "hx-target": "#drawer-feedback",
+                "hx-swap": "outerHTML",
+                "hx-indicator": "#refresh-spinner",
             },
         )["Refresh"],
-        htpy.button(
-            class_="inline-flex items-center cursor-pointer justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-11",
-            aria_label="Reveal secrets",
-            **(
-                {
-                    "hx-post": reveal_url,
-                    "hx-target": "#toast",
-                    "hx-swap": "innerHTML",
-                    "disabled": "disabled",
-                    "title": "Reveal disabled on non-loopback",
-                }
-                if warning_banner
-                else {
-                    "hx-post": reveal_url,
-                    "hx-target": "#toast",
-                    "hx-swap": "innerHTML",
-                    "title": "Reveal masked secrets (local only)",
-                }
-            ),
-        )["Reveal"],
+        reveal_btn,
         htpy.button(
             class_="inline-flex items-center justify-center rounded-full cursor-pointer bg-white border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 min-h-11",
             aria_label=f"Delete {name}",
@@ -691,8 +871,27 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
                 "hx-confirm": f"Delete server '{name}'? This cannot be undone.",
                 "hx-target": "#server-table-body",
                 "hx-swap": "outerHTML",
+                "hx-indicator": "#global-spinner",
             },
         )["Delete"],
+        htpy.span(
+            id="refresh-spinner",
+            class_="htmx-indicator inline-flex items-center gap-1.5 text-xs text-slate-500",
+        )[
+            htpy.span(
+                class_="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900"
+            )[[]],
+            "Refreshing…",
+        ],
+        htpy.span(
+            id="reveal-spinner",
+            class_="htmx-indicator inline-flex items-center gap-1.5 text-xs text-slate-500",
+        )[
+            htpy.span(
+                class_="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900"
+            )[[]],
+            "Revealing…",
+        ],
     ]
 
 
@@ -753,6 +952,16 @@ def server_drawer(
             htpy.div(class_="flex items-center gap-2")[badge(state)],
             _drawer_metadata(server),
             _drawer_actions(server, warning_banner),
+            htpy.div(id="drawer-feedback", class_="min-h-6")[
+                htpy.p(class_="text-xs text-slate-400")[
+                    "Refresh updates tools in background; Reveal shows secrets locally."
+                ]
+            ],
+            htpy.div(
+                id="drawer-reveal-output",
+                class_="hidden rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-mono overflow-auto max-h-40",
+            )[[]],
+            _drawer_edit_form(server),
             _tool_panel(tool_count, pyi_content, truncated),
         ],
     ]
@@ -766,7 +975,9 @@ def _footer() -> Any:
             class_="flex items-center justify-center gap-2 text-xs text-slate-400"
         )[
             htpy.span(class_="h-1 w-1 rounded-full bg-slate-300")[[]],
-            htpy.span["MCP Gateway • v0.7.0 • local-first — crafted with dedication"],
+            htpy.span[
+                f"MCP Gateway • v{_APP_VERSION} • local-first — crafted with dedication"
+            ],
             htpy.span(class_="h-1 w-1 rounded-full bg-slate-300")[[]],
         ],
     ]
@@ -782,6 +993,7 @@ def base_layout(
             htpy.meta(name="color-scheme", content="light"),
             htpy.title[title],
             htpy.link(rel="stylesheet", href="/static/tailwind.css"),
+            htpy.script(src="/static/tailwindcss.min.js")[[]],
             htpy.script(src="/static/htmx.min.js")[[]],
             htpy.script(src="/static/dialog.js")[[]],
             htpy.script(src="/static/dashboard.js")[[]],
@@ -814,7 +1026,7 @@ def navbar(*, healthy: int, total: int, health_badge: Any) -> Any:
                 ],
                 htpy.span(
                     class_="hidden md:inline-flex items-center rounded-full bg-slate-900 text-white px-2.5 py-0.5 text-xs font-medium tracking-wide"
-                )["v0.7.0"],
+                )[f"v{_APP_VERSION}"],
             ],
             htpy.div(class_="flex items-center gap-2 sm:gap-3")[
                 htpy.div(
@@ -864,7 +1076,9 @@ def _stats(servers: list[dict[str, Any]]) -> Any:
         "Disabled": (str(disabled), ""),
         "Unreachable": (str(unreachable), ""),
     }
-    return htpy.div(class_="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4")[
+    return htpy.div(
+        id="dashboard-stats", class_="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"
+    )[
         *[
             htpy.div(
                 class_="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-200 group"

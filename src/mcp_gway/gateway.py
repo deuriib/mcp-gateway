@@ -24,7 +24,20 @@ from mcp_gway.registry import Registry
 class _CSPMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         response = await call_next(request)
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        path = request.url.path
+        if path == "/" or path.startswith(("/dashboard", "/static")):
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "script-src-elem 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "style-src-elem 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; "
+                "connect-src 'self'; "
+                "font-src 'self' data:"
+            )
+        else:
+            response.headers["Content-Security-Policy"] = "default-src 'self'"
         return response
 
 

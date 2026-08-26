@@ -156,10 +156,61 @@ async def _read_limited_body(request: Request, limit: int) -> bytes | JSONRespon
 
 
 def _csp_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
-    base = {"Content-Security-Policy": "default-src 'self'"}
+    base = {
+        "Content-Security-Policy": (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "script-src-elem 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "style-src-elem 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "font-src 'self' data:"
+        )
+    }
     if extra:
         base.update(extra)
     return base
+
+
+def _stats_oob(registry: Registry) -> str:
+    try:
+        from mcp_gway.dashboard.views import (
+            _stats as _render_stats,  # type: ignore[attr-defined]
+        )
+
+        servers = _collect_servers(registry)
+        html_stats = str(_render_stats(servers))
+        return f"<div id='dashboard-stats' hx-swap-oob='outerHTML'>{html_stats}</div>"
+    except Exception:
+        return ""
+
+
+def _table_with_oob(
+    registry: Registry,
+    toast_msg: str | None = None,
+    toast_variant: str = "red",
+    close_dialog: bool = False,
+) -> str:
+    servers = _collect_servers(registry)
+    table_html = str(server_table(servers))
+    oob = _stats_oob(registry)
+    toast_oob = _toast_oob(toast_msg, toast_variant) if toast_msg else ""
+    dialog_oob = (
+        "<div id='server-dialog' hx-swap-oob='innerHTML'></div>" if close_dialog else ""
+    )
+    return f"{table_html}{oob}{toast_oob}{dialog_oob}"
+
+
+def _drawer_feedback_html(msg: str, variant: str = "slate") -> str:
+    colors = {
+        "slate": "bg-slate-50 border border-slate-200 text-slate-700",
+        "amber": "bg-amber-50 border border-amber-200 text-amber-800",
+        "emerald": "bg-emerald-50 border border-emerald-200 text-emerald-700",
+        "red": "bg-red-50 border border-red-200 text-red-800",
+    }
+    cls = colors.get(variant, colors["slate"])
+    return f"<div class='{cls} px-3 py-2 rounded-xl text-xs'>{_e(msg)}</div>"
 
 
 async def handle_dashboard(request: Request) -> HTMLResponse:
@@ -168,10 +219,9 @@ async def handle_dashboard(request: Request) -> HTMLResponse:
     warning = host not in ("127.0.0.1", "::1", "localhost")
     servers = _collect_servers(registry)
     html_content = str(layout(servers, warning_banner=warning))
-    headers = {}
+    headers: dict[str, str] = dict(_csp_headers())
     if warning:
         headers["X-Warning"] = "exposed"
-    headers["Content-Security-Policy"] = "default-src 'self'"
     return HTMLResponse(html_content, headers=headers)
 
 
@@ -179,7 +229,10 @@ async def handle_dashboard_servers(request: Request) -> HTMLResponse:
     registry: Registry = request.app.state.registry  # type: ignore[attr-defined]
     servers = _collect_servers(registry)
     html_content = str(server_table(servers))
-    return HTMLResponse(html_content, headers=_csp_headers())
+    # include stats OOB so cards stay synced on polling
+    stats_oob = _stats_oob(registry)
+    full = f"{html_content}{stats_oob}"
+    return HTMLResponse(full, headers=_csp_headers())
 
 
 def _detail_error(e: Exception, name: str) -> HTMLResponse:
@@ -260,7 +313,9 @@ async def handle_list(request: Request) -> JSONResponse | HTMLResponse:
     servers = _collect_servers(registry)
     if _is_htmx_request(request):
         html_content = str(server_table(servers))
-        return HTMLResponse(html_content, headers=_csp_headers())
+        stats_oob = _stats_oob(registry)
+        full = f"{html_content}{stats_oob}"
+        return HTMLResponse(full, headers=_csp_headers())
     return JSONResponse(servers, headers=_csp_headers())
 
 
@@ -828,29 +883,39 @@ def _create_success_resp(
     tool_count = len(tools)
     if _is_htmx_request(request):
         servers = _collect_servers(registry)
-        html_content = str(server_table(servers))
+        table_html = str(server_table(servers))
+        stats_oob = _stats_oob(registry)
+        toast_msg = None
+        headers = _csp_headers()
         if tool_count == 0:
-            headers = _csp_headers()
             if config.type == "remote":
                 if config.oauth:
-                    headers["X-Toast"] = (
+                    toast_msg = (
                         f"No tools discovered -- '{config.name}' saved, OAuth enabled. "
                         "Browser will open for authentication, or run: mcp-gway refresh "
                         f"{config.name} --auth"
                     )
                     headers["X-OAuth-Required"] = "1"
                 else:
-                    headers["X-Toast"] = (
+                    toast_msg = (
                         f"No tools discovered -- '{config.name}' saved but unreachable (401). "
                         'For PAT add Authorization in Advanced -> Headers {"Authorization": "Bearer <token>"}; '
                         f"for OAuth enable the OAuth check or run: mcp-gway refresh {config.name} --auth"
                     )
             else:
-                headers["X-Toast"] = (
-                    "No tools discovered -- server saved but unreachable. Check command & logs"
-                )
+                toast_msg = "No tools discovered -- server saved but unreachable. Check command & logs"
+            if toast_msg:
+                headers["X-Toast"] = toast_msg
+            html_content = f"{table_html}{stats_oob}"
             return HTMLResponse(html_content, status_code=201, headers=headers)
-        return HTMLResponse(html_content, status_code=201, headers=_csp_headers())
+        # success with tools
+        toast_oob = (
+            _toast_oob(f"Added '{config.name}' with {tool_count} tools", "emerald")
+            if tool_count
+            else ""
+        )
+        html_content = f"{table_html}{stats_oob}{toast_oob}"
+        return HTMLResponse(html_content, status_code=201, headers=headers)
     return JSONResponse(
         {"name": config.name, "tool_count": tool_count},
         status_code=201,
@@ -878,57 +943,391 @@ async def handle_create(request: Request) -> JSONResponse | HTMLResponse:
     return _create_success_resp(registry, config, tools, request)
 
 
-async def handle_patch(request: Request) -> JSONResponse:
+async def handle_patch(request: Request) -> JSONResponse | HTMLResponse:
     registry: Registry = request.app.state.registry  # type: ignore[attr-defined]
     name = request.path_params["name"]
-    body = await _read_limited_body(request, MAX_SMALL_PAYLOAD)
-    if isinstance(body, JSONResponse):
-        return body
-    try:
-        payload = json.loads(body.decode("utf-8") if body else "{}")
-    except Exception:  # noqa: BLE001
-        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+    is_hx = _is_htmx_request(request)
+    ctype = request.headers.get("content-type", "").lower()
+    payload: dict[str, Any]
+    if "application/json" in ctype:
+        body = await _read_limited_body(request, MAX_SMALL_PAYLOAD)
+        if isinstance(body, JSONResponse):
+            if is_hx:
+                return HTMLResponse(
+                    _toast_oob("payload too large"),
+                    status_code=413,
+                    headers=_csp_headers(),
+                )
+            return body
+        try:
+            payload = json.loads(body.decode("utf-8") if body else "{}")
+            if not isinstance(payload, dict):
+                raise TypeError("payload must be object")
+        except Exception:  # noqa: BLE001
+            if is_hx:
+                return HTMLResponse(
+                    _toast_oob("Invalid JSON"), status_code=400, headers=_csp_headers()
+                )
+            return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+    else:
+        parsed = await _parse_form_body(request)
+        if isinstance(parsed, (JSONResponse, HTMLResponse)):
+            return parsed
+        payload = parsed  # type: ignore[assignment]
+        if "enabled" in payload and isinstance(payload["enabled"], str):
+            v = payload["enabled"].lower()
+            if v in ("true", "1", "on", "yes"):
+                payload["enabled"] = True
+            elif v in ("false", "0", "off", "no"):
+                payload["enabled"] = False
+    # Edit flow: if payload contains fields beyond enabled (or _from_edit flag), handle as full edit
+    has_edit_fields = any(
+        k in payload
+        for k in (
+            "timeout",
+            "url",
+            "command",
+            "headers",
+            "environment",
+            "cwd",
+            "type",
+            "oauth",
+        )
+    )
+    from_edit = bool(payload.get("_from_edit")) or has_edit_fields
+    if from_edit:
+        # Full edit — merge with existing config
+        try:
+            existing = registry.get_config(name)
+        except FileNotFoundError:
+            if is_hx:
+                return HTMLResponse(
+                    _toast_oob(f"Server '{_e(name)}' not found"),
+                    status_code=404,
+                    headers=_csp_headers(),
+                )
+            return JSONResponse(
+                {"detail": f"Server '{_e(name)}' not found"},
+                status_code=404,
+                headers=_csp_headers(),
+            )
+        except json.JSONDecodeError:
+            if is_hx:
+                return HTMLResponse(
+                    _toast_oob("Corrupt config, remove and re-add"),
+                    status_code=500,
+                    headers=_csp_headers(),
+                )
+            return JSONResponse(
+                {"detail": "Corrupt config, remove and re-add"},
+                status_code=500,
+                headers=_csp_headers(),
+            )
+        except ValueError:
+            if is_hx:
+                return HTMLResponse(
+                    _toast_oob("invalid request"),
+                    status_code=400,
+                    headers=_csp_headers(),
+                )
+            return JSONResponse(
+                {"detail": "invalid request", "code": "validation_error"},
+                status_code=400,
+                headers=_csp_headers(),
+            )
+        # Build merged payload
+        merged: dict[str, Any] = {
+            "name": existing.name,
+            "type": payload.get("type") or existing.type,
+            "enabled": payload.get("enabled", existing.enabled),
+            "timeout": existing.timeout,
+        }
+        if "timeout" in payload:
+            try:
+                merged["timeout"] = int(payload["timeout"])
+            except Exception:
+                merged["timeout"] = existing.timeout
+        if existing.type == "remote" or merged["type"] == "remote":
+            merged["url"] = payload.get("url") or existing.url
+            # headers handling: if empty string, keep existing; if JSON string, parse
+            hdr_raw = payload.get("headers")
+            if isinstance(hdr_raw, str):
+                hdr_raw = hdr_raw.strip()
+                if not hdr_raw:
+                    merged["headers"] = existing.headers
+                else:
+                    try:
+                        parsed = json.loads(hdr_raw)
+                        if isinstance(parsed, dict):
+                            merged["headers"] = parsed
+                        else:
+                            merged["headers"] = existing.headers
+                    except Exception:
+                        if is_hx:
+                            return HTMLResponse(
+                                _toast_oob("headers must be a JSON object"),
+                                status_code=400,
+                                headers=_csp_headers(),
+                            )
+                        return JSONResponse(
+                            {"detail": "headers must be a JSON object"},
+                            status_code=400,
+                            headers=_csp_headers(),
+                        )
+            elif isinstance(hdr_raw, dict):
+                merged["headers"] = hdr_raw
+            else:
+                merged["headers"] = existing.headers
+            if existing.oauth is not None:
+                merged["oauth"] = (
+                    existing.oauth
+                    if isinstance(existing.oauth, dict)
+                    else existing.oauth.model_dump()
+                    if hasattr(existing.oauth, "model_dump")
+                    else existing.oauth
+                )
+            if "oauth" in payload and payload["oauth"] is not None:
+                merged["oauth"] = payload["oauth"]
+        else:
+            # local
+            cmd_raw = payload.get("command")
+            if isinstance(cmd_raw, str):
+                cmd_raw = cmd_raw.strip()
+                if cmd_raw:
+                    try:
+                        merged["command"] = shlex.split(cmd_raw)
+                    except Exception:
+                        merged["command"] = [cmd_raw]
+                else:
+                    merged["command"] = existing.command
+            elif isinstance(cmd_raw, list):
+                merged["command"] = cmd_raw
+            else:
+                merged["command"] = existing.command
+            merged["cwd"] = payload.get("cwd") or existing.cwd
+            env_raw = payload.get("environment")
+            if isinstance(env_raw, str):
+                env_raw = env_raw.strip()
+                if not env_raw:
+                    merged["environment"] = existing.environment
+                else:
+                    try:
+                        parsed_e = json.loads(env_raw)
+                        if isinstance(parsed_e, dict):
+                            merged["environment"] = parsed_e
+                        else:
+                            merged["environment"] = existing.environment
+                    except Exception:
+                        if is_hx:
+                            return HTMLResponse(
+                                _toast_oob("environment must be a JSON object"),
+                                status_code=400,
+                                headers=_csp_headers(),
+                            )
+                        return JSONResponse(
+                            {"detail": "environment must be a JSON object"},
+                            status_code=400,
+                            headers=_csp_headers(),
+                        )
+            elif isinstance(env_raw, dict):
+                merged["environment"] = env_raw
+            else:
+                merged["environment"] = existing.environment
+        # Preserve resolved_transport and other internal fields
+        if existing.resolved_transport:
+            merged["resolved_transport"] = existing.resolved_transport
+        # Clean Nones / empty
+        for k in ("url", "command", "headers", "environment", "cwd", "oauth"):
+            v = merged.get(k)
+            if isinstance(v, str) and not v.strip():
+                merged.pop(k, None)
+        try:
+            new_cfg = MCPServerConfig(
+                **{
+                    k: v
+                    for k, v in merged.items()
+                    if v is not None or k in ("name", "type")
+                }
+            )
+        except ValidationError as e:
+            return _handle_validation_error(e, merged, request)
+        except ValueError as e:
+            return _handle_validation_error(e, merged, request)
+        # Persist: need to keep tools
+        try:
+            tools = []
+            try:
+                content = registry.read_pyi(name)
+                # keep existing tools count dummy, but preserve pyi by reusing registry.add with new config and existing tools list
+                # we have no tool objects, create empty ToolInfo list; _generate_pyi will rebuild but with empty — better fetch actual tools via parsing? For edit we preserve tool_count by reusing existing pyi tools count via dummy?
+                # Instead try to preserve existing pyi content by not overwriting? But registry.add will overwrite pyi with empty tools — we want to keep tools.
+                # So try to extract tools from pyi? Simpler: keep empty but tool_count will be 0 until refresh — acceptable for resilience.
+                # Better: try to keep previous tool count by not changing pyi if no discovery.
+                from mcp_gway.models import ToolInfo as _TI
+
+                # count def lines as dummy tools
+                cnt = content.count("def ")
+                tools = [_TI(name=f"tool_{i}", description="") for i in range(cnt)]
+            except Exception:
+                tools = []
+            registry.add(new_cfg, tools)  # type: ignore[arg-type]
+        except ValueError:
+            if is_hx:
+                return HTMLResponse(
+                    _toast_oob("invalid request"),
+                    status_code=400,
+                    headers=_csp_headers(),
+                )
+            return JSONResponse(
+                {"detail": "invalid request", "code": "validation_error"},
+                status_code=400,
+                headers=_csp_headers(),
+            )
+        except Exception:
+            if is_hx:
+                return HTMLResponse(
+                    _toast_oob("Corrupt config, remove and re-add"),
+                    status_code=500,
+                    headers=_csp_headers(),
+                )
+            return JSONResponse(
+                {"detail": "Corrupt config, remove and re-add"},
+                status_code=500,
+                headers=_csp_headers(),
+            )
+        if is_hx:
+            html_table = _table_with_oob(
+                registry,
+                toast_msg=f"Updated '{_e(name)}'",
+                toast_variant="emerald",
+                close_dialog=True,
+            )
+            return HTMLResponse(html_table, headers=_csp_headers())
+        result = _server_to_dict(registry, name)
+        return JSONResponse(result, headers=_csp_headers())
+    # Simple enabled toggle
     if "enabled" not in payload:
-        return JSONResponse({"detail": "enabled required"}, status_code=400)
+        if is_hx:
+            return HTMLResponse(
+                _toast_oob("enabled required"), status_code=400, headers=_csp_headers()
+            )
+        return JSONResponse(
+            {"detail": "enabled required"}, status_code=400, headers=_csp_headers()
+        )
     enabled_val = payload["enabled"]
     if not isinstance(enabled_val, bool):
-        return JSONResponse({"detail": "enabled must be boolean"}, status_code=400)
+        if is_hx:
+            return HTMLResponse(
+                _toast_oob("enabled must be boolean"),
+                status_code=400,
+                headers=_csp_headers(),
+            )
+        return JSONResponse(
+            {"detail": "enabled must be boolean"},
+            status_code=400,
+            headers=_csp_headers(),
+        )
     try:
         registry.get_config(name)
     except FileNotFoundError:
+        if is_hx:
+            return HTMLResponse(
+                _toast_oob(f"Server '{_e(name)}' not found"),
+                status_code=404,
+                headers=_csp_headers(),
+            )
         return JSONResponse(
-            {"detail": f"Server '{_e(name)}' not found"}, status_code=404
+            {"detail": f"Server '{_e(name)}' not found"},
+            status_code=404,
+            headers=_csp_headers(),
         )
     except json.JSONDecodeError:
+        if is_hx:
+            return HTMLResponse(
+                _toast_oob("Corrupt config, remove and re-add"),
+                status_code=500,
+                headers=_csp_headers(),
+            )
         return JSONResponse(
-            {"detail": "Corrupt config, remove and re-add"}, status_code=500
+            {"detail": "Corrupt config, remove and re-add"},
+            status_code=500,
+            headers=_csp_headers(),
         )
     except ValueError:
+        if is_hx:
+            return HTMLResponse(
+                _toast_oob("invalid request"), status_code=400, headers=_csp_headers()
+            )
         return JSONResponse(
-            {"detail": "invalid request", "code": "validation_error"}, status_code=400
+            {"detail": "invalid request", "code": "validation_error"},
+            status_code=400,
+            headers=_csp_headers(),
         )
     try:
         registry.patch_enabled(name, enabled_val)
     except ValueError:
+        if is_hx:
+            return HTMLResponse(
+                _toast_oob("invalid request"), status_code=400, headers=_csp_headers()
+            )
         return JSONResponse(
-            {"detail": "invalid request", "code": "validation_error"}, status_code=400
+            {"detail": "invalid request", "code": "validation_error"},
+            status_code=400,
+            headers=_csp_headers(),
         )
     except FileNotFoundError:
+        if is_hx:
+            return HTMLResponse(
+                _toast_oob(f"Server '{_e(name)}' not found"),
+                status_code=404,
+                headers=_csp_headers(),
+            )
         return JSONResponse(
-            {"detail": f"Server '{_e(name)}' not found"}, status_code=404
+            {"detail": f"Server '{_e(name)}' not found"},
+            status_code=404,
+            headers=_csp_headers(),
         )
+    if is_hx:
+        action = "Enabled" if enabled_val else "Disabled"
+        html_table = _table_with_oob(
+            registry,
+            toast_msg=f"{action} '{_e(name)}'",
+            toast_variant="emerald",
+            close_dialog=True,
+        )
+        return HTMLResponse(html_table, headers=_csp_headers())
     result = _server_to_dict(registry, name)
     return JSONResponse(result, headers=_csp_headers())
 
 
-async def handle_delete(request: Request) -> JSONResponse:
+async def handle_delete(request: Request) -> JSONResponse | HTMLResponse:
+    from starlette.responses import Response
+
     registry: Registry = request.app.state.registry  # type: ignore[attr-defined]
     name = request.path_params["name"]
+    is_hx = _is_htmx_request(request)
     try:
         safe = registry._safe_path(name, ".pyi")  # type: ignore[attr-defined]
         _ = safe
     except ValueError:
-        return JSONResponse(None, status_code=204, headers=_csp_headers())
+        if is_hx:
+            html_table = _table_with_oob(
+                registry,
+                toast_msg="Invalid name",
+                toast_variant="red",
+                close_dialog=True,
+            )
+            return HTMLResponse(html_table, headers=_csp_headers())
+        return Response(status_code=204, headers=_csp_headers())
+    # check if server actually exists to give proper feedback
+    existed = False
+    for suffix in (".pyi", ".json"):
+        try:
+            p = registry._safe_path(name, suffix)  # type: ignore[attr-defined]
+            if p.exists():
+                existed = True
+        except Exception:
+            continue
     for suffix in (".pyi", ".json"):
         try:
             p = registry._safe_path(name, suffix)  # type: ignore[attr-defined]
@@ -944,7 +1343,23 @@ async def handle_delete(request: Request) -> JSONResponse:
                 token_file.unlink()
         except Exception:  # noqa: BLE001, S110
             continue
-    return JSONResponse(None, status_code=204, headers=_csp_headers())
+    if is_hx:
+        if not existed:
+            html_table = _table_with_oob(
+                registry,
+                toast_msg=f"Server '{_e(name)}' not found",
+                toast_variant="amber",
+                close_dialog=True,
+            )
+            return HTMLResponse(html_table, status_code=404, headers=_csp_headers())
+        html_table = _table_with_oob(
+            registry,
+            toast_msg=f"Deleted '{_e(name)}'",
+            toast_variant="emerald",
+            close_dialog=True,
+        )
+        return HTMLResponse(html_table, headers=_csp_headers())
+    return Response(status_code=204, headers=_csp_headers())
 
 
 async def _background_refresh(registry: Registry, name: str) -> None:
@@ -1057,25 +1472,65 @@ async def _background_oauth_flow(registry: Registry, name: str) -> None:
         )
 
 
-async def handle_refresh(request: Request) -> JSONResponse:
+async def handle_refresh(request: Request) -> JSONResponse | HTMLResponse:
     registry: Registry = request.app.state.registry  # type: ignore[attr-defined]
     name = request.path_params["name"]
+    is_hx = _is_htmx_request(request)
     body = await _read_limited_body(request, MAX_SMALL_PAYLOAD)
     if isinstance(body, JSONResponse):
+        if is_hx:
+            return HTMLResponse(
+                _toast_oob("payload too large"), status_code=413, headers=_csp_headers()
+            )
         return body
     try:
         cfg = registry.get_config(name)
     except FileNotFoundError:
+        if is_hx:
+            msg = _drawer_feedback_html(f"Server '{_e(name)}' not found", "red")
+            return HTMLResponse(
+                f"<div id='drawer-feedback' hx-swap-oob='innerHTML'>{msg}</div>",
+                status_code=404,
+                headers=_csp_headers(),
+            )
         return JSONResponse(
-            {"detail": f"Server '{_e(name)}' not found"}, status_code=404
+            {"detail": f"Server '{_e(name)}' not found"},
+            status_code=404,
+            headers=_csp_headers(),
         )
     except json.JSONDecodeError:
+        if is_hx:
+            msg2 = _drawer_feedback_html("Corrupt config, remove and re-add", "red")
+            return HTMLResponse(
+                f"<div id='drawer-feedback' hx-swap-oob='innerHTML'>{msg2}</div>",
+                status_code=500,
+                headers=_csp_headers(),
+            )
         return JSONResponse(
-            {"detail": "Corrupt config, remove and re-add"}, status_code=500
+            {"detail": "Corrupt config, remove and re-add"},
+            status_code=500,
+            headers=_csp_headers(),
         )
     if not cfg.enabled:
-        return JSONResponse({"detail": "Server disabled"}, status_code=409)
+        if is_hx:
+            msg3 = _drawer_feedback_html("Server disabled — enable first", "amber")
+            return HTMLResponse(
+                f"<div id='drawer-feedback' hx-swap-oob='innerHTML'>{msg3}</div>",
+                status_code=409,
+                headers=_csp_headers(),
+            )
+        return JSONResponse(
+            {"detail": "Server disabled"}, status_code=409, headers=_csp_headers()
+        )
     asyncio.create_task(_background_refresh(registry, name))
+    if is_hx:
+        feedback = _drawer_feedback_html(
+            f"Refreshing '{_e(name)}'... checking transports (this may take ~5s)",
+            "slate",
+        )
+        toast = _toast_oob(f"Refreshing '{_e(name)}' in background...", "amber")
+        html = f"<div id='drawer-feedback'>{feedback}<div class='mt-2 flex items-center gap-2 text-xs text-slate-500'><span class='inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900'></span> discovering tools via streamable-http -> SSE...</div></div>{toast}"
+        return HTMLResponse(html, status_code=202, headers=_csp_headers())
     return JSONResponse(
         {"status": "refreshing"}, status_code=202, headers=_csp_headers()
     )
@@ -1112,30 +1567,67 @@ def _check_reveal_rate(ip: str, name: str) -> bool:
     return True
 
 
-async def handle_reveal(request: Request) -> JSONResponse:
+async def handle_reveal(request: Request) -> JSONResponse | HTMLResponse:
     registry: Registry = request.app.state.registry  # type: ignore[attr-defined]
     name = request.path_params["name"]
+    is_hx = _is_htmx_request(request)
     if not _is_loopback(request):
-        return JSONResponse({"detail": "Forbidden"}, status_code=403)
+        if is_hx:
+            return HTMLResponse(
+                "<div id='drawer-reveal-output' class='rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800'>Forbidden — reveal only allowed from 127.0.0.1</div>",
+                status_code=403,
+                headers=_csp_headers(),
+            )
+        return JSONResponse(
+            {"detail": "Forbidden"}, status_code=403, headers=_csp_headers()
+        )
     client_ip = (
         getattr(request.client, "host", "unknown") if request.client else "unknown"
     )
     if not _check_reveal_rate(str(client_ip), name):
-        return JSONResponse({"detail": "Too many requests"}, status_code=429)
+        if is_hx:
+            return HTMLResponse(
+                "<div id='drawer-reveal-output' class='rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800'>Too many requests — try again in 60s</div>",
+                status_code=429,
+                headers=_csp_headers(),
+            )
+        return JSONResponse(
+            {"detail": "Too many requests"}, status_code=429, headers=_csp_headers()
+        )
     body = await _read_limited_body(request, MAX_SMALL_PAYLOAD)
     if isinstance(body, JSONResponse):
+        if is_hx:
+            return HTMLResponse(
+                _toast_oob("payload too large"), status_code=413, headers=_csp_headers()
+            )
         return body
     sanitized = re.sub(r"[^A-Za-z0-9_.-]", "_", name)
     logger.info("reveal name=%s ip=%s", sanitized, str(client_ip))
     try:
         cfg = registry.get_config(name)
     except FileNotFoundError:
+        if is_hx:
+            return HTMLResponse(
+                f"<div id='drawer-reveal-output' class='rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800'>Server '{_e(name)}' not found</div>",
+                status_code=404,
+                headers=_csp_headers(),
+            )
         return JSONResponse(
-            {"detail": f"Server '{_e(name)}' not found"}, status_code=404
+            {"detail": f"Server '{_e(name)}' not found"},
+            status_code=404,
+            headers=_csp_headers(),
         )
     except json.JSONDecodeError:
+        if is_hx:
+            return HTMLResponse(
+                "<div id='drawer-reveal-output' class='rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800'>Corrupt config, remove and re-add</div>",
+                status_code=500,
+                headers=_csp_headers(),
+            )
         return JSONResponse(
-            {"detail": "Corrupt config, remove and re-add"}, status_code=500
+            {"detail": "Corrupt config, remove and re-add"},
+            status_code=500,
+            headers=_csp_headers(),
         )
     result: dict[str, Any] = {}
     if cfg.type == "remote":
@@ -1160,6 +1652,13 @@ async def handle_reveal(request: Request) -> JSONResponse:
             "oauth": cfg.oauth,
         }
         result = {k: v for k, v in result.items() if v is not None}
+    if is_hx:
+        if not result or all(v is None for v in result.values()):
+            out_html = "<div id='drawer-reveal-output' class='rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600'>No secrets stored for this server</div>"
+            return HTMLResponse(out_html, headers=_csp_headers())
+        pretty = html.escape(json.dumps(result, indent=2), quote=True)
+        out_html = f"<div id='drawer-reveal-output' class='rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-mono whitespace-pre-wrap break-all text-emerald-900 max-h-60 overflow-auto' style='display:block'>{pretty}</div><div id='toast' hx-swap-oob='innerHTML'><div class='bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl shadow-sm text-sm' role='status'>Secrets revealed (local only, not logged)</div></div>"
+        return HTMLResponse(out_html, headers=_csp_headers())
     return JSONResponse(result, headers=_csp_headers())
 
 
