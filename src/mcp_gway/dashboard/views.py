@@ -468,9 +468,10 @@ def drawer_error(message: str, status: int = 404) -> Any:
         else "bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl"
     )
     return htpy.aside(
-        class_="relative w-full max-w-md bg-white shadow-2xl h-full overflow-y-auto ml-auto transform transition-all duration-300 translate-x-0 border-l border-slate-200 flex flex-col",
+        class_="relative w-full max-w-md bg-white shadow-2xl h-full max-h-[100dvh] overflow-y-auto overscroll-y-contain ml-auto transform transition-all duration-300 translate-x-0 border-l border-slate-200 flex flex-col focus:outline-none",
         role="region",
         aria_label="Error",
+        tabindex="-1",
     )[
         htpy.div(
             class_="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white z-10"
@@ -943,9 +944,10 @@ def server_drawer(
     else:
         state = "healthy"
     return htpy.aside(
-        class_="relative w-full max-w-md bg-white shadow-2xl h-full rounded-xl overflow-y-auto ml-auto transform transition-all duration-300 translate-x-0 border-l border-slate-200 flex flex-col",
+        class_="relative w-full max-w-md bg-white shadow-2xl h-full max-h-[100dvh] rounded-xl overflow-y-auto overscroll-y-contain ml-auto transform transition-all duration-300 translate-x-0 border-l border-slate-200 flex flex-col focus:outline-none",
         role="region",
         aria_label=f"Details for {name}",
+        tabindex="-1",
     )[
         _drawer_header(name),
         htpy.div(class_="px-6 py-5 space-y-5 flex-1")[
@@ -1212,7 +1214,7 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
                     add_form(),
                     htpy.dialog(
                         id=_DIALOG_ID,
-                        class_="m-0 p-0 max-w-none w-screen h-screen max-h-none bg-transparent backdrop:bg-slate-900/30 backdrop:backdrop-blur-sm open:flex open:justify-end border-0",
+                        class_="m-0 p-0 max-w-none w-screen h-screen max-h-none bg-transparent backdrop:bg-slate-900/30 backdrop:backdrop-blur-sm open:flex open:justify-end border-0 overscroll-contain",
                     )[[]],
                 ],
                 htpy.div(

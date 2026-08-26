@@ -14,8 +14,34 @@
     if (el.childElementCount === 0) return (el.textContent || "").trim() === "";
     return el.innerHTML.trim() === "";
   }
+  function lockBody() {
+    if (document.body.dataset.scrollLocked) return;
+    var scrollY = window.scrollY || document.documentElement.scrollTop;
+    document.body.dataset.scrollLocked = "1";
+    document.body.dataset.scrollY = String(scrollY);
+    document.body.style.position = "fixed";
+    document.body.style.top = "-" + scrollY + "px";
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+  }
+  function unlockBody() {
+    if (!document.body.dataset.scrollLocked) return;
+    var scrollY = parseInt(document.body.dataset.scrollY || "0", 10);
+    delete document.body.dataset.scrollLocked;
+    delete document.body.dataset.scrollY;
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.overflow = "";
+    document.documentElement.style.overflow = "";
+    window.scrollTo(0, scrollY);
+  }
   function openDialog(d) {
     if (!d || d.open) return;
+    lockBody();
     try {
       d.showModal();
     } catch (e) {
@@ -23,6 +49,22 @@
       d.setAttribute("open", "");
       d.style.display = "flex";
     }
+    // focus trap: move focus inside drawer after render
+    setTimeout(function () {
+      var aside = d.querySelector("aside");
+      if (!aside) return;
+      if (!aside.hasAttribute("tabindex")) aside.setAttribute("tabindex", "-1");
+      var focusable = aside.querySelector(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      try {
+        if (focusable) focusable.focus({ preventScroll: true });
+        else aside.focus({ preventScroll: true });
+      } catch (_) {
+        if (focusable) focusable.focus();
+        else aside.focus();
+      }
+    }, 30);
   }
   function clearDialog(d) {
     if (!d) return;
@@ -34,6 +76,8 @@
     } else if (!d.open) {
       d.style.display = "";
     }
+    // always unlock when dialog becomes empty/closed
+    if (isEmpty(d)) unlockBody();
   }
   function showToast(message) {
     var toast = getToast();
@@ -92,13 +136,49 @@
     });
     dialog.addEventListener("close", function () {
       clearDialog(dialog);
+      unlockBody();
     });
     dialog.addEventListener("cancel", function () {
-      // 0ms defers to after native cancel handling; 50ms below waits for htmx swap
       setTimeout(function () {
         clearDialog(dialog);
+        unlockBody();
       }, 0);
     });
+    // trap Tab inside drawer when open
+    dialog.addEventListener("keydown", function (e) {
+      if (e.key !== "Tab" || !dialog.open) return;
+      var aside = dialog.querySelector("aside");
+      if (!aside) return;
+      var focusables = aside.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusables.length === 0) return;
+      var first = focusables[0];
+      var last = focusables[focusables.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    });
+    // prevent background scroll chaining via wheel/touch on dialog backdrop
+    dialog.addEventListener(
+      "wheel",
+      function (e) {
+        if (!dialog.open) return;
+        var aside = dialog.querySelector("aside");
+        if (!aside) return;
+        // if wheel over backdrop (not aside), prevent scroll
+        if (!aside.contains(e.target)) e.preventDefault();
+      },
+      { passive: false }
+    );
   }
 
   function setupHtmxConfig() {
