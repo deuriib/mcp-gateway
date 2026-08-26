@@ -815,14 +815,12 @@ def _drawer_actions(server: dict[str, Any], warning_banner: bool) -> Any:
             )["Reveal"]
         else:
             reveal_btn = htpy.button(
-                class_="inline-flex items-center cursor-pointer justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11",
+                id="reveal-btn",
+                class_="inline-flex items-center cursor-pointer justify-center rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200 min-h-11 reveal-toggle-btn",
                 aria_label="Reveal secrets",
                 title="Reveal masked secrets (local only)",
                 **{
-                    "hx-post": reveal_url,
-                    "hx-target": "#drawer-reveal-output",
-                    "hx-swap": "outerHTML",
-                    "hx-indicator": "#reveal-spinner",
+                    "data-reveal-url": reveal_url,
                 },
             )["Reveal"]
     return htpy.div(class_="flex flex-wrap gap-2")[

@@ -202,6 +202,27 @@ def _table_with_oob(
     return f"{table_html}{oob}{toast_oob}{dialog_oob}"
 
 
+def _table_oob(registry: Registry) -> str:
+    try:
+        servers = _collect_servers(registry)
+        html = str(server_table(servers))
+        if 'id="server-table-body"' in html:
+            html = html.replace(
+                'id="server-table-body"',
+                'id="server-table-body" hx-swap-oob="outerHTML"',
+                1,
+            )
+        elif "id='server-table-body'" in html:
+            html = html.replace(
+                "id='server-table-body'",
+                "id='server-table-body' hx-swap-oob='outerHTML'",
+                1,
+            )
+        return html
+    except Exception:
+        return ""
+
+
 def _drawer_feedback_html(msg: str, variant: str = "slate") -> str:
     colors = {
         "slate": "bg-slate-50 border border-slate-200 text-slate-700",
@@ -1522,15 +1543,51 @@ async def handle_refresh(request: Request) -> JSONResponse | HTMLResponse:
         return JSONResponse(
             {"detail": "Server disabled"}, status_code=409, headers=_csp_headers()
         )
-    asyncio.create_task(_background_refresh(registry, name))
     if is_hx:
-        feedback = _drawer_feedback_html(
-            f"Refreshing '{_e(name)}'... checking transports (this may take ~5s)",
-            "slate",
-        )
-        toast = _toast_oob(f"Refreshing '{_e(name)}' in background...", "amber")
-        html = f"<div id='drawer-feedback'>{feedback}<div class='mt-2 flex items-center gap-2 text-xs text-slate-500'><span class='inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900'></span> discovering tools via streamable-http -> SSE...</div></div>{toast}"
-        return HTMLResponse(html, status_code=202, headers=_csp_headers())
+        # HX refresh is now blocking with timeout so drawer never hangs
+        # keep 202 semantics for API clients, but for HX we await discovery and return final state
+        tools: list[Any] = []
+        try:
+            # reuse discovery helper with semaphore/timeout
+            tools = await _acquire_and_discover(cfg)
+        except Exception:
+            tools = []
+        if tools:
+            try:
+                registry.update(name, tools)
+            except Exception:
+                pass
+            feedback = _drawer_feedback_html(
+                f"Refreshed '{_e(name)}' — {len(tools)} tool(s) discovered", "emerald"
+            )
+            table_oob = _table_oob(registry)
+            stats_oob = _stats_oob(registry)
+            toast = _toast_oob(
+                f"Refreshed '{_e(name)}' — {len(tools)} tools", "emerald"
+            )
+            html = f"<div id='drawer-feedback'>{feedback}</div>{table_oob}{stats_oob}{toast}"
+            return HTMLResponse(html, headers=_csp_headers())
+        else:
+            has_auth = bool(cfg.headers or cfg.oauth)
+            if cfg.type == "remote" and not has_auth:
+                hint = "No tools discovered (401). Add Authorization header in Edit → Advanced → Headers or enable OAuth."
+                variant = "amber"
+            elif cfg.type == "remote":
+                hint = "No tools discovered — still unreachable. Check URL, headers/token or OAuth."
+                variant = "amber"
+            else:
+                hint = "No tools discovered — check command, cwd and that the local process is reachable."
+                variant = "amber"
+            feedback = _drawer_feedback_html(
+                f"Refresh '{_e(name)}' finished — {hint}", variant
+            )
+            table_oob = _table_oob(registry)
+            stats_oob = _stats_oob(registry)
+            toast = _toast_oob(f"Refresh '{_e(name)}' — no tools", variant)
+            html = f"<div id='drawer-feedback'>{feedback}</div>{table_oob}{stats_oob}{toast}"
+            return HTMLResponse(html, headers=_csp_headers())
+    # non-HX API clients keep old fire-and-forget 202 for backward compat
+    asyncio.create_task(_background_refresh(registry, name))
     return JSONResponse(
         {"status": "refreshing"}, status_code=202, headers=_csp_headers()
     )

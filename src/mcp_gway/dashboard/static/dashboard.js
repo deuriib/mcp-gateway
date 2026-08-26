@@ -233,6 +233,133 @@
     });
   }
 
+  function setupRevealToggle(){
+    if(document.body.dataset.revealToggleBound) return;
+    document.body.dataset.revealToggleBound="1";
+    document.addEventListener('click', function(e){
+      var btn = e.target.closest('#reveal-btn, .reveal-toggle-btn');
+      if(!btn) return;
+      // only handle reveal buttons inside drawer
+      if(!btn.closest('aside')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      window.toggleReveal(btn);
+    });
+  }
+
+  window.toggleReveal = function(btn){
+    var out = document.getElementById('drawer-reveal-output');
+    var spinner = document.getElementById('reveal-spinner');
+    if(!out || !btn) return;
+    var isVisible = out && !out.classList.contains('hidden') && out.style.display !== 'none' && out.innerHTML.trim() !== '' && out.textContent.trim() !== '';
+    // if output has emerald background (revealed), consider visible
+    if(isVisible && out.innerHTML.trim() !== '' && out.textContent.indexOf('No secrets') === -1){
+      out.classList.add('hidden');
+      out.style.display='none';
+      out.innerHTML='';
+      btn.textContent='Reveal';
+      btn.setAttribute('aria-label','Reveal secrets');
+      return;
+    }
+    var url = btn.getAttribute('data-reveal-url');
+    if(!url) return;
+    if(spinner) { spinner.classList.remove('hidden'); spinner.style.display='inline-flex'; }
+    btn.disabled = true;
+    var prevText = btn.textContent;
+    btn.textContent = 'Revealing…';
+    fetch(url, {method:'POST', headers:{'HX-Request':'true'}})
+      .then(function(r){ return r.text().then(function(t){ return {status:r.status, text:t, headers:r.headers}; }); })
+      .then(function(res){
+        var temp = document.createElement('template');
+        temp.innerHTML = res.text.trim();
+        var newOut = temp.content.querySelector('#drawer-reveal-output');
+        var toastFrag = temp.content.querySelector('#toast');
+        if(newOut){
+          out.outerHTML = newOut.outerHTML;
+          var fresh = document.getElementById('drawer-reveal-output');
+          if(fresh){
+            fresh.classList.remove('hidden');
+            fresh.style.display='block';
+            fresh.scrollIntoView({behavior:'smooth', block:'nearest'});
+          }
+          btn.textContent='Hide';
+          btn.setAttribute('aria-label','Hide secrets');
+          if(toastFrag){
+            var toast=document.getElementById('toast');
+            if(toast){
+              toast.innerHTML = toastFrag.innerHTML;
+              setTimeout(function(){ if(toast) toast.innerHTML=''; }, 4000);
+            }
+          }
+        } else {
+          // fallback: handle non-HTML (e.g., JSON) or error
+          if(res.status===200){
+            out.innerHTML = res.text;
+            out.classList.remove('hidden');
+            out.style.display='block';
+            btn.textContent='Hide';
+          } else {
+            var toast2=document.getElementById('toast');
+            if(toast2){
+              var d=document.createElement('div');
+              d.className='bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl shadow-sm text-sm';
+              d.textContent='Reveal failed ('+res.status+')';
+              toast2.appendChild(d);
+              setTimeout(function(){ if(toast2.contains(d)) toast2.removeChild(d); }, 4000);
+            }
+            btn.textContent='Reveal';
+          }
+        }
+      })
+      .catch(function(){
+        var toast=document.getElementById('toast');
+        if(toast){
+          var d=document.createElement('div');
+          d.className='bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl shadow-sm text-sm';
+          d.textContent='Failed to reveal';
+          toast.appendChild(d);
+          setTimeout(function(){ if(toast.contains(d)) toast.removeChild(d); }, 4000);
+        }
+        btn.textContent='Reveal';
+      })
+      .finally(function(){
+        btn.disabled=false;
+        if(spinner){ spinner.classList.add('hidden'); spinner.style.display='none'; }
+        if(btn.textContent==='Revealing…') btn.textContent='Reveal';
+      });
+  };
+
+  function setupToastAutoHide(){
+    var toast=document.getElementById('toast');
+    if(!toast) return;
+    if(toast.dataset.autoHideBound) return;
+    toast.dataset.autoHideBound="1";
+    var hideTimer=null;
+    function scheduleHide(){
+      if(hideTimer) clearTimeout(hideTimer);
+      if(!toast.innerHTML.trim()) return;
+      hideTimer=setTimeout(function(){
+        if(toast) toast.innerHTML='';
+        hideTimer=null;
+      }, 4500);
+    }
+    // htmx OOB and direct innerHTML
+    var observer=new MutationObserver(function(){ scheduleHide(); });
+    observer.observe(toast, {childList:true, subtree:true, characterData:true});
+    document.addEventListener('htmx:afterSwap', function(e){
+      if(e.detail && e.detail.target && e.detail.target.id==='toast') scheduleHide();
+      if(e.detail && e.detail.target && e.detail.target.id==='drawer-feedback') {
+        // also ensure toast from OOB gets hidden
+        if(toast.innerHTML.trim()) scheduleHide();
+      }
+    });
+    document.addEventListener('htmx:oobAfterSwap', function(e){
+      if(e.detail && e.detail.target && e.detail.target.id==='toast') scheduleHide();
+    });
+    // initial if already has content
+    if(toast.innerHTML.trim()) scheduleHide();
+  }
+
   function setupHeaderToast(){
     if(document.body.dataset.headerToastBound) return;
     document.body.dataset.headerToastBound="1";
@@ -333,7 +460,9 @@
     setupVisualFeedback();
     setupGlobalErrorToast();
     setupRevealVisibility();
+    setupToastAutoHide();
     setupHeaderToast();
+    setupRevealToggle();
     syncType();
     syncOAuth();
   }
