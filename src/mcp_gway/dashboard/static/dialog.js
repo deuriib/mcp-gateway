@@ -69,6 +69,10 @@
   function clearDialog(d) {
     if (!d) return;
     if (!isEmpty(d)) d.innerHTML = "";
+    // if dialog is open but now empty, close it and unlock
+    if (isEmpty(d) && d.open) {
+      try { d.close(); } catch (_) {}
+    }
     // polyfill fallback cleanup: remove open attr/style when not natively open
     if (d.hasAttribute("open") && !d.open) {
       d.removeAttribute("open");
@@ -179,6 +183,21 @@
       },
       { passive: false }
     );
+    // mutation observer: if OOB clears dialog while open, close and unlock
+    try {
+      var obs = new MutationObserver(function () {
+        var dlg = getDialog();
+        if (dlg && dlg.open && isEmpty(dlg)) {
+          try { dlg.close(); } catch (_) {}
+          unlockBody();
+          if (dlg.hasAttribute("open") && !dlg.open) {
+            dlg.removeAttribute("open");
+            dlg.style.display = "none";
+          }
+        }
+      });
+      obs.observe(dialog, { childList: true, subtree: true, characterData: true });
+    } catch (_) {}
   }
 
   function setupHtmxConfig() {
@@ -202,9 +221,36 @@
         dialog.removeAttribute("open");
         dialog.style.display = "none";
       }
+      unlockBody();
       return;
     }
     openDialog(dialog);
+  });
+
+  document.addEventListener("htmx:oobAfterSwap", function (e) {
+    var target = e.detail.elt || e.detail.target;
+    if (!target) target = getDialog();
+    if (!target || target.id !== DIALOG_ID) {
+      // fallback: check dialog directly if OOB cleared it
+      var dlg = getDialog();
+      if (dlg && isEmpty(dlg) && dlg.open) {
+        dlg.close();
+        unlockBody();
+      }
+      return;
+    }
+    var dialog = getDialog();
+    if (!dialog) return;
+    if (isEmpty(target) || isEmpty(dialog)) {
+      if (dialog.open) dialog.close();
+      if (dialog.hasAttribute("open") && !dialog.open) {
+        dialog.removeAttribute("open");
+        dialog.style.display = "none";
+      }
+      unlockBody();
+    } else {
+      openDialog(dialog);
+    }
   });
 
   document.addEventListener("htmx:afterSettle", function (e) {
