@@ -111,12 +111,12 @@ class _CSPMiddleware(BaseHTTPMiddleware):
 CODE_MODE_TOOLS = [
     {
         "name": "listToolFiles",
-        "description": "Lists all available files for connected MCP servers.",
+        "description": "Discover registered MCP servers.",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "readToolFile",
-        "description": "Reads a file to get compact signatures for tools.",
+        "description": "Get compact signatures for tools.",
         "inputSchema": {
             "type": "object",
             "properties": {
