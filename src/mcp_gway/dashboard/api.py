@@ -1597,6 +1597,98 @@ async def handle_refresh(request: Request) -> JSONResponse | HTMLResponse:
     )
 
 
+async def handle_refresh_all(request: Request) -> JSONResponse | HTMLResponse:
+    registry: Registry = request.app.state.registry  # type: ignore[attr-defined]
+    is_hx = _is_htmx_request(request)
+    body = await _read_limited_body(request, MAX_SMALL_PAYLOAD)
+    if isinstance(body, JSONResponse):
+        if is_hx:
+            return HTMLResponse(
+                _toast_oob("payload too large"), status_code=413, headers=_csp_headers()
+            )
+        return body
+    names = registry.list()
+    if not names:
+        if is_hx:
+            table_html = str(server_table([]))
+            stats_oob = _stats_oob(registry)
+            toast = _toast_oob("No servers to refresh", "amber")
+            html = f"{table_html}{stats_oob}{toast}"
+            return HTMLResponse(html, headers=_csp_headers())
+        return JSONResponse(
+            {"status": "no servers", "refreshed": 0}, headers=_csp_headers()
+        )
+    # Filter enabled only
+    enabled_names: list[str] = []
+    for n in names:
+        try:
+            cfg = registry.get_config(n)
+            if getattr(cfg, "enabled", True):
+                enabled_names.append(n)
+        except Exception:
+            enabled_names.append(n)
+    if not enabled_names:
+        if is_hx:
+            table_html = str(server_table(_collect_servers(registry)))
+            stats_oob = _stats_oob(registry)
+            toast = _toast_oob("All servers disabled — nothing to refresh", "amber")
+            html = f"{table_html}{stats_oob}{toast}"
+            return HTMLResponse(html, headers=_csp_headers())
+        return JSONResponse(
+            {"status": "all disabled", "refreshed": 0}, headers=_csp_headers()
+        )
+    # Perform refresh sequentially to avoid overwhelming
+    refreshed = 0
+    failed: list[str] = []
+    total_tools = 0
+    for n in enabled_names:
+        try:
+            cfg = registry.get_config(n)
+            tools = await _acquire_and_discover(cfg)
+            if tools:
+                try:
+                    registry.update(n, tools)
+                    refreshed += 1
+                    total_tools += len(tools)
+                except Exception:
+                    failed.append(n)
+            else:
+                failed.append(n)
+        except Exception:
+            failed.append(n)
+    servers = _collect_servers(registry)
+    table_html = str(server_table(servers))
+    stats_oob = _stats_oob(registry)
+    if refreshed == len(enabled_names):
+        toast = _toast_oob(
+            f"Refreshed {refreshed}/{len(enabled_names)} — {total_tools} tools",
+            "emerald",
+        )
+    elif refreshed > 0:
+        toast = _toast_oob(
+            f"Refreshed {refreshed}/{len(enabled_names)} — {len(failed)} failed (check URL/auth)",
+            "amber",
+        )
+    else:
+        toast = _toast_oob(
+            "Refresh finished — no tools discovered (check 401/auth)", "amber"
+        )
+    html = f"{table_html}{stats_oob}{toast}"
+    return (
+        HTMLResponse(html, headers=_csp_headers())
+        if is_hx
+        else JSONResponse(
+            {
+                "status": "done",
+                "refreshed": refreshed,
+                "failed": failed,
+                "total_tools": total_tools,
+            },
+            headers=_csp_headers(),
+        )
+    )
+
+
 def _is_loopback(request: Request) -> bool:
     client = request.client
     if not client:

@@ -47,6 +47,7 @@ def _icon(name: str, cls: str = "h-4 w-4", aria_hidden: str = "true") -> Any:
         "activity": '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
         "alert": '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
         "zap": '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
+        "refresh": '<path d="M21 12a9 9 0 1 1-6.64-8.64"/><path d="M21 3v5h-5"/>',
     }
     inner = icons.get(name, icons["server"])
     return htpy.svg(
@@ -117,6 +118,49 @@ def empty_state() -> Any:
             _icon("plus", cls="h-4 w-4"),
             "Add your first server",
         ],
+    ]
+
+
+def table_loading_state() -> Any:
+    return htpy.tr[
+        htpy.td(colspan="6", class_="px-4 py-12")[
+            htpy.div(
+                class_="flex flex-col items-center justify-center gap-3 py-6 text-center"
+            )[
+                htpy.span(
+                    class_="inline-block h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900"
+                )[[]],
+                htpy.p(class_="text-sm font-medium text-slate-600")["Loading servers…"],
+                htpy.p(class_="text-xs text-slate-400")["Fetching registry"],
+            ]
+        ]
+    ]
+
+
+def table_error_state(message: str = "Failed to load servers") -> Any:
+    return htpy.tr[
+        htpy.td(colspan="6", class_="px-4 py-10")[
+            htpy.div(
+                class_="flex flex-col items-center justify-center gap-3 py-6 text-center"
+            )[
+                htpy.div(
+                    class_="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 border border-red-200 text-red-600"
+                )[_icon("alert", cls="h-5 w-5"),],
+                htpy.p(class_="text-sm font-semibold text-slate-900")[message],
+                htpy.p(class_="text-xs text-slate-500 max-w-sm")[
+                    "Check connection and try again. If the problem persists, verify the gateway is running."
+                ],
+                htpy.button(
+                    class_="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all duration-200",
+                    **{
+                        "hx-get": "/dashboard/servers",
+                        "hx-target": "#server-table-body",
+                        "hx-swap": "outerHTML",
+                        "hx-indicator": "#table-loading-indicator",
+                    },
+                )[_icon("refresh", cls="h-4 w-4"), "Retry"],
+            ]
+        ]
     ]
 
 
@@ -1174,6 +1218,17 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
                                 )[str(total)],
                             ],
                             htpy.div(class_="flex items-center gap-2")[
+                                htpy.button(
+                                    id="global-refresh-btn",
+                                    class_="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all duration-200",
+                                    title="Refresh all enabled servers",
+                                    **{
+                                        "hx-post": "/api/servers/refresh",
+                                        "hx-target": "#server-table-body",
+                                        "hx-swap": "outerHTML",
+                                        "hx-indicator": "#table-loading-indicator",
+                                    },
+                                )[_icon("refresh", cls="h-4 w-4"), "Refresh all"],
                                 htpy.div(class_="relative")[
                                     htpy.input(
                                         id="server-filter",
@@ -1187,15 +1242,48 @@ def layout(servers: list[dict[str, Any]], warning_banner: bool = False) -> Any:
                             ],
                         ],
                         htpy.div(
+                            id="table-wrapper",
                             class_="overflow-x-auto",
                             **{
                                 "hx-get": "/dashboard/servers",
                                 "hx-trigger": "load",
                                 "hx-target": "#server-table-body",
                                 "hx-swap": "outerHTML",
-                                "hx-indicator": "#global-spinner",
+                                "hx-indicator": "#table-loading-indicator",
                             },
                         )[table],
+                        htpy.div(
+                            id="table-loading-indicator",
+                            class_="htmx-indicator flex items-center justify-center gap-2 py-6 text-sm text-slate-500",
+                        )[
+                            htpy.span(
+                                class_="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900"
+                            )[[]],
+                            "Loading servers…",
+                        ],
+                        htpy.div(
+                            id="table-error",
+                            class_="hidden flex-col items-center justify-center gap-3 py-8 text-center border-t border-slate-100",
+                        )[
+                            htpy.div(
+                                class_="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 border border-red-200 text-red-600"
+                            )[_icon("alert", cls="h-5 w-5"),],
+                            htpy.p(class_="text-sm font-semibold text-slate-900")[
+                                "Failed to load servers"
+                            ],
+                            htpy.p(class_="text-xs text-slate-500 max-w-sm")[
+                                "Check connection and try again. If the problem persists, verify the gateway is running."
+                            ],
+                            htpy.button(
+                                class_="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all duration-200",
+                                **{
+                                    "hx-get": "/dashboard/servers",
+                                    "hx-target": "#server-table-body",
+                                    "hx-swap": "outerHTML",
+                                    "hx-indicator": "#table-loading-indicator",
+                                },
+                            )[_icon("refresh", cls="h-4 w-4"), "Retry"],
+                        ],
                     ],
                     add_form(),
                     htpy.dialog(

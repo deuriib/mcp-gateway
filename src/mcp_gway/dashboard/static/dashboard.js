@@ -491,6 +491,50 @@
     });
   }
 
+  function setupTableStates(){
+    if(document.body.dataset.tableStatesBound) return;
+    document.body.dataset.tableStatesBound="1";
+    var errorEl=document.getElementById('table-error');
+    if(errorEl) { errorEl.style.display='none'; errorEl.classList.add('hidden'); }
+    document.addEventListener('htmx:responseError', function(e){
+      var target=e.detail && e.detail.target;
+      if(target && target.id==='server-table-body'){
+        if(errorEl){
+          errorEl.style.display='flex';
+          errorEl.classList.remove('hidden');
+        }
+      }
+    });
+    document.addEventListener('htmx:sendError', function(e){
+      var target=e.detail && e.detail.target;
+      if(target && target.id==='server-table-body'){
+        if(errorEl){
+          errorEl.style.display='flex';
+          errorEl.classList.remove('hidden');
+        }
+      }
+    });
+    document.addEventListener('htmx:afterSwap', function(e){
+      var target=e.detail && e.detail.target;
+      if(target && target.id==='server-table-body'){
+        if(errorEl){
+          errorEl.style.display='none';
+          errorEl.classList.add('hidden');
+        }
+        // re-apply filter after table swap
+        var filter=document.getElementById('server-filter');
+        if(filter && filter.value){
+          var v=filter.value.toLowerCase();
+          document.querySelectorAll("tr[data-name]").forEach(function(tr){
+            var name=tr.getAttribute("data-name")||"";
+            tr.style.display=name.includes(v)?"":"none";
+          });
+        }
+        if(window.htmx) htmx.process(document.body);
+      }
+    });
+  }
+
   function init() {
     setupType();
     setupOAuth();
@@ -504,6 +548,7 @@
     setupHeaderToast();
     setupRevealToggle();
     setupRefreshDone();
+    setupTableStates();
     syncType();
     syncOAuth();
   }

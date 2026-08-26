@@ -20,6 +20,7 @@ from mcp_gway.dashboard.api import (
     handle_oauth_status,
     handle_patch,
     handle_refresh,
+    handle_refresh_all,
     handle_reveal,
 )
 from mcp_gway.registry import Registry
@@ -39,6 +40,7 @@ def get_dashboard_routes(registry: Registry) -> list[Route | Mount]:
         Route("/api/servers", handle_list, methods=["GET"]),
         Route("/api/servers/{name}", handle_get, methods=["GET"]),
         Route("/api/servers", handle_create, methods=["POST"]),
+        Route("/api/servers/refresh", handle_refresh_all, methods=["POST"]),
         Route("/api/servers/{name}", handle_patch, methods=["PATCH"]),
         Route("/api/servers/{name}", handle_delete, methods=["DELETE"]),
         Route("/api/servers/{name}/refresh", handle_refresh, methods=["POST"]),
