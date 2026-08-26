@@ -25,7 +25,8 @@ async def test_patch_toggle(gateway: Gateway, registry: Registry, monkeypatch) -
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return [ToolInfo(name="t1")]
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await client.post(
@@ -48,7 +49,8 @@ async def test_patch_validation(
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await client.post(
@@ -66,7 +68,8 @@ async def test_delete_idempotent(gateway: Gateway, monkeypatch) -> None:
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await client.post(
@@ -86,7 +89,8 @@ async def test_refresh_nonblocking(gateway: Gateway, monkeypatch) -> None:
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return [ToolInfo(name="t1")]
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await client.post(
@@ -117,7 +121,8 @@ async def test_reveal_loopback_and_rate(gateway: Gateway, monkeypatch) -> None:
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await client.post(

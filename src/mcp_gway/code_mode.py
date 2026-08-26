@@ -58,12 +58,7 @@ class CodeMode:
         return content
 
     def get_tool_docs(self, server: str, tool: str) -> str:
-        docs_url = self.registry.get_docs_url(server)
-        tool_docs = self.registry.get_tool_docs(server, tool)
-        result = tool_docs
-        if docs_url:
-            result += f"\n\nDocumentation URL: {docs_url}"
-        return result
+        return self.registry.get_tool_docs(server, tool)
 
     def execute_tool_code(self, code: str) -> str:
         result = self.sandbox.execute(code)

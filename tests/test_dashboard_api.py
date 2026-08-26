@@ -29,7 +29,8 @@ async def test_add_remote_persists(
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
@@ -67,7 +68,8 @@ async def test_add_local_persists(
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
@@ -92,7 +94,8 @@ async def test_add_remote_with_headers_masks(gateway: Gateway, monkeypatch) -> N
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
@@ -118,7 +121,8 @@ async def test_add_duplicate_409(gateway: Gateway, monkeypatch) -> None:
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {"name": "dup", "type": "remote", "url": "https://example.com/mcp"}
@@ -162,7 +166,8 @@ async def test_legacy_resolved_transport(gateway: Gateway, monkeypatch) -> None:
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
@@ -201,7 +206,8 @@ async def test_content_negotiation_hx(gateway: Gateway, monkeypatch) -> None:
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
@@ -262,7 +268,8 @@ async def test_no_direct_fs_write_outside_registry(
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
@@ -284,7 +291,8 @@ async def test_add_remote_with_oauth_generates_uuid(
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
@@ -327,7 +335,8 @@ async def test_add_remote_with_oauth_via_headers_fallback(
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
@@ -348,7 +357,8 @@ async def test_oauth_toast_and_automatic_header(gateway: Gateway, monkeypatch) -
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
@@ -391,7 +401,8 @@ async def test_web_oauth_flow_via_dashboard(gateway: Gateway, monkeypatch) -> No
     ):  # noqa: ARG001
         return "https://auth.example.com/authorize?client_id=test", None
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     monkeypatch.setattr(
         "mcp_gway.oauth.discover_oauth_metadata", mock_discover_oauth_meta
     )

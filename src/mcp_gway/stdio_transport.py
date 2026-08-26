@@ -162,6 +162,6 @@ async def filtered_stdio_client(
     else:
         from mcp.client.stdio import stdio_client
 
-        async with stdio_client(server) as (raw_read, write):
+        async with stdio_client(server, errlog=sys.__stderr__) as (raw_read, write):
             filtered = _FilteredReadStream(raw_read, on_noise)
             yield filtered, write

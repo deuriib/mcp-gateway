@@ -37,7 +37,7 @@ async def _maybe_detect_transport(config: MCPServerConfig) -> None:
     if config.resolved_transport:
         return
     try:
-        from mcp_gway.transport import detect_transport
+        from mcp_gway.core import detect_transport
 
         timeout = (config.timeout / 1000 + 2) if config.timeout else 7
         detected = await asyncio.wait_for(detect_transport(config), timeout=timeout)
@@ -819,7 +819,7 @@ def _check_duplicate(
 
 
 async def _acquire_and_discover(config: MCPServerConfig) -> list[Any]:
-    from mcp_gway.cli import _discover_tools as cli_discover  # circular import lazy
+    from mcp_gway.core import discover_tools as cli_discover  # circular import lazy
 
     acquired = False
     try:
@@ -1408,7 +1408,7 @@ async def _background_refresh(registry: Registry, name: str) -> None:
         return
     tools: list[Any] = []
     try:
-        from mcp_gway.cli import _discover_tools as cli_discover  # circular import lazy
+        from mcp_gway.core import discover_tools as cli_discover  # circular import lazy
 
         acquired = False
         try:
@@ -1499,7 +1499,7 @@ async def _background_oauth_flow(registry: Registry, name: str) -> None:
                 await client.aclose()
             except Exception:
                 pass
-            from mcp_gway.cli import _discover_tools as cli_discover_oauth
+            from mcp_gway.core import discover_tools as cli_discover_oauth
 
             tools = await cli_discover_oauth(cfg, force_auth=True)
             if tools:

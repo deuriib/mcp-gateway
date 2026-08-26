@@ -19,7 +19,7 @@ def test_full_flow(tmp_path, monkeypatch):
 
     monkeypatch.setattr("mcp_gway.cli._get_registry", mock_get_registry)
 
-    async def mock_discover(config):
+    async def mock_discover(config, force_auth=False):
         return [
             ToolInfo(
                 name="search",
@@ -41,13 +41,21 @@ def test_full_flow(tmp_path, monkeypatch):
             ),
         ]
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    async def mock_detect(config):
+        return "streamable-http"
+
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.cli.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.transport.detect_transport", mock_detect)
+    monkeypatch.setattr("mcp_gway.core.detect_transport", mock_detect)
+    monkeypatch.setattr("mcp_gway.cli.detect_transport", mock_detect)
     runner = CliRunner()
 
     # Add server
     result = runner.invoke(
         main,
-        ["add", "youtube", "--type", "http", "--url", "http://localhost:3001/mcp"],
+        ["add", "youtube", "--type", "remote", "--url", "http://localhost:3001/mcp"],
     )
     assert result.exit_code == 0
     assert "2 tools" in result.output

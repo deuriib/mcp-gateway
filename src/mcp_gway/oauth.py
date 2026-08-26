@@ -748,7 +748,7 @@ async def _complete_web_oauth(server_name: str) -> None:
                 try:
                     from pathlib import Path as _Path
 
-                    from mcp_gway.cli import _discover_tools as _cli_discover
+                    from mcp_gway.core import discover_tools as _cli_discover
                     from mcp_gway.registry import Registry
 
                     reg = Registry(

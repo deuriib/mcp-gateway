@@ -44,7 +44,9 @@ async def test_form_multipart_exceeds_64kb_returns_413(
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.cli.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         boundary = "----TestBoundary413"
@@ -120,7 +122,9 @@ async def test_form_small_multipart_still_works(
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.cli.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         boundary = "----SmallBoundaryOK"
@@ -174,7 +178,9 @@ async def test_handle_get_truncated_flag_true(
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.cli.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         cfg = MCPServerConfig(
@@ -204,7 +210,9 @@ async def test_handle_get_truncated_flag_false(
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return [ToolInfo(name="t1")]
 
-    monkeypatch.setattr("mcp_gway.cli._discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
+    monkeypatch.setattr("mcp_gway.cli.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         cfg = MCPServerConfig(

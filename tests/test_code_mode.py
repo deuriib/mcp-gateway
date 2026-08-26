@@ -3,17 +3,17 @@
 import pytest
 
 from mcp_gway.code_mode import CodeMode
-from mcp_gway.models import ConnectionType, MCPClientConfig, ToolInfo
+from mcp_gway.models import MCPServerConfig, ToolInfo
 from mcp_gway.registry import Registry
 
 
 @pytest.fixture
 def code_mode(tmp_path):
     registry = Registry(servers_dir=tmp_path / "servers")
-    config = MCPClientConfig(
+    config = MCPServerConfig(
         name="youtube",
-        connection_type=ConnectionType.HTTP,
-        connection_string="http://localhost:3001/mcp",
+        type="remote",
+        url="http://localhost:3001/mcp",
     )
     tools = [
         ToolInfo(
@@ -130,10 +130,10 @@ def test_execute_code_call_tool_not_found(code_mode):
 def code_mode_hyphens(tmp_path):
     """CodeMode with a server that has hyphenated tool names (like context7)."""
     registry = Registry(servers_dir=tmp_path / "servers")
-    config = MCPClientConfig(
+    config = MCPServerConfig(
         name="context7",
-        connection_type=ConnectionType.HTTP,
-        connection_string="http://localhost:3002/mcp",
+        type="remote",
+        url="http://localhost:3002/mcp",
     )
     tools = [
         ToolInfo(

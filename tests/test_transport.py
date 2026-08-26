@@ -17,7 +17,11 @@ def test_detect_transport_streamable_http_success(monkeypatch):
         return False
 
     monkeypatch.setattr("mcp_gway.transport._try_streamable_http", mock_streamable_http)
+    monkeypatch.setattr(
+        "mcp_gway.core.transport._try_streamable_http", mock_streamable_http
+    )
     monkeypatch.setattr("mcp_gway.transport._try_sse", mock_sse)
+    monkeypatch.setattr("mcp_gway.core.transport._try_sse", mock_sse)
     from mcp_gway.transport import detect_transport
 
     result = asyncio.run(detect_transport(config))
@@ -34,7 +38,11 @@ def test_detect_transport_fallback_to_sse(monkeypatch):
         return True
 
     monkeypatch.setattr("mcp_gway.transport._try_streamable_http", mock_streamable_http)
+    monkeypatch.setattr(
+        "mcp_gway.core.transport._try_streamable_http", mock_streamable_http
+    )
     monkeypatch.setattr("mcp_gway.transport._try_sse", mock_sse)
+    monkeypatch.setattr("mcp_gway.core.transport._try_sse", mock_sse)
     from mcp_gway.transport import detect_transport
 
     result = asyncio.run(detect_transport(config))
@@ -54,8 +62,13 @@ def test_detect_transport_fallback_to_http(monkeypatch):
         return True
 
     monkeypatch.setattr("mcp_gway.transport._try_streamable_http", mock_streamable_http)
+    monkeypatch.setattr(
+        "mcp_gway.core.transport._try_streamable_http", mock_streamable_http
+    )
     monkeypatch.setattr("mcp_gway.transport._try_sse", mock_sse)
+    monkeypatch.setattr("mcp_gway.core.transport._try_sse", mock_sse)
     monkeypatch.setattr("mcp_gway.transport._try_http", mock_http)
+    monkeypatch.setattr("mcp_gway.core.transport._try_http", mock_http)
     from mcp_gway.transport import detect_transport
 
     result = asyncio.run(detect_transport(config))
@@ -69,8 +82,11 @@ def test_detect_transport_all_fail_raises(monkeypatch):
         return False
 
     monkeypatch.setattr("mcp_gway.transport._try_streamable_http", mock_fail)
+    monkeypatch.setattr("mcp_gway.core.transport._try_streamable_http", mock_fail)
     monkeypatch.setattr("mcp_gway.transport._try_sse", mock_fail)
+    monkeypatch.setattr("mcp_gway.core.transport._try_sse", mock_fail)
     monkeypatch.setattr("mcp_gway.transport._try_http", mock_fail)
+    monkeypatch.setattr("mcp_gway.core.transport._try_http", mock_fail)
     from mcp_gway.transport import detect_transport
 
     with pytest.raises(ConnectionError, match="All transports failed"):
@@ -96,8 +112,13 @@ def test_detect_transport_respects_timeout(monkeypatch):
         return True
 
     monkeypatch.setattr("mcp_gway.transport._try_streamable_http", mock_streamable_http)
+    monkeypatch.setattr(
+        "mcp_gway.core.transport._try_streamable_http", mock_streamable_http
+    )
     monkeypatch.setattr("mcp_gway.transport._try_sse", mock_sse)
+    monkeypatch.setattr("mcp_gway.core.transport._try_sse", mock_sse)
     monkeypatch.setattr("mcp_gway.transport._try_http", mock_http)
+    monkeypatch.setattr("mcp_gway.core.transport._try_http", mock_http)
     from mcp_gway.transport import detect_transport
 
     asyncio.run(detect_transport(config))

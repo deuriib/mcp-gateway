@@ -2,7 +2,7 @@
 
 import pytest
 
-from mcp_gway.models import ConnectionType, MCPClientConfig, ToolInfo
+from mcp_gway.models import MCPServerConfig, ToolInfo
 from mcp_gway.registry import Registry
 from mcp_gway.server_factory import ServerFactory, _extract_result
 
@@ -11,10 +11,10 @@ from mcp_gway.server_factory import ServerFactory, _extract_result
 def registry(tmp_path):
     """Create a registry with a mock server."""
     reg = Registry(servers_dir=tmp_path / "servers")
-    config = MCPClientConfig(
+    config = MCPServerConfig(
         name="youtube",
-        connection_type=ConnectionType.HTTP,
-        connection_string="http://localhost:3001/mcp",
+        type="remote",
+        url="http://localhost:3001/mcp",
     )
     tools = [
         ToolInfo(

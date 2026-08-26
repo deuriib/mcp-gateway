@@ -3,24 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import shlex
 import sys
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 import click
 
-from mcp_gway.models import (
-    ConnectionType,
-    MCPClientConfig,
-    MCPServerConfig,
-    OAuthConfig,
-    ToolInfo,
-)
+from mcp_gway.core import detect_transport, discover_tools, parse_envs, parse_headers
+from mcp_gway.core.client import refresh_server
+from mcp_gway.models import MCPServerConfig, OAuthConfig, ToolInfo
 from mcp_gway.registry import Registry
 
 
@@ -28,280 +21,20 @@ def _get_registry() -> Registry:
     return Registry(servers_dir=Path.home() / ".config" / "mcp-gway" / "servers")
 
 
-def _parse_envs(envs: list[str]) -> dict[str, str]:
-    """Parse KEY=VALUE env strings into a dict."""
-    result: dict[str, str] = {}
-    for item in envs:
-        key, _, value = item.partition("=")
-        result[key] = value
-    return result
+def _is_local_config(config: MCPServerConfig) -> bool:
+    return config.type == "local"
 
 
-def _parse_headers(headers: list[str]) -> dict[str, str]:
-    """Parse KEY=VALUE header strings into a dict."""
-    result: dict[str, str] = {}
-    for item in headers:
-        key, _, value = item.partition("=")
-        result[key.strip()] = value.strip()
-    return result
+def _is_remote_config(config: MCPServerConfig) -> bool:
+    return config.type == "remote"
 
 
-def _default_on_noise(count: int) -> None:
-    """Log a warning when noise is detected in the server output."""
-    click.echo(f"Warning: {count} non-JSON messages received from server", err=True)
+def _get_config_url(config: MCPServerConfig) -> str | None:
+    return config.url
 
 
-def _is_local_config(config: MCPClientConfig | MCPServerConfig) -> bool:
-    t = getattr(config, "type", None)
-    if t is not None:
-        return t == "local"
-    ct = getattr(config, "connection_type", None)
-    return ct == ConnectionType.STDIO
-
-
-def _is_remote_config(config: MCPClientConfig | MCPServerConfig) -> bool:
-    t = getattr(config, "type", None)
-    if t is not None:
-        return t == "remote"
-    ct = getattr(config, "connection_type", None)
-    return ct in (
-        ConnectionType.HTTP,
-        ConnectionType.SSE,
-        ConnectionType.STREAMABLE_HTTP,
-    )
-
-
-def _get_config_url(config: MCPClientConfig | MCPServerConfig) -> str | None:
-    url = getattr(config, "url", None)
-    if url is not None:
-        return url
-    return getattr(config, "connection_string", None)
-
-
-def _get_config_display_type(config: MCPClientConfig | MCPServerConfig) -> str:
-    t = getattr(config, "type", None)
-    if t is not None:
-        return str(t).upper()
-    ct = getattr(config, "connection_type", None)
-    if ct is not None:
-        try:
-            return str(ct.value).upper()  # type: ignore[union-attr]
-        except Exception:
-            return str(ct).upper()
-    return "HTTP"
-
-
-@asynccontextmanager
-async def _create_client_transport(
-    config: MCPClientConfig | MCPServerConfig, *, force_auth: bool = False
-) -> AsyncIterator[tuple[object, object]]:
-    """Create the appropriate MCP client transport for a connection type."""
-    config_type = getattr(config, "type", None)
-    if config_type is not None:
-        if config_type == "local":
-            from mcp import StdioServerParameters
-
-            from mcp_gway.stdio_transport import (
-                filtered_stdio_client,
-                resolve_windows_command,
-            )
-
-            cmd_list: list[str] | None = getattr(config, "command", None)
-            if not cmd_list:
-                raise ValueError("command required for local")
-            command = cmd_list[0]
-            args = cmd_list[1:] if len(cmd_list) > 1 else []
-            resolved = resolve_windows_command(command)
-            env_dict = getattr(config, "environment", None)
-            cwd = getattr(config, "cwd", None)
-            try:
-                params = StdioServerParameters(
-                    command=resolved,
-                    args=args,
-                    env=env_dict,
-                    cwd=cwd,
-                )
-            except TypeError:
-                params = StdioServerParameters(
-                    command=resolved,
-                    args=args,
-                    env=env_dict,
-                )
-            async with filtered_stdio_client(
-                server=params, on_noise=_default_on_noise
-            ) as (
-                read,
-                write,
-            ):
-                yield read, write
-        else:
-            url = getattr(config, "url", None) or getattr(
-                config, "connection_string", None
-            )
-            resolved_transport = getattr(config, "resolved_transport", None)
-            headers = getattr(config, "headers", None)
-            if resolved_transport == "streamable-http":
-                from mcp.client.streamable_http import streamable_http_client
-
-                if force_auth:
-                    from mcp_gway.oauth import get_authenticated_client
-
-                    http_client = await get_authenticated_client(config.name)
-                    async with streamable_http_client(url, http_client=http_client) as (
-                        read,
-                        write,
-                    ):
-                        yield read, write
-                elif headers:
-                    import httpx
-
-                    async with httpx.AsyncClient(headers=headers) as hc:
-                        async with streamable_http_client(url, http_client=hc) as (
-                            read,
-                            write,
-                        ):
-                            yield read, write
-                else:
-                    async with streamable_http_client(url) as (
-                        read,
-                        write,
-                    ):
-                        yield read, write
-            elif resolved_transport == "http":
-                from mcp.client.sse import sse_client
-
-                sse_headers = None
-                if force_auth:
-                    from mcp_gway.oauth import get_authenticated_client
-
-                    http_client = await get_authenticated_client(config.name)
-                    sse_headers = http_client.headers if http_client else None
-                elif headers:
-                    sse_headers = headers
-                async with sse_client(url, headers=sse_headers) as (
-                    read,
-                    write,
-                ):
-                    yield read, write
-            else:
-                from mcp.client.sse import sse_client
-
-                sse_headers = None
-                if force_auth:
-                    from mcp_gway.oauth import get_authenticated_client
-
-                    http_client = await get_authenticated_client(config.name)
-                    sse_headers = http_client.headers if http_client else None
-                elif headers:
-                    sse_headers = headers
-                async with sse_client(url, headers=sse_headers) as (
-                    read,
-                    write,
-                ):
-                    yield read, write
-    else:
-        if config.connection_type == ConnectionType.STDIO:
-            from mcp import StdioServerParameters
-
-            from mcp_gway.stdio_transport import (
-                filtered_stdio_client,
-                resolve_windows_command,
-            )
-
-            resolved = resolve_windows_command(config.stdio_config.command)
-            env_dict = (
-                _parse_envs(config.stdio_config.envs)
-                if config.stdio_config.envs
-                else None
-            )
-            params = StdioServerParameters(
-                command=resolved,
-                args=config.stdio_config.args,
-                env=env_dict,
-            )
-            async with filtered_stdio_client(
-                server=params, on_noise=_default_on_noise
-            ) as (
-                read,
-                write,
-            ):
-                yield read, write
-        elif config.connection_type == ConnectionType.STREAMABLE_HTTP:
-            from mcp.client.streamable_http import streamable_http_client
-
-            if force_auth:
-                from mcp_gway.oauth import get_authenticated_client
-
-                http_client = await get_authenticated_client(config.name)
-                async with streamable_http_client(
-                    config.connection_string, http_client=http_client
-                ) as (read, write):
-                    yield read, write
-            else:
-                headers = getattr(config, "headers", None)
-                if headers:
-                    import httpx
-
-                    async with httpx.AsyncClient(headers=headers) as hc:
-                        async with streamable_http_client(
-                            config.connection_string, http_client=hc
-                        ) as (read, write):
-                            yield read, write
-                else:
-                    async with streamable_http_client(config.connection_string) as (
-                        read,
-                        write,
-                    ):
-                        yield read, write
-        else:
-            from mcp.client.sse import sse_client
-
-            headers = None
-            if force_auth:
-                from mcp_gway.oauth import get_authenticated_client
-
-                http_client = await get_authenticated_client(config.name)
-                headers = http_client.headers if http_client else None
-            else:
-                headers = getattr(config, "headers", None)
-            async with sse_client(config.connection_string, headers=headers) as (
-                read,
-                write,
-            ):
-                yield read, write
-
-
-async def _discover_tools(
-    config: MCPClientConfig | MCPServerConfig, *, force_auth: bool = False
-) -> list[ToolInfo]:
-    """Connect to MCP server and discover available tools."""
-    try:
-        from mcp import ClientSession
-
-        raw_timeout = getattr(config, "timeout", 5000)
-        if raw_timeout is None or raw_timeout <= 0:
-            timeout_sec = 5
-        else:
-            timeout_sec = raw_timeout / 1000
-        async with _create_client_transport(config, force_auth=force_auth) as (
-            read,
-            write,
-        ):
-            async with ClientSession(read, write) as session:
-                async with asyncio.timeout(timeout_sec):
-                    await session.initialize()
-                    result = await session.list_tools()
-                return [
-                    ToolInfo(
-                        name=t.name,
-                        description=t.description or "",
-                        input_schema=t.input_schema,
-                    )
-                    for t in result.tools
-                ]
-    except Exception as e:
-        logging.getLogger(__name__).debug("Could not connect to server: %s", e)
-        return []
+def _get_config_display_type(config: MCPServerConfig) -> str:
+    return str(config.type).upper()
 
 
 @click.group()
@@ -314,7 +47,7 @@ def main() -> None:
 @click.option(
     "--type",
     "conn_type",
-    type=click.Choice(["local", "remote", "http", "stdio", "sse", "streamable-http"]),
+    type=click.Choice(["local", "remote"]),
     required=True,
 )
 @click.option("--url", help="URL for remote")
@@ -322,9 +55,7 @@ def main() -> None:
     "--command",
     help="Command for local (single string, will be split). For local new style, pass like 'npx -y my-mcp'",
 )
-@click.option("--args", help="JSON array of extra args", default="[]")
 @click.option("--tools", help="Comma-separated tool names (default: all)", default="*")
-@click.option("--docs-url", help="Documentation URL for the server", default=None)
 @click.option(
     "--env", "envs", multiple=True, help="Environment variable KEY=VALUE (repeatable)"
 )
@@ -351,9 +82,7 @@ def add(
     conn_type: str,
     url: str | None,
     command: str | None,
-    args: str,
     tools: str,
-    docs_url: str | None,
     oauth_port: int,
     envs: tuple[str, ...],
     headers: tuple[str, ...],
@@ -365,8 +94,7 @@ def add(
     cwd: str | None,
 ) -> None:
     """Add an MCP server and generate its .pyi stub."""
-    _ = docs_url  # deprecated, kept for backward compat
-    headers_dict = _parse_headers(list(headers)) if headers else None
+    headers_dict = parse_headers(list(headers)) if headers else None
     oauth_config = None
     if oauth_client_id or oauth_client_secret or oauth_scope:
         oauth_config = OAuthConfig(
@@ -375,55 +103,15 @@ def add(
             scope=oauth_scope,
         )
 
-    env_dict = _parse_envs(list(envs)) if envs else None
+    env_dict = parse_envs(list(envs)) if envs else None
     environment = env_dict if env_dict else None
 
     config: MCPServerConfig
-    if conn_type in ("http", "sse", "streamable-http"):
-        if not url:
-            click.echo(f"Error: --url required for {conn_type} connection", err=True)
-            sys.exit(1)
-        config = MCPServerConfig(
-            name=name,
-            type="remote",
-            url=url,
-            headers=headers_dict,
-            oauth=oauth_config,
-            timeout=timeout,
-            enabled=enabled,
-            resolved_transport=conn_type,  # type: ignore[arg-type]
-        )
-    elif conn_type == "stdio":
-        if not command:
-            click.echo("Error: --command required for stdio connection", err=True)
-            sys.exit(1)
-        try:
-            extra = json.loads(args) if args else []
-            if not isinstance(extra, list):
-                extra = []
-        except Exception:
-            extra = []
-        cmd_parts = [command] + extra if extra else [command]
-        config = MCPServerConfig(
-            name=name,
-            type="local",
-            command=cmd_parts,
-            environment=environment,
-            timeout=timeout,
-            enabled=enabled,
-        )
-    elif conn_type == "local":
+    if conn_type == "local":
         if not command:
             click.echo("Error: --command required for local connection", err=True)
             sys.exit(1)
         cmd_parts = shlex.split(command, posix=sys.platform != "win32")
-        if args and args != "[]":
-            try:
-                extra = json.loads(args)
-                if isinstance(extra, list) and extra:
-                    cmd_parts.extend(extra)
-            except Exception:
-                extra = []
         config = MCPServerConfig(
             name=name,
             type="local",
@@ -447,8 +135,6 @@ def add(
             enabled=enabled,
         )
         try:
-            from mcp_gway.transport import detect_transport
-
             try:
                 detected = asyncio.run(
                     asyncio.wait_for(
@@ -466,7 +152,7 @@ def add(
 
     tool_filter = tools.split(",") if tools != "*" else ["*"]
     click.echo(f"Discovering tools from {name}...")
-    discovered = asyncio.run(_discover_tools(config))
+    discovered = asyncio.run(discover_tools(config))
 
     if (
         not discovered
@@ -499,7 +185,7 @@ def add(
         )
         if client:
             click.echo("Authentication successful.")
-            discovered = asyncio.run(_discover_tools(config, force_auth=True))
+            discovered = asyncio.run(discover_tools(config, force_auth=True))
 
     if tools != "*":
         discovered = [t for t in discovered if t.name in tool_filter]
@@ -531,18 +217,12 @@ def remove(name: str) -> None:
 @main.command()
 @click.argument("name")
 @click.option("--tools", help="Comma-separated tool names", required=True)
-@click.option("--docs-url", help="Documentation URL for the server", default=None)
-def update(name: str, tools: str, docs_url: str | None) -> None:
+def update(name: str, tools: str) -> None:
     """Update tools for an existing server."""
     registry = _get_registry()
     tool_list = [ToolInfo(name=t.strip(), description="") for t in tools.split(",")]
     try:
-        if docs_url:
-            config = registry.get_config(name)
-            config.docs_url = docs_url  # type: ignore[attr-defined]
-            registry.add(config, tool_list)
-        else:
-            registry.update(name, tool_list)
+        registry.update(name, tool_list)
         click.echo(f"Updated {name} with {len(tool_list)} tools.")
     except FileNotFoundError:
         click.echo(f"Error: Server '{name}' not found.", err=True)
@@ -740,50 +420,6 @@ def serve(host: str, port: int, log_level: str | None) -> None:
     )
 
 
-async def _refresh_server(
-    cfg: MCPClientConfig | MCPServerConfig,
-    srv_name: str,
-    force_auth: bool,
-    oauth_port: int = 8989,
-) -> list[ToolInfo]:
-    """Refresh a single server: try without auth, then with OAuth if needed."""
-    discovered = await _discover_tools(cfg, force_auth=False)
-
-    needs_auth = (force_auth or _is_remote_config(cfg)) and getattr(
-        cfg, "oauth", None
-    ) is not False
-    if not discovered and needs_auth:
-        from mcp_gway.oauth import run_oauth_flow
-
-        server_url = _get_config_url(cfg) or ""
-        client_metadata = None
-        if isinstance(getattr(cfg, "oauth", None), OAuthConfig):
-            try:
-                from mcp.shared.auth import OAuthClientMetadata
-
-                client_metadata = OAuthClientMetadata(
-                    scope=cfg.oauth.scope,  # type: ignore[union-attr]
-                    redirect_uris=[f"http://127.0.0.1:{oauth_port}/callback"],
-                )
-            except Exception:
-                client_metadata = None
-        client = await run_oauth_flow(
-            server_url=server_url,
-            server_name=srv_name,
-            client_metadata=client_metadata,
-            output_callback=click.echo,
-            callback_port=oauth_port,
-            oauth_config=getattr(cfg, "oauth", None),
-        )
-        if client:
-            click.echo("Authentication successful. Discovering tools...")
-            discovered = await _discover_tools(cfg, force_auth=True)
-        else:
-            click.echo("Authentication failed.")
-
-    return discovered
-
-
 @main.command()
 @click.argument("name", required=False)
 @click.option("--auth", is_flag=True, help="Force OAuth authentication flow")
@@ -831,7 +467,7 @@ def refresh(name: str | None, auth: bool, oauth_port: int) -> None:
 
         try:
             discovered = asyncio.run(
-                _refresh_server(config, server_name, auth, oauth_port)
+                refresh_server(config, server_name, auth, oauth_port)
             )
         except Exception as e:
             click.echo(f"Error refreshing {server_name}: {e}", err=True)
