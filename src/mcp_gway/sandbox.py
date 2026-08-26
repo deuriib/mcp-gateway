@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 
@@ -40,6 +41,7 @@ class StarlarkSandbox:
         self._modules: dict[str, object] = {}
         self._custom_globals: dict[str, object] = {}
         self._custom_globals["print"] = _noop
+        self._metrics: object | None = None
 
     def set_global(self, name: str, value: object) -> None:
         """Set a custom global variable (e.g., call_tool function)."""
@@ -49,48 +51,89 @@ class StarlarkSandbox:
         self._modules[name] = server_proxy
 
     def execute(self, code: str, timeout: float = 30.0) -> object:
-        mod = sl.Module()
-        preamble_lines: list[str] = []
+        start = time.perf_counter()
+        status = "ok"
+        try:
+            mod = sl.Module()
+            preamble_lines: list[str] = []
 
-        # Inject custom globals (e.g., call_tool function)
-        for name, value in self._custom_globals.items():
-            mod.add_callable(name, value)
+            # Inject custom globals (e.g., call_tool function)
+            for name, value in self._custom_globals.items():
+                mod.add_callable(name, value)
 
-        for name, proxy in self._modules.items():
-            methods: list[str] = []
-            for attr_name in dir(proxy):
-                if attr_name.startswith("_"):
-                    continue
-                attr_val = getattr(proxy, attr_name, None)
-                if callable(attr_val) or (inspect.isfunction(attr_val)):
-                    safe_name = _sanitize_identifier(attr_name)
-                    callable_name = f"{name}_{safe_name}"
-                    mod.add_callable(callable_name, attr_val)
-                    methods.append(f"{safe_name} = {callable_name}")
+            for name, proxy in self._modules.items():
+                methods: list[str] = []
+                for attr_name in dir(proxy):
+                    if attr_name.startswith("_"):
+                        continue
+                    attr_val = getattr(proxy, attr_name, None)
+                    if callable(attr_val) or (inspect.isfunction(attr_val)):
+                        safe_name = _sanitize_identifier(attr_name)
+                        callable_name = f"{name}_{safe_name}"
+                        mod.add_callable(callable_name, attr_val)
+                        methods.append(f"{safe_name} = {callable_name}")
 
-            if methods:
-                fields = ", ".join(methods)
-                preamble_lines.append(f"{name} = struct({fields})")
+                if methods:
+                    fields = ", ".join(methods)
+                    preamble_lines.append(f"{name} = struct({fields})")
 
-        full_code = "\n".join(preamble_lines) + "\n" + code if preamble_lines else code
+            full_code = (
+                "\n".join(preamble_lines) + "\n" + code if preamble_lines else code
+            )
 
-        def _run() -> object:
-            ast = sl.parse("code.star", full_code)
-            sl.eval(mod, ast, self.globals)
+            def _run() -> object:
+                ast = sl.parse("code.star", full_code)
+                sl.eval(mod, ast, self.globals)
+                try:
+                    return mod["result"]
+                except (KeyError, Exception):
+                    raise RuntimeError(
+                        "Code did not assign to 'result' variable. "
+                        "Assign your output to 'result' to return it."
+                    )
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_run)
+                try:
+                    result = future.result(timeout=timeout)
+                except FuturesTimeoutError:
+                    status = "timeout"
+                    raise SandboxTimeoutError(
+                        f"Code execution timed out after {timeout}s. "
+                        "Avoid infinite loops or long-running operations."
+                    )
+            return result
+        except SandboxTimeoutError:
+            raise
+        except Exception:
+            status = "error"
+            raise
+        finally:
+            duration = time.perf_counter() - start
             try:
-                return mod["result"]
-            except (KeyError, Exception):
-                raise RuntimeError(
-                    "Code did not assign to 'result' variable. "
-                    "Assign your output to 'result' to return it."
-                )
-
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_run)
+                metrics = getattr(self, "_metrics", None)
+                if metrics is not None:
+                    # type: ignore[attr-defined]
+                    metrics.inc("sandbox_execute_total", {"status": status})  # type: ignore[union-attr]
+                    metrics.observe(
+                        "sandbox_duration_seconds", duration, {"status": status}
+                    )  # type: ignore[union-attr]
+            except Exception:
+                pass
+            # logging without secrets truncated
             try:
-                return future.result(timeout=timeout)
-            except FuturesTimeoutError:
-                raise SandboxTimeoutError(
-                    f"Code execution timed out after {timeout}s. "
-                    "Avoid infinite loops or long-running operations."
-                )
+                import logging
+
+                logger = logging.getLogger("mcp_gway.sandbox")
+                if status == "timeout":
+                    logger.warning(
+                        "sandbox execute timeout",
+                        extra={"status": status, "duration_ms": int(duration * 1000)},
+                    )
+                elif status == "error":
+                    logger.warning(
+                        "sandbox execute error",
+                        extra={"status": status, "duration_ms": int(duration * 1000)},
+                    )
+            except Exception:
+                pass

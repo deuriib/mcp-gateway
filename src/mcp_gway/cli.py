@@ -319,6 +319,9 @@ def serve(host: str, port: int, log_level: str | None) -> None:
     import uvicorn
 
     resolved_level = _resolve_log_level(log_level)
+    from mcp_gway.observability.logging import setup_logging
+
+    setup_logging(resolved_level)
     _py_level = {
         "trace": logging.DEBUG,
         "debug": logging.DEBUG,
@@ -327,7 +330,6 @@ def serve(host: str, port: int, log_level: str | None) -> None:
         "error": logging.ERROR,
         "critical": logging.CRITICAL,
     }.get(resolved_level, logging.INFO)
-    logging.getLogger("mcp_gway").setLevel(_py_level)
     logging.getLogger("uvicorn.error").setLevel(_py_level)
     logging.getLogger("uvicorn.access").setLevel(_py_level)
 

@@ -19,9 +19,18 @@ class Registry:
     def __init__(self, servers_dir: Path | str = "servers") -> None:
         self.servers_dir = Path(servers_dir)
         self.servers_dir.mkdir(parents=True, exist_ok=True)
+        self._metrics: Any = None
 
     def ensure(self) -> None:
         self.servers_dir.mkdir(parents=True, exist_ok=True)
+
+    def _inc_registry_metric(self, op: str) -> None:
+        try:
+            metrics = getattr(self, "_metrics", None)
+            if metrics is not None:
+                metrics.inc("registry_operations_total", {"op": op})
+        except Exception:
+            pass
 
     def patch_enabled(self, name: str, enabled: bool) -> None:
         cfg = self.get_config(name)
@@ -32,6 +41,7 @@ class Registry:
                 data = json.loads(json_path.read_text(encoding="utf-8"))
                 data["enabled"] = enabled
                 self._atomic_write_text(json_path, json.dumps(data, indent=2))
+                self._inc_registry_metric("patch")
                 return
             except Exception:  # noqa: BLE001
                 pass
@@ -166,6 +176,7 @@ class Registry:
         pyi_path = self._safe_path(config.name, ".pyi")
         content = self._generate_pyi(config, tools)
         self._atomic_write_text(pyi_path, content)
+        self._inc_registry_metric("add")
 
     def remove(self, name: str) -> None:
         pyi_path = self._safe_path(name, ".pyi")
@@ -175,10 +186,15 @@ class Registry:
         json_path = self._safe_path(name, ".json")
         if json_path.exists():
             json_path.unlink()
+        self._inc_registry_metric("remove")
 
     def update(self, name: str, tools: list[ToolInfo]) -> None:
         config = self.get_config(name)
         self.add(config, tools)
+        # add already counts; avoid double count for update if needed we count add, but spec says registry_operations_total{op="update"} not needed double
+        # To ensure update is counted, we inc update additionally but not double if add already counted?
+        # We already counted add via self.add, so for update we add extra "update" label
+        self._inc_registry_metric("update")
 
     def get_config(self, name: str) -> MCPServerConfig:
         json_path = self._safe_path(name, ".json")

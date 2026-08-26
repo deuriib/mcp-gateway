@@ -47,8 +47,37 @@ class ServerFactory:
         Creates an MCP client connection, calls the tool, and returns the result.
         This method is injected into the Starlark sandbox as `call_tool`.
         """
-        config = self._registry.get_config(server)
-        return asyncio.run(self._call_tool_async(config, tool, kwargs))
+        import re
+        import time
+
+        start = time.perf_counter()
+        status = "ok"
+        try:
+            config = self._registry.get_config(server)
+            result = asyncio.run(self._call_tool_async(config, tool, kwargs))
+            return result
+        except Exception:
+            status = "error"
+            raise
+        finally:
+            duration = time.perf_counter() - start
+            try:
+                metrics = getattr(self._registry, "_metrics", None)
+                if metrics is not None:
+
+                    def _san(v: str) -> str:
+                        s = re.sub(r"[^A-Za-z0-9_]", "_", v)[:32]
+                        return s.strip("_") or "_other"
+
+                    metrics.inc(
+                        "mcp_tool_calls_total",
+                        {"server": _san(server), "tool": _san(tool), "status": status},
+                    )
+                    metrics.observe(
+                        "discovery_duration_seconds", duration, {"server": _san(server)}
+                    )
+            except Exception:
+                pass
 
     async def _call_tool_async(
         self, config: Any, tool_name: str, arguments: dict[str, Any]
