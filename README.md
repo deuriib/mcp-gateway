@@ -169,6 +169,42 @@ mcp-gway serve --host 0.0.0.0
 - Masking `***` obligatorio: `GET /api/servers`, `GET /api/servers/{name}`, `GET /dashboard` nunca exponen `headers`/`oauth.clientSecret`/`environment` reales.
 - Reveal solo `POST /api/servers/{name}/reveal` desde `127.0.0.1`, rate-limit 5/min, audit log sin valor, `403` si no loopback, `405` si GET.
 
+## Observability — Logs + Metrics + Health (Approach C, 0.8.0)
+
+> **Zero vendor lock-in:** stdlib `json` logs (no `structlog`), vendored `MetricsRegistry` (no `prometheus_client`), correlation via `X-Request-ID` + `contextvars`, health probes `/health|/ready|/live` + Prometheus text `/metrics`. Local-first + masking `***` preserved; `/metrics` gated like `reveal`.
+
+**Health & Metrics:**
+
+```bash
+curl -s http://127.0.0.1:8080/health | jq
+# {"status":"ok","version":"1.3.4","checks":{"registry":"ok","dashboard":"ok"},"uptime_seconds":42}
+curl -s http://127.0.0.1:8080/ready | jq   # 200 ready / 503 not_ready (registry/routes/event_loop checks)
+curl -s http://127.0.0.1:8080/live | jq    # 200 alive — no FS I/O, <5ms
+curl -s http://127.0.0.1:8080/metrics | head -n 20
+# # HELP mcp_gway_http_requests_total Total HTTP requests
+# # TYPE mcp_gway_http_requests_total counter
+# mcp_gway_http_requests_total{method="GET",path="/health",status="200"} 7
+curl -s http://127.0.0.1:8080/api/health | jq  # dashboard-friendly JSON + metrics_summary
+```
+
+**Correlation & JSON logs:**
+
+```bash
+curl -s -H "X-Request-ID: demo123" http://127.0.0.1:8080/health -D - | grep -i X-Request-ID
+# X-Request-ID: demo123  ← echo on every response; json log line also has "request_id":"demo123"
+uv run mcp-gway serve --port 8080 2>&1 | head   # each line valid JSON: timestamp, level, logger, message, request_id, method, path, status, duration_ms
+```
+
+- `X-Request-ID` or `X-Correlation-ID` accepted, sanitized to `^[A-Za-z0-9_-]{1,64}$`, truncated; auto `uuid4` if absent.
+- Labels bounded: `path` templated to `/api/servers/{name}` (not concrete), server sanitized `[^A-Za-z0-9_]`→`_` 32 chars.
+- Metrics catalog: `http_requests_total`, `http_request_duration_seconds` (buckets 0.005..5), `mcp_tool_calls_total{server,tool,status}`, `discovery_duration_seconds`, `sandbox_execute_total{status}`, `registry_operations_total{op}`, `gateway_sessions_active`.
+
+**Dashboard ops card:**
+
+- `GET /dashboard` renders `id="ops-card"` (htpy) with badge `healthy`/`degraded`/`not_ready`, uptime, p95, checks; polls `GET /api/health` (`hx-get every 15s`). `HX-Request:true` → fragment, else JSON. No secrets, CSP intact.
+
+**Local-first gating:** `/metrics` never leaks secrets; if somehow bound non-loopback without `MCP_GWAY_ALLOW_REMOTE=1`, `serve` exits 2; if bypassed, `/metrics` returns `403` + `X-Warning: exposed`.
+
 ## Connect from Claude Desktop
 
 Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
