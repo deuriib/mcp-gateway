@@ -111,26 +111,26 @@ class _CSPMiddleware(BaseHTTPMiddleware):
 CODE_MODE_TOOLS = [
     {
         "name": "listToolFiles",
-        "description": "Discover registered MCP servers.",
+        "description": "See every registered server in one place so you find the right capability instantly.",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "readToolFile",
-        "description": "Get compact signatures for tools.",
+        "description": "Peek inside any server to see its tools and how to call them correctly.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "fileName": {
                     "type": "string",
-                    "description": "Path like servers/youtube.pyi",
+                    "description": "Server to preview — e.g., youtube or servers/youtube.pyi",
                 },
                 "startLine": {
                     "type": "integer",
-                    "description": "Optional 1-based start line",
+                    "description": "Where to start reading — useful for large servers (leave empty for full view).",
                 },
                 "endLine": {
                     "type": "integer",
-                    "description": "Optional 1-based end line",
+                    "description": "Where to stop reading — useful for large servers (leave empty for full view).",
                 },
             },
             "required": ["fileName"],
@@ -138,23 +138,32 @@ CODE_MODE_TOOLS = [
     },
     {
         "name": "getToolDocs",
-        "description": "Get detailed documentation for a specific tool.",
+        "description": "Get the full details on any tool — what it needs and what it returns — so you build the right call.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "server": {"type": "string", "description": "The server name"},
-                "tool": {"type": "string", "description": "The tool name"},
+                "server": {
+                    "type": "string",
+                    "description": "The server that owns the tool, like youtube",
+                },
+                "tool": {
+                    "type": "string",
+                    "description": "The tool you want to explore, like searchVideos",
+                },
             },
             "required": ["server", "tool"],
         },
     },
     {
         "name": "executeToolCode",
-        "description": "Use call_tool(server, tool, **kwargs) to invoke MCP tools.",
+        "description": "Run chain one or many tools together — just use call_tool() and put your answer in result.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "code": {"type": "string", "description": "Python code to execute"}
+                "code": {
+                    "type": "string",
+                    "description": "Code that calls tools with call_tool() — set result to your final answer",
+                }
             },
             "required": ["code"],
         },
