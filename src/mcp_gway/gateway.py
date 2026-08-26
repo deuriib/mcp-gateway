@@ -168,13 +168,13 @@ CODE_MODE_TOOLS = [
     },
     {
         "name": "executeToolCode",
-        "description": "Run and chain one or many tools together — just use call_tool() and put your answer in result.",
+        "description": 'Run and chain one or many tools together — just use call_tool("server-name", "tool-name", param1="value1", param2="value2") and put your answer in result.',
         "inputSchema": {
             "type": "object",
             "properties": {
                 "code": {
                     "type": "string",
-                    "description": "Code that calls tools with call_tool() — set result to your final answer",
+                    "description": 'Code that calls tools with result = call_tool("server-name", "tool-name", param1="value1", param2="value2") — set result to your final answer',
                 }
             },
             "required": ["code"],
