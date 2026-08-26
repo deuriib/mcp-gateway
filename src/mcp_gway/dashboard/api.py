@@ -1560,13 +1560,16 @@ async def handle_refresh(request: Request) -> JSONResponse | HTMLResponse:
             feedback = _drawer_feedback_html(
                 f"Refreshed '{_e(name)}' — {len(tools)} tool(s) discovered", "emerald"
             )
-            table_oob = _table_oob(registry)
             stats_oob = _stats_oob(registry)
             toast = _toast_oob(
                 f"Refreshed '{_e(name)}' — {len(tools)} tools", "emerald"
             )
-            html = f"<div id='drawer-feedback'>{feedback}</div>{table_oob}{stats_oob}{toast}"
-            return HTMLResponse(html, headers=_csp_headers())
+            # table is updated via OOB fetch on client to avoid tbody parsing issues inside drawer
+            html = f"<div id='drawer-feedback'>{feedback}</div>{stats_oob}{toast}"
+            resp = HTMLResponse(html, headers=_csp_headers())
+            # also trigger client-side table reload via HX-Trigger header for htmx
+            resp.headers["HX-Trigger"] = "refreshDone"
+            return resp
         else:
             has_auth = bool(cfg.headers or cfg.oauth)
             if cfg.type == "remote" and not has_auth:
@@ -1581,11 +1584,12 @@ async def handle_refresh(request: Request) -> JSONResponse | HTMLResponse:
             feedback = _drawer_feedback_html(
                 f"Refresh '{_e(name)}' finished — {hint}", variant
             )
-            table_oob = _table_oob(registry)
             stats_oob = _stats_oob(registry)
             toast = _toast_oob(f"Refresh '{_e(name)}' — no tools", variant)
-            html = f"<div id='drawer-feedback'>{feedback}</div>{table_oob}{stats_oob}{toast}"
-            return HTMLResponse(html, headers=_csp_headers())
+            html = f"<div id='drawer-feedback'>{feedback}</div>{stats_oob}{toast}"
+            resp = HTMLResponse(html, headers=_csp_headers())
+            resp.headers["HX-Trigger"] = "refreshDone"
+            return resp
     # non-HX API clients keep old fire-and-forget 202 for backward compat
     asyncio.create_task(_background_refresh(registry, name))
     return JSONResponse(

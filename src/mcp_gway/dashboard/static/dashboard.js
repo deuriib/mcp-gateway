@@ -451,6 +451,46 @@
     });
   }
 
+  function setupRefreshDone(){
+    if(document.body.dataset.refreshDoneBound) return;
+    document.body.dataset.refreshDoneBound="1";
+    function reloadTable(){
+      var tbody=document.getElementById('server-table-body');
+      if(!tbody) return;
+      fetch('/dashboard/servers', {headers:{'HX-Request':'true'}})
+        .then(function(r){ return r.text(); })
+        .then(function(html){
+          var tmp=document.createElement('template'); tmp.innerHTML=html.trim();
+          var newTbody=tmp.content.querySelector('#server-table-body');
+          if(newTbody && tbody.parentNode) tbody.parentNode.replaceChild(newTbody, tbody);
+          var newStats=tmp.content.querySelector('#dashboard-stats');
+          if(newStats){
+            var cur=document.getElementById('dashboard-stats');
+            if(cur) cur.outerHTML=newStats.outerHTML;
+          }
+          // re-init htmx for new rows
+          if(window.htmx) htmx.process(document.body);
+          // re-apply filter if any
+          var filter=document.getElementById('server-filter');
+          if(filter && filter.value){
+            var v=filter.value.toLowerCase();
+            document.querySelectorAll("tr[data-name]").forEach(function(tr){
+              var name=tr.getAttribute("data-name")||"";
+              tr.style.display=name.includes(v)?"":"none";
+            });
+          }
+        }).catch(function(){});
+    }
+    document.addEventListener('refreshDone', reloadTable);
+    document.addEventListener('htmx:afterRequest', function(e){
+      var elt=e.detail && e.detail.elt;
+      if(elt && elt.getAttribute && elt.getAttribute('hx-post') && elt.getAttribute('hx-post').indexOf('/refresh')!==-1){
+        // also trigger reload after any refresh request, even if header missed
+        setTimeout(reloadTable, 100);
+      }
+    });
+  }
+
   function init() {
     setupType();
     setupOAuth();
@@ -463,6 +503,7 @@
     setupToastAutoHide();
     setupHeaderToast();
     setupRevealToggle();
+    setupRefreshDone();
     syncType();
     syncOAuth();
   }
