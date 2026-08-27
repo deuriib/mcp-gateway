@@ -123,12 +123,12 @@ class _CSPMiddleware(BaseHTTPMiddleware):
 CODE_MODE_TOOLS = [
     {
         "name": "listToolFiles",
-        "description": "See every registered server in one place so you find the right capability instantly.",
+        "description": "Returns a tree structure listing all virtual .pyi stub files available for connected MCP servers, organized by individual tool. Each tool has a corresponding file (e.g., servers/<serverName>/<toolName>.pyi) that contains compact Python signatures for that specific tool. The <toolName> shown in each filename is the exact canonical identifier exposed in executeToolCode. Safe workflow: listToolFiles -> readToolFile -> (optional) getToolDocs -> executeToolCode. Use readToolFile before executeToolCode to confirm the exact signature and parameters for the tool you want to call. Use getToolDocs if you need detailed documentation for a specific tool. In code, access tools via: server_name.tool_name(param=value). The server names used in code correspond to the human-readable names shown in this listing. This tool is generic and works with any set of servers connected at runtime. CALL THIS TOOL FIRST whenever the user references a server, tool, capability, or action that is not visible in your current tool list — connected MCP servers and their tools are NOT included in your top-level tool schema, so the only way to discover them is by calling listToolFiles. Examples that should trigger this tool: user names a server you don't recognize (e.g. 'localserver', 'mydb'), asks 'who am I on X', 'what can X do', 'does X have a tool for Y', or asks you to perform an action and you are unsure whether a matching tool exists. Do NOT tell the user a server or capability is unavailable until you have called listToolFiles and confirmed it is absent.",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "readToolFile",
-        "description": "Peek inside any server to see its tools and how to call them correctly.",
+        "description": "Reads a virtual .pyi stub file for a specific tool, returning its compact Python function signature. The fileName should be in format servers/<serverName>/<toolName>.pyi as listed by listToolFiles. The function performs case-insensitive matching and removes the .pyi extension. This is the authoritative source for the exact callable tool name and arguments to use in executeToolCode. The tool can be accessed in code via: serverName.tool_name(param=value) using the def name shown in the file. If the compact signature is not enough to understand the tool, use getToolDocs for detailed documentation. Workflow: listToolFiles -> readToolFile -> (optional) getToolDocs -> executeToolCode. IMPORTANT: If the response header shows 'Total lines: X (this is the complete file)', do NOT call this tool again with startLine/endLine - you already have the complete file.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -150,7 +150,7 @@ CODE_MODE_TOOLS = [
     },
     {
         "name": "getToolDocs",
-        "description": "Get the full details on any tool — what it needs and what it returns — so you build the right call.",
+        "description": "Get detailed documentation for a specific tool including full parameter descriptions, types, and usage examples. Use this when the compact signature from readToolFile is not sufficient to understand how to use a tool. Requires both server name and tool name as parameters.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -168,7 +168,7 @@ CODE_MODE_TOOLS = [
     },
     {
         "name": "executeToolCode",
-        "description": 'Run and chain one or many tools together — just use call_tool("server-name", "tool-name", param1="value1", param2="value2") and put your answer in result.',
+        "description": 'Executes Python code in a sandboxed Starlark interpreter with MCP server tool access. Servers are exposed as global objects: result = serverName.toolName(param="value"). This is the final step of the four-tool code mode workflow: listToolFiles -> readToolFile -> (optional) getToolDocs -> executeToolCode. If you have not already read a tool\'s .pyi stub in this conversation, do that before writing code. Do NOT guess callable tool names from natural language or stale assumptions; use the exact identifier returned by listToolFiles/readToolFile. STARLARK DIFFERENCES FROM PYTHON — READ BEFORE WRITING CODE: 1. NO try/except/finally/raise — error handling is not supported, and tool failures cannot be caught inside Starlark. 2. NO classes — use dicts and functions. 3. NO imports, direct network access, or direct filesystem access — use MCP tools instead. 4. NO is operator — use == for comparison. 5. NO f-strings — use % formatting: "Hello %s, count=%d" % (name, n). 6. Each executeToolCode call runs in a FRESH ISOLATED SCOPE — no variables, functions, or state persist between calls. Re-fetch data or store it via MCP tools (e.g., SQLite, FileSystem) if needed across calls. SYNTAX NOTES: • Synchronous calls — NO async/await: result = server.tool(arg="value") • Use keyword arguments: server.tool(param="value") NOT server.tool({"param": "value"}) • Access dict values with brackets: result["key"] NOT result.key • Use print() for logging/debugging • List comprehensions: [x for x in items if x["active"]] • String escapes work normally: "line1\\nline2" produces a newline • Triple-quoted strings for multiline: """multi\\nline""" • chr(10) for newline character, chr(9) for tab • To return a value, assign to \'result\': result = computed_value • MCP tool calls are timeout-limited; avoid long or infinite loops AVAILABLE BUILTINS: print, len, range, enumerate, zip, sorted, reversed, min, max, int, float, str, bool, list, dict, tuple, set, hasattr, getattr, type, chr, ord, any, all, hash, repr. RETRY POLICY: Retry after fixing syntax or logic errors, especially for read-only flows. Before rerunning code that already made tool calls, inspect prior outputs and avoid replaying stateful operations.',
         "inputSchema": {
             "type": "object",
             "properties": {
