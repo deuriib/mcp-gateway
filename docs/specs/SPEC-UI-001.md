@@ -1,10 +1,10 @@
 # Spec: Dashboard Management MCPs — SPEC-UI-001
 
 ## Spec ID: SPEC-UI-001
-## Status: Complete — Shipped v0.7.0 GA (Vinculante SBTDD)
-## Version: 0.7.0 GA — 2026-08-25 (181 tests passed)
+## Status: Complete — Shipped v1.4.1 GA (Vinculante SBTDD)
+## Version: 1.4.1 GA — 2026-08-27 (254 tests passed)
 ## Author: Vasquez (Senior CTO Orchestrator)
-## Date: 2026-08-25
+## Date: 2026-08-27
 ## Stack Decisión: htpy + python-htmx + Starlette + TailwindCSS vendoreado (sin Node)
 
 ---
@@ -230,13 +230,13 @@ No nuevas deps de build. `htmx.min.js` vendoreado opcional (o CDN con fallback).
 
 ---
 
-### Verification — Definition of Done (v0.7.0 GA — Verificado 2026-08-25)
+### Verification — Definition of Done (v1.4.1 GA — Verificado 2026-08-27)
 
 - [x] `uv run ruff check src/ tests/` y `ruff format --check` pasan
-- [x] `uv run pytest -v` 181 tests (`test_dashboard_*` API + views htpy) y CLI existentes verdes
+- [x] `uv run pytest -v` 254 tests (`test_dashboard_*` + `test_catalog_*` + `test_observability_*` + CLI) verdes
 - [x] `mcp-gway serve` en `127.0.0.1:8080` → `curl /dashboard` 200 HTML htpy + Tailwind vendoreado + `curl /api/servers` JSON masked `***`
 - [x] Demostración manual: add remote, add local, toggle enabled, inspect drawer, delete, refresh con 401 → OAuth (ver `docs/specs/ACCEPTANCE-UI-001.md`)
-- [x] Review waves: `readability` + `reliability` + `resilience` + `risk` → `refuter` → `qa` (sole executor) → Vasquez Gate — CEO GO
+- [x] Review waves: `readability` + `reliability` + `resilience` + `risk` → `refuter` → `qa` (sole executor) → Vasquez Gate — CEO GO v1.4.1
 
 ---
 
@@ -248,9 +248,10 @@ No nuevas deps de build. `htmx.min.js` vendoreado opcional (o CDN con fallback).
 
 ---
 
-### Changelog v0.7.0
+### Changelog v0.7.0 — v1.4.1
 
 - **2026-08-25 — v0.7.0 GA shipped**: Dashboard embebido htpy+htmx+Tailwind vendoreado, Registry única fuente, masking `***`, local-first `127.0.0.1` + `MCP_GWAY_ALLOW_REMOTE`, 181 tests, release híbrido `push v*` + `workflow_run` (ADR-007).
+- **2026-08-27 — v1.4.1 GA**: Align a 1.4.1 exacta — sync `pyproject.toml:project.version` + `src/mcp_gway/__init__.py:__version__` (`[tool.semantic_release]`), 254 tests (`catalog` + `observability`), badge/dashboard expone `__version__` 1.4.1, `health` version 1.4.1.
 
 ---
 

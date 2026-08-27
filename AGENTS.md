@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**MCP Gateway** — A standalone Python CLI that aggregates multiple MCP servers behind a single HTTP/SSE endpoint with Code Mode and a local-first Dashboard (v0.7.0 GA).
+**MCP Gateway** — A standalone Python CLI that aggregates multiple MCP servers behind a single HTTP/SSE endpoint with Code Mode and a local-first Dashboard (v1.4.1 GA).
 
 ## Tech Stack
 
@@ -13,14 +13,14 @@
 - **MCP SDK**: mcp v2.0.0
 - **Dashboard**: htpy + python-htmx + TailwindCSS vendoreado (sin Node, sin build)
 - **Sandbox**: starlark-pyo3
-- **Testing**: pytest + pytest-asyncio (181 tests v0.7.0)
+- **Testing**: pytest + pytest-asyncio (254 tests v1.4.1)
 - **Linting**: ruff
 
 ## Project Structure
 
 ```
 src/mcp_gway/
-├── __init__.py          # Package version (0.7.0)
+├── __init__.py          # Package version (1.4.1)
 ├── models.py            # Pydantic models (MCPServerConfig OpenCode + MCPClientConfig deprecated compat, ToolInfo, ConnectionType)
 ├── registry.py          # .pyi file CRUD (servers/ directory) — única fuente de verdad
 ├── sandbox.py           # Starlark sandbox (hermetic execution)
@@ -50,7 +50,7 @@ tests/
 └── test_integration.py  # End-to-end flow tests
 
 docs/specs/
-├── SPEC-UI-001.md       # Dashboard spec v0.7.0 GA (vinculante)
+├── SPEC-UI-001.md       # Dashboard spec v1.4.1 GA (vinculante)
 ├── SCENARIOS-UI-001.md  # Given/When/Then 28 scenarios
 └── ACCEPTANCE-UI-001.md # 9 AC ejecutables (TestClient)
 ```
@@ -62,7 +62,7 @@ docs/specs/
 uv sync --all-groups                     # Install dependencies (dev group includes pre-commit)
 uv run pre-commit install                # Install git hooks (once per clone)
 uv run pre-commit run --all-files        # Run hooks on all files
-uv run pytest -v                         # Run tests (181 tests v0.7.0)
+uv run pytest -v                         # Run tests (254 tests v1.4.1)
 uv run ruff check src/ tests/            # Lint (CI parity)
 uv run ruff format --check src/ tests/   # Format check (CI parity)
 
@@ -108,10 +108,10 @@ mcp-gway serve [--host 127.0.0.1] [--port 8080]   # default local-first; 0.0.0.0
 ## Deployment
 
 - **PyPI**: Hybrid workflow `.github/workflows/release.yml` — `on: push tags v*` **+** `on: workflow_run Tests completed` (ver ADR-007)
-  - `push v*` → `uv build` + `pypi-publish` determinístico (GA manual `v0.7.0` via tag, CEO GO)
+  - `push v*` → `uv build` + `pypi-publish` determinístico (GA manual `v1.4.1` via tag, CEO GO)
   - `workflow_run` → `python-semantic-release@v9` para patches automáticos `fix/perf` → minor/patch sin tag manual
   - Condición: `if: push || workflow_run.conclusion == 'success'` + `concurrency: release` + `fetch-depth: 0`
-- **Version**: `0.7.0` sincronizada `pyproject.toml:project.version` + `src/mcp_gway/__init__.py:__version__` (`[tool.semantic_release]`)
+- **Version**: `1.4.1` sincronizada `pyproject.toml:project.version` + `src/mcp_gway/__init__.py:__version__` (`[tool.semantic_release]`)
 - **Build**: `uv_build` backend — sin Node en CI (`ruff` único linter)
 
 ## Key Patterns

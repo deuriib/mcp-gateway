@@ -75,7 +75,7 @@ async def test_add_local_persists(
         payload = {
             "name": "echo_srv",
             "type": "local",
-            "command": ["echo", "hi"],
+            "command": ["npx", "hi"],
             "cwd": "/tmp",
             "environment": {"FOO": "bar"},
         }

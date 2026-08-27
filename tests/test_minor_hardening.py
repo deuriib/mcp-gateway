@@ -85,7 +85,7 @@ async def test_form_multipart_exceeds_64kb_returns_413(
         payload = {
             "name": "big3",
             "type": "local",
-            "command": "echo hi",
+            "command": "npx hi",
             "extra": "x" * 70000,
         }
         body2 = urllib.parse.urlencode(payload)
@@ -141,7 +141,7 @@ async def test_form_small_multipart_still_works(
         s3 = (
             "--"
             + boundary
-            + '\r\nContent-Disposition: form-data; name="command"\r\n\r\necho hi\r\n'
+            + '\r\nContent-Disposition: form-data; name="command"\r\n\r\nnpx hi\r\n'
         )
         s4 = "--" + boundary + "--\r\n"
         body = (s1 + s2 + s3 + s4).encode()
@@ -154,11 +154,11 @@ async def test_form_small_multipart_still_works(
         assert resp.status_code == 201
         assert "small1" in registry.list()
         cfg = registry.get_config("small1")
-        assert cfg.command == ["echo", "hi"]
+        assert cfg.command == ["npx", "hi"]
 
         # also small urlencoded must work
         body2 = urllib.parse.urlencode(
-            {"name": "small2", "type": "local", "command": "echo hi"}
+            {"name": "small2", "type": "local", "command": "npx hi"}
         )
         resp2 = await client.post(
             "/api/servers",

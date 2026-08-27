@@ -576,7 +576,7 @@ def test_create_client_transport_local_env(tmp_path, monkeypatch):
     config = MCPServerConfig(
         name="envtest",
         type="local",
-        command=["echo", "hello"],
+        command=["npx", "hello"],
         environment={"FOO": "bar", "BAZ": "qux"},
     )
 

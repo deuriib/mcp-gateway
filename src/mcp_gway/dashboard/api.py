@@ -27,7 +27,10 @@ logger = logging.getLogger(__name__)
 
 MAX_PAYLOAD_SIZE = 1_048_576
 MAX_SMALL_PAYLOAD = 65536
-_discovery_sem = asyncio.Semaphore(3)
+try:
+    from mcp_gway.core.install import _discovery_sem  # shared semaphore
+except Exception:
+    _discovery_sem = asyncio.Semaphore(3)
 _reveal_attempts: dict[str, list[float]] = {}
 
 
@@ -175,7 +178,7 @@ def _csp_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
     base = {
         "Content-Security-Policy": (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "script-src 'self' 'unsafe-inline'; "
             "script-src-elem 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
             "style-src-elem 'self' 'unsafe-inline'; "

@@ -4,13 +4,13 @@
 [![Python](https://img.shields.io/pypi/pyversions/mcp-gway)](https://pypi.org/project/mcp-gway/)
 [![License](https://img.shields.io/pypi/l/mcp-gway)](https://github.com/deuriib/mcp-gateway/blob/main/LICENSE)
 
-A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) servers behind a single HTTP/SSE endpoint with **Code Mode** — reducing LLM input token usage by up to 92% when using multiple MCP servers. **v0.7.0 GA** adds a local-first **Dashboard** (Python `htpy` + `python-htmx` + Tailwind vendoreado, sin Node).
+A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) servers behind a single HTTP/SSE endpoint with **Code Mode** — reducing LLM input token usage by up to 92% when using multiple MCP servers. **v1.4.1 GA** adds a local-first **Dashboard** (Python `htpy` + `python-htmx` + Tailwind vendoreado, sin Node).
 
 ## Features
 
 - **Multi-Server Aggregation** — Connect to multiple MCP servers (HTTP, SSE, Stdio, Streamable HTTP) and expose them through a single endpoint
 - **Code Mode** — 4 meta-tools that let LLMs discover and use tools dynamically without loading all schemas upfront
-- **Dashboard (v0.7.0)** — Local-first UI en `http://127.0.0.1:8080/dashboard` para listar/agregar/inspeccionar/enable-disable/remover/refrescar servers. SSR con `htpy`, mutaciones `htmx`, Tailwind vendoreado (<100KB), sin `package.json` ni build Node. Registry única fuente, masking `***` obligatorio.
+- **Dashboard (v1.4.1)** — Local-first UI en `http://127.0.0.1:8080` para listar/agregar/inspeccionar/enable-disable/remover/refrescar servers. SSR con `htpy`, mutaciones `htmx`, Tailwind vendoreado (<100KB), sin `package.json` ni build Node. Registry única fuente, masking `***` obligatorio.
 - **OAuth 2.0 Support** — Built-in OAuth flow with dynamic client registration (RFC 7591) and token storage
 - **Hermetic Sandbox** — Starlark-based sandbox for safe code execution
 - **MCP Protocol Compliant** — Works with Claude Desktop, Cursor, and any MCP-compatible client
@@ -169,7 +169,7 @@ mcp-gway serve --host 0.0.0.0
 - Masking `***` obligatorio: `GET /api/servers`, `GET /api/servers/{name}`, `GET /dashboard` nunca exponen `headers`/`oauth.clientSecret`/`environment` reales.
 - Reveal solo `POST /api/servers/{name}/reveal` desde `127.0.0.1`, rate-limit 5/min, audit log sin valor, `403` si no loopback, `405` si GET.
 
-## Observability — Logs + Metrics + Health (Approach C, 0.8.0)
+## Observability — Logs + Metrics + Health (Approach C, v1.4.1)
 
 > **Zero vendor lock-in:** stdlib `json` logs (no `structlog`), vendored `MetricsRegistry` (no `prometheus_client`), correlation via `X-Request-ID` + `contextvars`, health probes `/health|/ready|/live` + Prometheus text `/metrics`. Local-first + masking `***` preserved; `/metrics` gated like `reveal`.
 
@@ -177,7 +177,7 @@ mcp-gway serve --host 0.0.0.0
 
 ```bash
 curl -s http://127.0.0.1:8080/health | jq
-# {"status":"ok","version":"1.3.4","checks":{"registry":"ok","dashboard":"ok"},"uptime_seconds":42}
+# {"status":"ok","version":"1.4.1","checks":{"registry":"ok","dashboard":"ok"},"uptime_seconds":42}
 curl -s http://127.0.0.1:8080/ready | jq   # 200 ready / 503 not_ready (registry/routes/event_loop checks)
 curl -s http://127.0.0.1:8080/live | jq    # 200 alive — no FS I/O, <5ms
 curl -s http://127.0.0.1:8080/metrics | head -n 20
@@ -286,7 +286,7 @@ uv run pre-commit install  # once per clone — hooks already configured in .pre
 
 # Run checks
 uv run pre-commit run --all-files  # ruff + ruff-format + hygiene (trailing-whitespace, end-of-file-fixer, check-yaml, check-added-large-files)
-uv run pytest -v  # 181 tests v0.7.0 — incluye test_dashboard_views + test_dashboard_api
+uv run pytest -v  # 254 tests v1.4.1 — incluye test_dashboard_* + test_catalog_* + test_observability_*
 uv run ruff check src/ tests/
 uv run ruff format --check src/ tests/
 
@@ -307,7 +307,7 @@ Pre-commit is already in place (`.pre-commit-config.yaml` — `ruff` v0.16.4, `r
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        MCP Gateway v0.7.0 GA                         │
+│                        MCP Gateway v1.4.1 GA                         │
 ├──────────────────────────────────────────────────────────────────────┤
 │  CLI (click)              │  Gateway (Starlette + uvicorn, CSP)      │
 │  - add remote/local       │  - POST /mcp (JSON-RPC)                  │
@@ -342,7 +342,7 @@ Pre-commit is already in place (`.pre-commit-config.yaml` — `ruff` v0.16.4, `r
 ```
 
 - **Sin Node** en runtime ni CI: Tailwind + htmx vendoreados commit, `ruff` único linter, `uv_build` backend.
-- **Release híbrido** (ADR-007): `push tags v*` → `uv build` + `pypi-publish` (GA `v0.7.0` tag manual) + `workflow_run Tests completed` → `python-semantic-release@v9` para `fix/perf` patches auto. `concurrency: release`, `fetch-depth:0`, `[tool.semantic_release]` sync `pyproject.toml` + `__init__.py`.
+- **Release híbrido** (ADR-007): `push tags v*` → `uv build` + `pypi-publish` (GA `v1.4.1` tag manual) + `workflow_run Tests completed` → `python-semantic-release@v9` para `fix/perf` patches auto. `concurrency: release`, `fetch-depth:0`, `[tool.semantic_release]` sync `pyproject.toml` + `__init__.py` (`1.4.1` exacta).
 
 ## License
 

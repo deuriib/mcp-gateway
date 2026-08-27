@@ -54,5 +54,5 @@ def stdio_config() -> MCPServerConfig:
     return MCPServerConfig(
         name="teststdio",
         type="local",
-        command=["echo", "hello"],
+        command=["npx", "hello"],
     )

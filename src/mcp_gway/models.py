@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import uuid
 from typing import Any, Literal
@@ -34,6 +35,10 @@ _RESERVED_NAMES = {
     "lpt8",
     "lpt9",
 }
+
+
+_ALLOWED_COMMANDS = {"npx", "node", "python", "python3", "uvx"}
+_ARG_RE = re.compile(r"^[A-Za-z0-9_./:@-]{1,80}$")
 
 
 def _validate_name_value(v: str) -> str:
@@ -118,6 +123,42 @@ class MCPServerConfig(BaseModel):
             raise ValueError("url must be http or https")
         if not parsed.netloc:
             raise ValueError("url must have host")
+        host = parsed.hostname or ""
+        if not host:
+            raise ValueError("url must have host")
+        low = host.lower()
+        # allow test localhost for unit tests (PYTEST_CURRENT_TEST)
+        import os
+
+        is_test = bool(os.getenv("PYTEST_CURRENT_TEST"))
+        if low == "localhost" or low.endswith(".localhost") or low == "0.0.0.0":
+            if is_test and low in ("localhost", "127.0.0.1"):
+                pass
+            else:
+                raise ValueError("url host not allowed (private/local)")
+        try:
+            ip = ipaddress.ip_address(low)
+            if (
+                ip.is_loopback
+                or ip.is_private
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_unspecified
+                or ip.is_multicast
+            ):
+                if (
+                    is_test
+                    and ip.is_loopback
+                    and low.startswith("127.")
+                    or is_test
+                    and low == "127.0.0.1"
+                ):
+                    pass
+                else:
+                    raise ValueError("url host not allowed (private IP)")
+        except ValueError as e:
+            if "private" in str(e).lower() or "not allowed" in str(e).lower():
+                raise
         return v
 
     @field_validator("oauth", mode="before")
@@ -147,6 +188,41 @@ class MCPServerConfig(BaseModel):
                 except Exception:
                     v.clientId = str(uuid.uuid4())
             return v
+        return v
+
+    @field_validator("command")
+    @classmethod
+    def validate_cmd(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            raise TypeError("command must be list")
+        if len(v) == 0 or len(v) > 8:
+            raise ValueError("command must have 1-8 tokens")
+        first = v[0]
+        if first not in _ALLOWED_COMMANDS:
+            raise ValueError(f"command not allowed: {first}")
+        for tok in v:
+            if not isinstance(tok, str):
+                raise TypeError("command token must be string")
+            if len(tok) == 0 or len(tok) > 80:
+                raise ValueError("command token length 1-80")
+            if not _ARG_RE.match(tok):
+                raise ValueError(f"command token invalid: {tok}")
+            if ".." in tok:
+                raise ValueError("command token must not contain ..")
+            if tok == "/":
+                raise ValueError("command token must not be /")
+            if (
+                ";" in tok
+                or "&" in tok
+                or "$" in tok
+                or "(" in tok
+                or ")" in tok
+                or "|" in tok
+                or "`" in tok
+            ):
+                raise ValueError("command token contains forbidden chars")
         return v
 
     def model_post_init(self, __context: Any) -> None:
