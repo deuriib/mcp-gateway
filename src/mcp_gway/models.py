@@ -5,6 +5,8 @@ from __future__ import annotations
 import ipaddress
 import re
 import uuid
+from pathlib import Path as _Path
+from pathlib import PurePosixPath as _PurePosix
 from typing import Any, Literal
 from urllib.parse import urlparse as _urlparse_for_validation
 
@@ -37,7 +39,6 @@ _RESERVED_NAMES = {
 }
 
 
-_ALLOWED_COMMANDS = {"npx", "node", "python", "python3", "uvx"}
 _ARG_RE = re.compile(r"^[A-Za-z0-9_./:@-]{1,80}$")
 
 
@@ -195,35 +196,37 @@ class MCPServerConfig(BaseModel):
     def validate_cmd(cls, v: list[str] | None) -> list[str] | None:
         if v is None:
             return v
-        if not isinstance(v, list):
-            raise TypeError("command must be list")
-        if len(v) == 0 or len(v) > 8:
-            raise ValueError("command must have 1-8 tokens")
-        first = v[0]
-        if first not in _ALLOWED_COMMANDS:
-            raise ValueError(f"command not allowed: {first}")
-        for tok in v:
-            if not isinstance(tok, str):
-                raise TypeError("command token must be string")
-            if len(tok) == 0 or len(tok) > 80:
-                raise ValueError("command token length 1-80")
-            if not _ARG_RE.match(tok):
-                raise ValueError(f"command token invalid: {tok}")
-            if ".." in tok:
-                raise ValueError("command token must not contain ..")
-            if tok == "/":
-                raise ValueError("command token must not be /")
-            if (
-                ";" in tok
-                or "&" in tok
-                or "$" in tok
-                or "(" in tok
-                or ")" in tok
-                or "|" in tok
-                or "`" in tok
-            ):
-                raise ValueError("command token contains forbidden chars")
+        from mcp_gway.core.policy import validate_command_syntax
+
+        try:
+            validate_command_syntax(v)
+        except ValueError as e:
+            raise ValueError(str(e)) from None
         return v
+
+    @field_validator("cwd")
+    @classmethod
+    def validate_cwd(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("cwd must be absolute path [reason=invalid_cwd]")
+        text = v.strip()
+        is_abs = _Path(text).is_absolute() or _PurePosix(text).is_absolute()
+
+        is_abs = _Path(text).is_absolute() or _PurePosix(text).is_absolute()
+        if not is_abs:
+            raise ValueError("cwd must be absolute path [reason=invalid_cwd]")
+        return text
+
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, v: dict[str, str] | None) -> dict[str, str] | None:
+        if v is None:
+            return v
+        from mcp_gway.core.policy import check_environment
+
+        return check_environment(v)
 
     def model_post_init(self, __context: Any) -> None:
         if self.type == "local":
