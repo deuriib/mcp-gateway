@@ -335,6 +335,22 @@ async def handle_catalog_install(request: Request) -> JSONResponse | HTMLRespons
             )
     try:
         config = entry_to_config(entry, override_name=override_name, timeout=timeout)
+        if config.type == "local" and _is_exposed(request):
+            from mcp_gway.core.policy import audit_local_action, check_local_command
+
+            decision = check_local_command(
+                list(config.command or []),
+                via_dashboard=True,
+                host_loopback=False,
+                require_binary=True,
+            )
+            audit_local_action(
+                "catalog_install_exposed",
+                config.name,
+                (config.command or [None])[0],
+                decision,
+            )
+            raise PermissionError(decision.message)
     except PermissionError as e:
         detail = str(e)
         logger.warning("catalog install blocked local without allow id=%s", cid)

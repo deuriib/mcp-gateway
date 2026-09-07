@@ -63,11 +63,16 @@ async def test_add_remote_persists(
 
 @pytest.mark.asyncio
 async def test_add_local_persists(
-    gateway: Gateway, registry: Registry, monkeypatch
+    gateway: Gateway, registry: Registry, monkeypatch, tmp_path
 ) -> None:
     async def mock_discover(config, force_auth=False):  # noqa: ARG001
         return []
 
+    monkeypatch.setenv("MCP_GWAY_ALLOW_LOCAL_COMMANDS", "npx")
+    monkeypatch.setattr(
+        "mcp_gway.core.policy.resolve_binary", lambda basename: "/usr/bin/npx"
+    )
+    monkeypatch.setattr("mcp_gway.core.policy.check_cwd", lambda cwd: str(tmp_path))
     monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
     monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     transport = ASGITransport(app=gateway.app)
@@ -76,7 +81,7 @@ async def test_add_local_persists(
             "name": "echo_srv",
             "type": "local",
             "command": ["npx", "hi"],
-            "cwd": "/tmp",
+            "cwd": str(tmp_path),
             "environment": {"FOO": "bar"},
         }
         resp = await client.post("/api/servers", json=payload)
