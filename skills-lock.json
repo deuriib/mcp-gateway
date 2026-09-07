@@ -12,6 +12,12 @@
       "sourceType": "github",
       "skillPath": "skills/htpy/SKILL.md",
       "computedHash": "938bdb56ee8d99b95bb3c4b478e110d5277d151e6504d30d17ac6ea6d51a9fe5"
+    },
+    "mcp-gway": {
+      "source": "deuriib/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mcp-gway/SKILL.md",
+      "computedHash": "85a9015d724eb431250e19e484e75564d263ac1c447c63a8ed7a19c91a1465b5"
     }
   }
 }
