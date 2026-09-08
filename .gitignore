@@ -74,3 +74,4 @@ servers/
 .ruff_cache/
 junit.xml
 .agents/
+.worktrees/
