@@ -2,79 +2,37 @@
 
 from __future__ import annotations
 
-import os
+import shutil
 import sys
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
 if TYPE_CHECKING:
     from mcp import StdioServerParameters
 
-_NATIVE_EXTENSIONS = (".exe", ".com")
-_SHELL_EXTENSIONS = (".cmd", ".bat", ".ps1")
-_WINDOWS_EXTENSIONS = _NATIVE_EXTENSIONS + _SHELL_EXTENSIONS
-
-
-def _scan_path_for_command(command: str) -> str | None:
-    """Scan PATH directories for *command*, honouring extension priority.
-
-    Returns the matched path preserving the original filesystem casing,
-    or ``None`` when no match is found.
-    """
-    for entry in os.get_exec_path():
-        if not entry:
-            continue
-        directory = Path(entry)
-        candidate = directory / command
-        if candidate.is_file():
-            return str(candidate)
-        for ext in _WINDOWS_EXTENSIONS:
-            candidate = directory / f"{command}{ext}"
-            if candidate.is_file():
-                return str(candidate)
-    return None
-
 
 def resolve_windows_command(command: str) -> str:
-    """Resolve a command name to its full path on Windows.
+    """Resolve a basename via PATH to its full path (execvp target).
 
-    On non-Windows platforms the command is returned unchanged.
-
-    Resolution strategy on Windows:
-    - Absolute paths are validated for existence.  When the path has no
-      recognized extension (.exe/.com/.cmd/.bat/.ps1) we try appending
-      each extension in priority order before giving up.
-    - Bare command names are resolved by scanning PATH directories,
-      preferring native executables (.exe, .com) over shell shims
-      (.cmd, .bat, .ps1).
+    Only basenames are accepted — paths, separators and shell shims are
+    rejected. Resolution uses ``shutil.which`` so ``PATH``/``PATHEXT``
+    semantics apply on every platform. Never invokes a shell.
     """
     if not command:
         raise ValueError("Command must not be empty")
-
-    if sys.platform != "win32":
-        return command
-
-    path = Path(command)
-
-    # ── absolute path ────────────────────────────────────────────
-    if path.is_absolute():
-        if path.exists():
-            return str(path)
-        if path.suffix.lower() not in _WINDOWS_EXTENSIONS:
-            for ext in _WINDOWS_EXTENSIONS:
-                candidate = path.with_suffix(ext)
-                if candidate.exists():
-                    return str(candidate)
-        raise FileNotFoundError(f"Command not found: {command}")
-
-    # ── bare name – scan PATH ────────────────────────────────────
-    found = _scan_path_for_command(command)
-    if found is not None:
-        return found
-
-    raise FileNotFoundError(f"Command not found: {command}")
+    if "/" in command or "\\" in command or ":" in command:
+        raise ValueError(
+            f"command must be basename, not path: {command} [reason=invalid_syntax]"
+        )
+    if ".." in command:
+        raise ValueError("command token must not contain .. [reason=invalid_syntax]")
+    resolved = shutil.which(command)
+    if not resolved:
+        raise FileNotFoundError(
+            f"binary not found in PATH: {command} [reason=binary_not_found]"
+        )
+    return resolved
 
 
 # ── noise-filtered read stream ────────────────────────────────────

@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from mcp_gway.models import _ALLOWED_COMMANDS, _ARG_RE, _validate_name_value
+from mcp_gway.models import _validate_name_value
 
 
 def _deny_private_url(v: str) -> str:
@@ -57,6 +57,8 @@ class CatalogEntry(BaseModel):
     type: Literal["remote", "local"]
     url: str | None = None
     command: list[str] | None = None
+    cwd: str | None = None
+    environment: dict[str, str] | None = None
     tags: list[str] = Field(default_factory=list)
     docsUrl: str | None = None  # noqa: N815
     source: str = Field(default="bifrost")
@@ -90,35 +92,32 @@ class CatalogEntry(BaseModel):
     def validate_cmd(cls, v: list[str] | None) -> list[str] | None:  # type: ignore[no-untyped-def]
         if v is None:
             return v
-        if not isinstance(v, list):
-            raise TypeError("command must be list")
-        if len(v) == 0 or len(v) > 8:
-            raise ValueError("command must have 1-8 tokens")
-        first = v[0]
-        if first not in _ALLOWED_COMMANDS:
-            raise ValueError(f"command not allowed: {first}")
-        for tok in v:
-            if not isinstance(tok, str):
-                raise TypeError("command token must be string")
-            if len(tok) == 0 or len(tok) > 80:
-                raise ValueError("command token length 1-80")
-            if not _ARG_RE.match(tok):
-                raise ValueError(f"command token invalid: {tok}")
-            if ".." in tok:
-                raise ValueError("command token must not contain ..")
-            if tok == "/":
-                raise ValueError("command token must not be /")
-            if (
-                ";" in tok
-                or "&" in tok
-                or "$" in tok
-                or "(" in tok
-                or ")" in tok
-                or "|" in tok
-                or "`" in tok
-            ):
-                raise ValueError("command token contains forbidden chars")
+        from mcp_gway.core.policy import validate_command_syntax
+
+        try:
+            validate_command_syntax(v)
+        except ValueError as e:
+            raise ValueError(str(e)) from None
         return v
+
+    @field_validator("cwd")
+    @classmethod
+    def validate_cwd(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        from mcp_gway.core.policy import check_cwd
+
+        return check_cwd(v)
+
+    @field_validator("environment")
+    @classmethod
+    def validate_env(cls, v: dict[str, str] | None) -> dict[str, str] | None:
+        if v is None:
+            return v
+        from mcp_gway.core.policy import check_environment
+
+        result = check_environment(v)
+        return dict(result) if result is not None else None
 
     @model_validator(mode="after")
     def _check_type_constraints(self) -> CatalogEntry:

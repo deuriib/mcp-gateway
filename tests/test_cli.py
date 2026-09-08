@@ -314,6 +314,10 @@ def test_add_local_type(runner, monkeypatch):
 
         return [ToolInfo(name="ping", description="Ping")]
 
+    monkeypatch.setenv("MCP_GWAY_ALLOW_LOCAL_COMMANDS", "npx")
+    monkeypatch.setattr(
+        "mcp_gway.core.policy.resolve_binary", lambda basename: "/usr/bin/npx"
+    )
     monkeypatch.setattr("mcp_gway.cli.discover_tools", mock_discover_tools)
     monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover_tools)
     result = runner.invoke(
@@ -541,6 +545,10 @@ def test_add_local_with_env_stores_environment(tmp_path, monkeypatch):
     async def mock_discover_tools(config, force_auth=False):
         return [ToolInfo(name="ping", description="Ping")]
 
+    monkeypatch.setenv("MCP_GWAY_ALLOW_LOCAL_COMMANDS", "node")
+    monkeypatch.setattr(
+        "mcp_gway.core.policy.resolve_binary", lambda basename: "/usr/bin/node"
+    )
     monkeypatch.setattr("mcp_gway.cli.discover_tools", mock_discover_tools)
     monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover_tools)
 
@@ -617,6 +625,10 @@ def test_create_client_transport_local_env(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "mcp_gway.stdio_transport.resolve_windows_command", lambda cmd: cmd
     )
+    monkeypatch.setattr(
+        "mcp_gway.core.policy.resolve_binary", lambda basename: "/usr/bin/npx"
+    )
+    monkeypatch.setenv("MCP_GWAY_ALLOW_LOCAL_COMMANDS", "npx")
 
     async def run_test():
         from mcp_gway.core import create_client_transport

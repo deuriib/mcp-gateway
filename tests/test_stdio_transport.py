@@ -14,42 +14,33 @@ from mcp_gway.stdio_transport import filtered_stdio_client, resolve_windows_comm
 
 
 def test_resolve_prefers_exe_over_cmd(tmp_path: Any, monkeypatch: Any) -> None:
-    """A bare command name should resolve to .exe over .cmd on Windows."""
-    # Create fake executables
-    fake_dir = tmp_path / "fakebin"
-    fake_dir.mkdir()
-    (fake_dir / "mytool.exe").write_text("exe")
-    (fake_dir / "mytool.cmd").write_text("cmd")
-    (fake_dir / "mytool.bat").write_text("bat")
-
-    # Monkeypatch platform and PATH
-    monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setenv("PATH", str(fake_dir))
-
+    """A bare command name resolves via shutil.which (PATHEXT-aware)."""
+    monkeypatch.setattr(
+        "mcp_gway.stdio_transport.shutil.which",
+        lambda cmd: str(tmp_path / "mytool.exe"),
+    )
     result = resolve_windows_command("mytool")
-    assert result == str(fake_dir / "mytool.exe")
+    assert result == str(tmp_path / "mytool.exe")
 
 
 def test_resolve_absolute_path_valid(tmp_path: Any) -> None:
     """An absolute path that exists should be returned as-is."""
     existing = tmp_path / "tool.exe"
     existing.write_text("x")
-    result = resolve_windows_command(str(existing))
-    assert result == str(existing)
+    with pytest.raises(ValueError, match="basename"):
+        resolve_windows_command(str(existing))
 
 
 def test_resolve_absolute_path_invalid(tmp_path: Any, monkeypatch: Any) -> None:
     """An absolute path that does not exist should raise FileNotFoundError."""
-    monkeypatch.setattr(sys, "platform", "win32")
     missing = tmp_path / "nope.exe"
-    with pytest.raises(FileNotFoundError, match="not found"):
+    with pytest.raises(ValueError, match="basename"):
         resolve_windows_command(str(missing))
 
 
 def test_resolve_unresolvable_raises(tmp_path: Any, monkeypatch: Any) -> None:
     """Unknown command should raise FileNotFoundError with helpful message."""
-    monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setattr("mcp_gway.stdio_transport.shutil.which", lambda cmd: None)
 
     with pytest.raises(FileNotFoundError, match="nonexistent_tool"):
         resolve_windows_command("nonexistent_tool")
@@ -57,35 +48,33 @@ def test_resolve_unresolvable_raises(tmp_path: Any, monkeypatch: Any) -> None:
 
 def test_resolve_non_windows_passthrough(monkeypatch: Any) -> None:
     """On non-Windows platforms the command should pass through unchanged."""
-    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(
+        "mcp_gway.stdio_transport.shutil.which", lambda cmd: "/usr/bin/some_tool"
+    )
     result = resolve_windows_command("some_tool")
-    assert result == "some_tool"
+    assert result == "/usr/bin/some_tool"
 
 
 def test_resolve_appends_exe_extension(tmp_path: Any, monkeypatch: Any) -> None:
     """A bare name with no extension should resolve if .exe exists in PATH."""
-    fake_dir = tmp_path / "bin"
-    fake_dir.mkdir()
-    (fake_dir / "grepper.exe").write_text("x")
-
-    monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setenv("PATH", str(fake_dir))
+    monkeypatch.setattr(
+        "mcp_gway.stdio_transport.shutil.which",
+        lambda cmd: str(tmp_path / "bin" / "grepper.exe"),
+    )
 
     result = resolve_windows_command("grepper")
-    assert result == str(fake_dir / "grepper.exe")
+    assert result == str(tmp_path / "bin" / "grepper.exe")
 
 
 def test_resolve_appends_com_extension(tmp_path: Any, monkeypatch: Any) -> None:
     """A bare name should also resolve .com if .exe is not found."""
-    fake_dir = tmp_path / "bin"
-    fake_dir.mkdir()
-    (fake_dir / "grepper.com").write_text("x")
-
-    monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setenv("PATH", str(fake_dir))
+    monkeypatch.setattr(
+        "mcp_gway.stdio_transport.shutil.which",
+        lambda cmd: str(tmp_path / "bin" / "grepper.com"),
+    )
 
     result = resolve_windows_command("grepper")
-    assert result == str(fake_dir / "grepper.com")
+    assert result == str(tmp_path / "bin" / "grepper.com")
 
 
 # --- filtered_stdio_client tests ---
@@ -204,15 +193,13 @@ def test_resolve_empty_string_raises_value_error() -> None:
 
 def test_scan_path_bare_name_with_extension(tmp_path: Any, monkeypatch: Any) -> None:
     """A bare command like 'node.exe' should be found directly, not appended."""
-    fake_dir = tmp_path / "bin"
-    fake_dir.mkdir()
-    (fake_dir / "node.exe").write_text("x")
-
-    monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setenv("PATH", str(fake_dir))
+    monkeypatch.setattr(
+        "mcp_gway.stdio_transport.shutil.which",
+        lambda cmd: str(tmp_path / "bin" / "node.exe"),
+    )
 
     result = resolve_windows_command("node.exe")
-    assert result == str(fake_dir / "node.exe")
+    assert result == str(tmp_path / "bin" / "node.exe")
 
 
 # --- Bug 1: explicit server parameter ---

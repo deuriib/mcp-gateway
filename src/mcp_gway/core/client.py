@@ -36,6 +36,12 @@ async def _create_local_transport(
 ) -> AsyncIterator[tuple[object, object]]:
     from mcp import StdioServerParameters
 
+    from mcp_gway.core.policy import (
+        audit_local_action,
+        check_cwd,
+        check_environment,
+        check_local_command,
+    )
     from mcp_gway.stdio_transport import (
         filtered_stdio_client,
         resolve_windows_command,
@@ -44,11 +50,20 @@ async def _create_local_transport(
     cmd_list: list[str] | None = getattr(config, "command", None)
     if not cmd_list:
         raise ValueError("command required for local")
+    decision = check_local_command(
+        list(cmd_list), via_dashboard=False, require_binary=True
+    )
+    audit_local_action("spawn", config.name, cmd_list[0], decision)
+    if not decision.allowed:
+        if decision.reason_code == "binary_not_found":
+            raise FileNotFoundError(decision.message)
+        raise PermissionError(decision.message)
     command = cmd_list[0]
     args = cmd_list[1:] if len(cmd_list) > 1 else []
     resolved = resolve_windows_command(command)
-    env_dict = getattr(config, "environment", None)
-    cwd = getattr(config, "cwd", None)
+    env_dict = check_environment(getattr(config, "environment", None))
+    raw_cwd = getattr(config, "cwd", None)
+    cwd = check_cwd(raw_cwd) if raw_cwd else None
     try:
         params = StdioServerParameters(
             command=resolved,

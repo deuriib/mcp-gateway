@@ -334,7 +334,28 @@ async def handle_catalog_install(request: Request) -> JSONResponse | HTMLRespons
                 {"detail": detail}, status_code=400, headers=_base_headers(request)
             )
     try:
-        config = entry_to_config(entry, override_name=override_name, timeout=timeout)
+        config = entry_to_config(
+            entry,
+            override_name=override_name,
+            timeout=timeout,
+            host_loopback=not _is_exposed(request),
+        )
+        if config.type == "local" and _is_exposed(request):
+            from mcp_gway.core.policy import audit_local_action, check_local_command
+
+            decision = check_local_command(
+                list(config.command or []),
+                via_dashboard=True,
+                host_loopback=False,
+                require_binary=True,
+            )
+            audit_local_action(
+                "catalog_install_exposed",
+                config.name,
+                (config.command or [None])[0],
+                decision,
+            )
+            raise PermissionError(decision.message)
     except PermissionError as e:
         detail = str(e)
         logger.warning("catalog install blocked local without allow id=%s", cid)
@@ -400,7 +421,34 @@ async def handle_catalog_install(request: Request) -> JSONResponse | HTMLRespons
             {"detail": detail}, status_code=409, headers=_base_headers(request)
         )
     try:
-        tools = await discover_and_persist(registry, config)
+        tools = await discover_and_persist(
+            registry, config, host_loopback=not _is_exposed(request)
+        )
+    except PermissionError as e:
+        detail = str(e)
+        logger.warning("catalog install re-gate denied id=%s", cid)
+        if _is_htmx(request):
+            return HTMLResponse(
+                _toast_oob(detail, "red"),
+                status_code=403,
+                headers=_base_headers(request),
+            )
+        return JSONResponse(
+            {"detail": detail}, status_code=403, headers=_base_headers(request)
+        )
+    except FileNotFoundError as e:
+        msg = str(e) or "binary not found in PATH [reason=binary_not_found]"
+        if "binary_not_found" not in msg:
+            msg = f"{msg} [reason=binary_not_found]"
+        if _is_htmx(request):
+            return HTMLResponse(
+                _toast_oob(msg, "red"),
+                status_code=403,
+                headers=_base_headers(request),
+            )
+        return JSONResponse(
+            {"detail": msg}, status_code=403, headers=_base_headers(request)
+        )
     except Exception as e:  # noqa: BLE001
         if "saturated" in str(e):
             if _is_htmx(request):

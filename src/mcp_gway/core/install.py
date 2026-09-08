@@ -95,14 +95,37 @@ def is_duplicate(registry: Registry, config: MCPServerConfig) -> bool:
 
 
 async def discover_and_persist(
-    registry: Registry, config: MCPServerConfig
+    registry: Registry,
+    config: MCPServerConfig,
+    *,
+    host_loopback: bool = True,
+    via_dashboard: bool = True,
 ) -> list[Any]:
     try:
         tools = await _acquire_and_discover(config)
     except ConnectionError:
         raise
+    except FileNotFoundError:
+        raise
     except Exception:  # noqa: BLE001, S110
         tools = []
+    if config.type == "local":
+        from mcp_gway.core.policy import audit_local_action, check_local_command
+
+        decision = check_local_command(
+            list(config.command or []),
+            via_dashboard=via_dashboard,
+            host_loopback=host_loopback,
+            require_binary=True,
+        )
+        audit_local_action(
+            "regate_persist",
+            config.name,
+            (config.command or [None])[0],
+            decision,
+        )
+        if not decision.allowed:
+            raise PermissionError(decision.message)
     try:
         registry.add(config, tools)  # type: ignore[arg-type]
     except Exception as e:  # noqa: BLE001

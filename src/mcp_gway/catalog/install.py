@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 
 from mcp_gway.catalog.models import CatalogEntry
@@ -19,14 +18,36 @@ def entry_to_config(
     entry: CatalogEntry,
     override_name: str | None = None,
     timeout: int | None = None,
+    *,
+    host_loopback: bool = True,
 ) -> MCPServerConfig:
+    from mcp_gway.core.policy import (
+        audit_local_action,
+        check_cwd,
+        check_environment,
+        check_local_command,
+        is_via_dashboard_allowed,
+    )
+
     if entry.type == "local":
-        allow = os.getenv("MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD", "1")
-        if allow != "1":
+        if not is_via_dashboard_allowed():
             logger.warning("blocked local install without allow env id=%s", entry.id)
             raise PermissionError(
-                "local servers not allowed via dashboard (set MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD=1)"
+                "local servers not allowed via dashboard "
+                "(set MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD=1) "
+                "[reason=via_dashboard_disabled]"
             )
+        decision = check_local_command(
+            list(entry.command or []),
+            via_dashboard=True,
+            host_loopback=host_loopback,
+            require_binary=True,
+        )
+        audit_local_action(
+            "catalog_install", entry.id, (entry.command or [None])[0], decision
+        )
+        if not decision.allowed:
+            raise PermissionError(decision.message)
     name_raw = override_name or entry.name or entry.id
     sanitized = re.sub(r"[^A-Za-z0-9_]", "_", name_raw.strip())
     if not sanitized:
@@ -55,4 +76,8 @@ def entry_to_config(
         if not entry.command:
             raise ValueError("command required for type=local")
         base["command"] = entry.command
+        if entry.cwd is not None:
+            base["cwd"] = check_cwd(entry.cwd)
+        if entry.environment is not None:
+            base["environment"] = check_environment(entry.environment)
     return MCPServerConfig(**base)  # type: ignore[arg-type]
