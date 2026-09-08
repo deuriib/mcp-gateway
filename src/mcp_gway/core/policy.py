@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +55,12 @@ def marker_path() -> Path:
 
 
 def get_allow_list() -> set[str]:
+    """Parse allow-list CSV; matching is case-insensitive (lowercased, deduped).
+
+    Entries are stripped; ``*``/paths/invalid are denied with warn.
+    Callers compare ``basename.lower()`` against this set; PATH
+    resolution itself stays platform-native.
+    """
     raw = os.environ.get(ALLOW_LIST_ENV, "")
     if not raw.strip():
         return set()
@@ -71,7 +78,7 @@ def get_allow_list() -> set[str]:
         if not _BASENAME_RE.match(p):
             logger.warning("allow-list entry invalid, denied: %s", p[:32])
             continue
-        result.add(p)
+        result.add(p.lower())
     return result
 
 
@@ -82,7 +89,31 @@ def is_unrestricted_active(now: float | None = None) -> bool:
         marker = marker_path()
         if not marker.exists():
             return False
-        text = marker.read_text(encoding="utf-8").strip()
+        try:
+            st = marker.stat()
+            if os.name != "nt":
+                mode = stat.S_IMODE(st.st_mode)
+                if mode != 0o600:
+                    logger.warning(
+                        "unrestricted marker insecure permissions %o, denied",
+                        mode,
+                    )
+                    return False
+        except OSError as e:
+            logger.warning(
+                "unrestricted marker stat failed, denied: %s", type(e).__name__
+            )
+            return False
+        try:
+            with marker.open("r", encoding="utf-8") as f:
+                text = f.read(64).strip()
+        except Exception as e:
+            logger.warning(
+                "unrestricted marker unreadable, denied: %s", type(e).__name__
+            )
+            return False
+        if not text:
+            return False
         epoch = int(text.split()[0])
         current = time.time() if now is None else now
         age = current - epoch
@@ -164,7 +195,7 @@ def check_basename_allowed(
             allowed=True, reason_code="unrestricted", message="allowed (unrestricted)"
         )
     allow = get_allow_list()
-    if basename in allow:
+    if basename.lower() in allow:
         return PolicyDecision(
             allowed=True, reason_code="allow_list", message="allowed (allow-list)"
         )
