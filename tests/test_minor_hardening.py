@@ -125,6 +125,9 @@ async def test_form_small_multipart_still_works(
     monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover)
     monkeypatch.setattr("mcp_gway.core.client.discover_tools", mock_discover)
     monkeypatch.setattr("mcp_gway.cli.discover_tools", mock_discover)
+    monkeypatch.setenv("MCP_GWAY_ALLOW_LOCAL_COMMANDS", "npx")
+    monkeypatch.setattr("mcp_gway.core.policy.resolve_binary", lambda b: "/usr/bin/npx")
+    monkeypatch.setattr("mcp_gway.core.policy.check_cwd", lambda cwd: "/tmp")
     transport = ASGITransport(app=gateway.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         boundary = "----SmallBoundaryOK"

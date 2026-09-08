@@ -340,6 +340,8 @@ async def test_local_via_dashboard_blocked(
         assert r.status_code == 403
     # with allow -> 201 (mock discover)
     monkeypatch.setenv("MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD", "1")
+    monkeypatch.setenv("MCP_GWAY_ALLOW_LOCAL_COMMANDS", "npx")
+    monkeypatch.setattr("mcp_gway.core.policy.resolve_binary", lambda b: "/usr/bin/npx")
 
     async def mock_discover(config, force_auth=False):
         return []
