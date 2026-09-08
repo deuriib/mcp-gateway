@@ -107,6 +107,7 @@ async def test_ac004_unrestricted_fresh(
         "mcp_gway.core.policy.marker_path", lambda: tmp_path / ".local_unrestricted"
     )
     (tmp_path / ".local_unrestricted").write_text(str(int(time.time())))
+    (tmp_path / ".local_unrestricted").chmod(0o600)
     monkeypatch.setattr("mcp_gway.core.policy.resolve_binary", lambda b: "/bin/x")
     monkeypatch.setattr("mcp_gway.core.policy.check_cwd", lambda cwd: str(tmp_path))
     async with AsyncClient(
@@ -125,12 +126,15 @@ async def test_ac005_unrestricted_expired(gateway, monkeypatch, tmp_path) -> Non
         "mcp_gway.core.policy.marker_path", lambda: tmp_path / ".local_unrestricted"
     )
     (tmp_path / ".local_unrestricted").write_text(str(int(time.time()) - 73 * 3600))
+    (tmp_path / ".local_unrestricted").chmod(0o600)
+    monkeypatch.setattr("mcp_gway.core.policy.resolve_binary", lambda b: "/bin/x")
     monkeypatch.setattr("mcp_gway.core.policy.check_cwd", lambda cwd: str(tmp_path))
     async with AsyncClient(
         transport=ASGITransport(app=gateway.app), base_url="http://test"
     ) as client:
         resp = await _post_local(client, "e", ["freshbin"], tmp_path)
         assert resp.status_code == 403
+        assert resp.json()["reason_code"] == "not_allowlisted"
 
 
 @pytest.mark.asyncio
