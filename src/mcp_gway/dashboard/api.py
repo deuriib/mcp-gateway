@@ -824,7 +824,7 @@ def _check_local_gating(
     raw_cwd = getattr(config, "cwd", None)
     if raw_cwd:
         try:
-            check_cwd(raw_cwd)
+            config.cwd = check_cwd(raw_cwd)
         except ValueError as e:
             msg = str(e)
             if _is_htmx_request(request):
@@ -1017,15 +1017,45 @@ async def _acquire_and_discover(config: MCPServerConfig) -> list[Any]:
             _discovery_sem.release()
 
 
+def _regate_local(
+    config: MCPServerConfig, request: Request
+) -> JSONResponse | HTMLResponse | None:
+    if config.type != "local":
+        return None
+    from mcp_gway.core.policy import audit_local_action, check_local_command
+
+    decision = check_local_command(
+        list(config.command or []),
+        via_dashboard=True,
+        host_loopback=_dashboard_host_loopback(request),
+        require_binary=True,
+    )
+    audit_local_action(
+        "dashboard_regate",
+        config.name,
+        (config.command or [None])[0],
+        decision,
+    )
+    if not decision.allowed:
+        return _deny_local(decision.reason_code, decision.message, request)
+    return None
+
+
 async def _discover_and_persist(
-    registry: Registry, config: MCPServerConfig
+    registry: Registry, config: MCPServerConfig, request: Request | None = None
 ) -> list[Any]:
     try:
         tools = await _acquire_and_discover(config)
     except ConnectionError:
         raise
+    except FileNotFoundError:
+        raise
     except Exception:  # noqa: BLE001, S110
         tools = []
+    if request is not None and config.type == "local":
+        gating = _regate_local(config, request)
+        if gating is not None:
+            raise PermissionError("local policy re-gate denied")
     try:
         registry.add(config, tools)  # type: ignore[arg-type]
     except Exception as e:  # noqa: BLE001
@@ -1038,14 +1068,28 @@ async def _safe_discover_wrap(
     registry: Registry, config: MCPServerConfig, request: Request
 ) -> tuple[list[Any] | None, JSONResponse | HTMLResponse | None]:
     try:
-        tools = await _discover_and_persist(registry, config)
+        tools = await _discover_and_persist(registry, config, request)
         return tools, None
+    except PermissionError as e:
+        gating = _regate_local(config, request)
+        if gating is not None:
+            return None, gating
+        return None, _deny_local("not_allowlisted", str(e), request)
     except ValueError:
         detail = "invalid request"
         if _is_htmx_request(request):
             return None, HTMLResponse(_toast_oob(detail), status_code=400)
         return None, JSONResponse(
             {"detail": detail, "code": "validation_error"}, status_code=400
+        )
+    except FileNotFoundError as e:
+        msg = str(e) or "binary not found in PATH [reason=binary_not_found]"
+        if "binary_not_found" not in msg:
+            msg = f"{msg} [reason=binary_not_found]"
+        if _is_htmx_request(request):
+            return None, HTMLResponse(_toast_oob(msg), status_code=403)
+        return None, JSONResponse(
+            {"detail": msg, "reason_code": "binary_not_found"}, status_code=403
         )
     except ConnectionError as e:
         if "saturated" in str(e):
@@ -1541,7 +1585,9 @@ async def handle_delete(request: Request) -> JSONResponse | HTMLResponse:
     return Response(status_code=204, headers=_csp_headers())
 
 
-async def _background_refresh(registry: Registry, name: str) -> None:
+async def _background_refresh(
+    registry: Registry, name: str, *, host_loopback: bool = True
+) -> None:
     try:
         cfg = registry.get_config(name)
     except Exception:  # noqa: BLE001, S110
@@ -1553,7 +1599,7 @@ async def _background_refresh(registry: Registry, name: str) -> None:
             decision = check_local_command(
                 list(cfg.command or []),
                 via_dashboard=True,
-                host_loopback=True,
+                host_loopback=host_loopback,
                 require_binary=True,
             )
             audit_local_action(
@@ -1776,7 +1822,11 @@ async def handle_refresh(request: Request) -> JSONResponse | HTMLResponse:
             resp.headers["HX-Trigger"] = "refreshDone"
             return resp
     # non-HX API clients keep old fire-and-forget 202 for backward compat
-    asyncio.create_task(_background_refresh(registry, name))
+    asyncio.create_task(
+        _background_refresh(
+            registry, name, host_loopback=_dashboard_host_loopback(request)
+        )
+    )
     return JSONResponse(
         {"status": "refreshing"}, status_code=202, headers=_csp_headers()
     )
