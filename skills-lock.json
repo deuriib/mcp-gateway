@@ -5,13 +5,13 @@
       "source": "deuriib/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/htmx/SKILL.md",
-      "computedHash": "b009537e6da8cd783531a58642d60089e3ee5db3c4973e461c6b7b00fba2e708"
+      "computedHash": "a92edd98bf3485c9e6282c86977eeaa59c6ec2695f4b59fdfe7f8b06d9029c43"
     },
     "htpy": {
       "source": "deuriib/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/htpy/SKILL.md",
-      "computedHash": "938bdb56ee8d99b95bb3c4b478e110d5277d151e6504d30d17ac6ea6d51a9fe5"
+      "computedHash": "4f1e5f77614816780535eb2e34db41577e392be9bf54969f289cd25e24b1e80a"
     },
     "mcp-gway": {
       "source": "deuriib/agent-skills",
