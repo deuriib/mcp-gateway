@@ -46,8 +46,8 @@ Implement ADR-009 adapted per CISO HARD names; close PATCH bypass; prove with AC
 - Title: specs/plans/ADR-009 + test_policy_local_commands AC-001..AC-012 + full green + ruff
 - AC ref: AC-001..AC-012
 - BR/EC: BR-015..BR-016
-- Status: InProgress
-- Commit: pending
+- Status: Done
+- Commit: 141171c `docs(feat-006): SBTDD scaffold ADR-009 plus AC-001..AC-012`
 
 ## Dependencies
 - `Registry` atomic writes; `_discovery_sem` shared; `Gateway(registry, host)` loopback flag.
