@@ -118,12 +118,25 @@ def add(
                 "Error: invalid --command syntax [reason=invalid_syntax]", err=True
             )
             sys.exit(1)
+        from mcp_gway.core.policy import (
+            audit_local_action,
+            check_cwd,
+            check_local_command,
+        )
+
+        resolved_cwd: str | None = None
+        if cwd:
+            try:
+                resolved_cwd = check_cwd(cwd)
+            except ValueError as e:
+                click.echo(f"Error: {e}", err=True)
+                sys.exit(1)
         try:
             config = MCPServerConfig(
                 name=name,
                 type="local",
                 command=cmd_parts,
-                cwd=cwd,
+                cwd=resolved_cwd,
                 environment=environment,
                 timeout=timeout,
                 enabled=enabled,
@@ -131,18 +144,6 @@ def add(
         except Exception as e:
             click.echo(f"Error: invalid local config: {e}", err=True)
             sys.exit(1)
-        from mcp_gway.core.policy import (
-            audit_local_action,
-            check_cwd,
-            check_local_command,
-        )
-
-        if cwd:
-            try:
-                check_cwd(cwd)
-            except ValueError as e:
-                click.echo(f"Error: {e}", err=True)
-                sys.exit(1)
         decision = check_local_command(
             list(cmd_parts), via_dashboard=False, require_binary=True
         )
@@ -222,6 +223,15 @@ def add(
         discovered = [t for t in discovered if t.name in tool_filter]
     if not discovered:
         click.echo("Warning: No tools discovered. Adding server with empty tool list.")
+    if conn_type == "local":
+        from mcp_gway.core.policy import audit_local_action as _audit2
+        from mcp_gway.core.policy import check_local_command as _check2
+
+        _re = _check2(list(cmd_parts), via_dashboard=False, require_binary=True)
+        _audit2("cli_add_regate", name, cmd_parts[0] if cmd_parts else None, _re)
+        if not _re.allowed:
+            click.echo(f"Error: {_re.message}", err=True)
+            sys.exit(1)
     registry = _get_registry()
     registry.add(config, discovered)
     click.echo(f"Added {name} with {len(discovered)} tools.")

@@ -18,9 +18,13 @@ def entry_to_config(
     entry: CatalogEntry,
     override_name: str | None = None,
     timeout: int | None = None,
+    *,
+    host_loopback: bool = True,
 ) -> MCPServerConfig:
     from mcp_gway.core.policy import (
         audit_local_action,
+        check_cwd,
+        check_environment,
         check_local_command,
         is_via_dashboard_allowed,
     )
@@ -36,7 +40,7 @@ def entry_to_config(
         decision = check_local_command(
             list(entry.command or []),
             via_dashboard=True,
-            host_loopback=True,
+            host_loopback=host_loopback,
             require_binary=True,
         )
         audit_local_action(
@@ -72,4 +76,8 @@ def entry_to_config(
         if not entry.command:
             raise ValueError("command required for type=local")
         base["command"] = entry.command
+        if entry.cwd is not None:
+            base["cwd"] = check_cwd(entry.cwd)
+        if entry.environment is not None:
+            base["environment"] = check_environment(entry.environment)
     return MCPServerConfig(**base)  # type: ignore[arg-type]
