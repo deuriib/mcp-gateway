@@ -213,8 +213,6 @@ class MCPServerConfig(BaseModel):
             raise ValueError("cwd must be absolute path [reason=invalid_cwd]")
         text = v.strip()
         is_abs = _Path(text).is_absolute() or _PurePosix(text).is_absolute()
-
-        is_abs = _Path(text).is_absolute() or _PurePosix(text).is_absolute()
         if not is_abs:
             raise ValueError("cwd must be absolute path [reason=invalid_cwd]")
         return text
