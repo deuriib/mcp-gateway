@@ -51,7 +51,7 @@ mcp-gway add api --type remote --url https://api.example.com/mcp --timeout 10000
 # Local
 mcp-gway add filesystem --type local --command "npx -y @anthropic/mcp-filesystem"
 mcp-gway add tools --type local --command "python -m my_mcp_server" --env MY_VAR=value --cwd /path/to/workdir
-mcp-gway add tools --type local --command "npx -y my-mcp" --env KEY=VALUE --env OTHER=123 --cwd /tmp/workdir
+mcp-gway add tools --type local --command "npx -y my-mcp" --env KEY=VALUE --env OTHER=123 --cwd /srv/mcp/workdir
 
 # List and serve (local-first)
 mcp-gway list
@@ -114,7 +114,7 @@ curl -X POST http://127.0.0.1:8080/api/servers \
 # Add local (form, htmx)
 curl -X POST http://127.0.0.1:8080/api/servers \
   -H 'Content-Type: application/x-www-form-urlencoded' \
-  -d 'name=echo_srv&type=local&command=echo+hi&cwd=/tmp'
+  -d 'name=echo_srv&type=local&command=echo+hi&cwd=/srv/mcp/workdir'
 
 # Fragment htmx (polling tabla)
 curl -H "HX-Request: true" http://127.0.0.1:8080/dashboard/servers          # <tbody>
@@ -252,6 +252,50 @@ Options for `add` (OpenCode) — 12+ flags grouped by scope:
 | `--tools <list>` | Comma-separated tool filter (default `*` = all) |
 | `--args <json>` | JSON array of extra args — deprecated compat, used with `stdio`/`local` |
 | `--docs-url <url>` | Deprecated — accepted for compat but not persisted (legacy) |
+
+## Local Commands — Dynamic Allow-List (feat-006)
+
+> **Dynamic-no-static:** no hardcoded binaries. Operators allow-list once via env; see [ADR-009](docs/architecture/adr-009-dynamic-local-commands.md).
+
+**Default-deny:** empty `MCP_GWAY_ALLOW_LOCAL_COMMANDS` denies every `local` command.
+
+```bash
+# Allow-list (CSV basenames, `*` = invalid → deny + warn)
+export MCP_GWAY_ALLOW_LOCAL_COMMANDS="npx,uvx,python3,agentmemory"
+mcp-gway add mem --type local --command "agentmemory mcp local"
+mcp-gway add fs --type local --command "npx -y @anthropic/mcp-filesystem" --cwd /srv/mcp/workdir
+
+# Break-glass 72h (bootstrap only, time-boxed)
+export MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL=1
+unset MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL
+```
+
+- Marker `~/.config/mcp-gway/.local_unrestricted` (epoch, `0o600`, 72h TTL) — fail-closed: missing, expired, or invalid → deny.
+- Any syntactically valid basename allowed while marker fresh; otherwise deny.
+- `unset` returns to allow-list mode.
+
+**Dashboard ALLOW formula:**
+
+```
+ALLOW = VIA=1 AND (unrestricted OR in allow-list) AND serve-host loopback
+```
+
+- VIA ≡ `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD` (default `1`). `VIA=0` → `via_dashboard_disabled`.
+- Exposed host (`0.0.0.0` + `MCP_GWAY_ALLOW_REMOTE=1`) → `non_loopback_denied`, even if allow-listed.
+- CLI `add`/`refresh` uses allow-list/unrestricted only, ignores `VIA`.
+- Same gate on `POST /api/servers`, `PATCH /api/servers/{name}` (including edits from Dashboard drawer), `POST .../refresh` + bulk/background, catalog install.
+- `cwd` must be absolute + real + `is_dir`, else `reason_code=invalid_cwd`. Env denylist (`PATH`, `LD_PRELOAD`, `PYTHONPATH`, …) → `reason_code=denied_env`.
+- Spawn only resolved via PATH lookup (`shutil.which(basename)`); never `shell=True` / `cmd /c` / `sh -c`. Errors carry `reason_code` (`not_allowlisted`, `binary_not_found`, …).
+
+```bash
+# Dashboard examples (loopback only)
+curl -X POST http://127.0.0.1:8080/api/servers \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"mem","type":"local","command":"agentmemory mcp local"}'  # 201 when allow-listed
+curl -X POST http://127.0.0.1:8080/api/servers \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"evil","type":"local","command":"evilbin"}'  # 403 command not allowed
+```
 
 ## Code Mode
 

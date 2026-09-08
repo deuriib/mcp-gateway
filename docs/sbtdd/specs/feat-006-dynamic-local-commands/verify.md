@@ -4,15 +4,15 @@ slug: feat-006-dynamic-local-commands
 title: Dynamic Local Commands Verify
 status: Complete
 created: 2026-09-07
-updated: 2026-09-07
+updated: 2026-09-08
 spec_ref: ./spec.md
 plan_ref: ../../plans/feat-006-dynamic-local-commands/plan.md
 adr_refs: ["../../../architecture/adr-009-dynamic-local-commands.md"]
 slot_refs: ["verify_FEAT-006"]
 branch: feat/006-dynamic-local-commands
-commits: ["896b281 feat(policy): add dynamic local allow-list with unrestricted TTL", "7eb8028 fix(dashboard): re-gate local POST PATCH refresh catalog with policy", "e1b5f14 feat(cli): gate local add refresh with policy allow-list"]
-verified_by: backend
-verified_at: 2026-09-07
+commits: ["896b281 feat(policy): add dynamic local allow-list with unrestricted TTL", "7eb8028 fix(dashboard): re-gate local POST PATCH refresh catalog with policy", "e1b5f14 feat(cli): gate local add refresh with policy allow-list", "141171c docs(feat-006): SBTDD scaffold ADR-009 plus AC-001..AC-012", "66a72ae docs(feat-006): close WU-004", "084e5b2 fix(policy): marker 0o600", "1fc403f fix(core): parsing strip", "599dff7 fix(catalog): entry host_loopback", "1acaa6a fix(dashboard): re-gate persist", "04a13c6 merge feat/006-dynamic-local-commands to HEAD"]
+verified_by: writer
+verified_at: 2026-09-08
 tags: [local, verify]
 ---
 
