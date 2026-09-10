@@ -248,3 +248,27 @@ async def test_execute_code_with_server_struct_via_gateway(gateway, monkeypatch)
         data = response.json()
         text = data["result"]["content"][0]["text"]
         assert "query" in text
+
+
+@pytest.mark.asyncio
+async def test_removed_dashboard_routes_404(gateway):
+    transport = ASGITransport(app=gateway.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        for path in (
+            "/",
+            "/dashboard",
+            "/dashboard/servers",
+            "/api/servers",
+            "/api/catalog",
+        ):
+            response = await client.get(path)
+            assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_gateway_has_no_catalog_state(gateway):
+    assert not hasattr(gateway, "catalog_service")
+    assert not hasattr(gateway, "catalog_store")
+    assert getattr(gateway.app.state, "serve_host", None) == "127.0.0.1"
+    assert not hasattr(gateway.app.state, "dashboard_host")
+    assert not hasattr(gateway.app.state, "catalog_service")
