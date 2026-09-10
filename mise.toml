@@ -1,2 +1,54 @@
+# MCP Gateway — mise toolchain (Windows-compat, local-first, no Node)
+#
+# Uso mínimo:
+#   mise trust && mise install && mise tasks
+#   mise run dev          # uv sync --all-groups + pre-commit install (una vez por clon)
+#   mise run test         # uv run pytest -v  (CI parity)
+#   mise run lint         # uv run ruff check src/ tests/  (CI parity)
+#   mise run format       # uv run ruff format src/ tests/  (escritura, uso diario)
+#   mise run format-check # uv run ruff format --check src/ tests/  (CI parity)
+#   mise run ci           # lint + format-check + test (paridad con .github/workflows/test.yml)
+#   mise run serve        # uv run mcp-gway serve --host 127.0.0.1 --port 8080 (local-first)
+#
+# Notas:
+# - `mise.toml` es la única fuente de versiones (pin exacto). `.python-version`
+#   se mantiene alineado para pyenv/uv. CI prueba matriz 3.12/3.13; el pin
+#   local 3.12.x es el mínimo soportado (pyproject requires-python >=3.12).
+# - ruff 0.16.4 alineado con `.pre-commit-config.yaml` (rev v0.16.4) y
+#   `pyproject.toml` dev-group (`ruff>=0.16.4`). No subir sin alinear los tres.
+# - Tasks usan solo comandos portables (uv / ruff / mcp-gway). Sin `&&`,
+#   sin grep/head/jq, sin shell POSIX-only → funciona en win32 (pwsh) y unix.
+# - `serve` bindea 127.0.0.1 por defecto. 0.0.0.0 requiere MCP_GWAY_ALLOW_REMOTE=1.
+
 [tools]
-python = "3.12"
+python = "3.12.14"
+uv = "0.12.12"
+ruff = "0.16.4"
+
+[tasks.dev]
+description = "Setup dev env: sync deps + install pre-commit hooks"
+run = ["uv sync --all-groups", "uv run pre-commit install"]
+
+[tasks.test]
+description = "Run test suite (CI parity: uv run pytest -v)"
+run = "uv run pytest -v"
+
+[tasks.lint]
+description = "Lint with ruff (CI parity: ruff check src/ tests/)"
+run = "uv run ruff check src/ tests/"
+
+[tasks.format]
+description = "Format code with ruff (write mode)"
+run = "uv run ruff format src/ tests/"
+
+[tasks."format-check"]
+description = "Check formatting without writing (CI parity: ruff format --check)"
+run = "uv run ruff format --check src/ tests/"
+
+[tasks.ci]
+description = "CI parity: lint + format-check + test (no Node)"
+depends = ["lint", "format-check", "test"]
+
+[tasks.serve]
+description = "Serve gateway local-first on 127.0.0.1:8080"
+run = "uv run mcp-gway serve --host 127.0.0.1 --port 8080"
