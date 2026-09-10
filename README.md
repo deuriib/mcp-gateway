@@ -114,7 +114,7 @@ uv run mcp-gway serve --port 8080 2>&1 | head   # each line valid JSON: timestam
 ```
 
 - `X-Request-ID` or `X-Correlation-ID` accepted, sanitized to `^[A-Za-z0-9_-]{1,64}$`, truncated; auto `uuid4` if absent.
-- Labels bounded: `path` collapsed to `/mcp` or `/mcp/messages` (all other routes recorded as-is), server sanitized `[^A-Za-z0-9_]`→`_` 32 chars.
+- Labels bounded: `path` collapsed to `/mcp` or `/mcp/messages` (alias SSE al mismo handler `_mcp_post`, no endpoint independiente; all other routes recorded as-is), server sanitized `[^A-Za-z0-9_]`→`_` 32 chars.
 - Metrics: `http_requests_total`, `http_request_duration_seconds` (buckets 0.005..5), `mcp_tool_calls_total{server,tool,status}`, `discovery_duration_seconds`, `sandbox_execute_total{status}`, `registry_operations_total{op}`, `gateway_sessions_active`.
 
 **Local-first gating:** `/metrics` never leaks secrets; `serve` on non-loopback without `MCP_GWAY_ALLOW_REMOTE=1` exits 2; `X-Warning: exposed` only on `GET /metrics` → `403` (src/mcp_gway/observability/health.py:127-139).
@@ -169,18 +169,23 @@ Options for `add` (OpenCode) — 13 flags (cli.py:45-95):
 
 > **Dynamic-no-static:** no hardcoded binaries. Operators allow-list once via env; see [ADR-009](docs/architecture/adr-009-dynamic-local-commands.md).
 
-**Default-deny:** empty `MCP_GWAY_ALLOW_LOCAL_COMMANDS` denies every `local` command.
+**Default-deny:** empty `MCP_GWAY_ALLOW_LOCAL_COMMANDS` denies every `local` command (vacío = deny, se mantiene).
+
+Recomendado: `MCP_GWAY_ALLOW_LOCAL_COMMANDS="npx,uvx,python3,bunx"`.
 
 ```bash
 # Allow-list (CSV basenames, `*` = invalid → deny + warn)
-export MCP_GWAY_ALLOW_LOCAL_COMMANDS="npx,uvx,python3,agentmemory"
-mcp-gway add mem --type local --command "agentmemory mcp local"
+export MCP_GWAY_ALLOW_LOCAL_COMMANDS="npx,uvx,python3,bunx"
 mcp-gway add fs --type local --command "npx -y @anthropic/mcp-filesystem" --cwd /srv/mcp/workdir
 
 # Break-glass 72h (bootstrap only, time-boxed)
 export MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL=1
 unset MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL
 ```
+
+- Nota CISO opt-in: `bunx` solo como recomendado en documentación (no default en código, default-deny vacío se mantiene); solo opt-in con pin + owner + regate 90d; `bun` runtime sigue fuera; denylist `BUN_*`/`NPM_*`/`UV_*`/`NODE_*` + PATH controlado; prohibido `*`, paths o shell.
+- `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD` inerte desde v2.0.0 (headless CLI-only, sin dashboard).
+- Tag `v2.0.0` interno no publicado — no anuncio externo. Tras actualizar, borra la caché vieja manualmente: `rm ~/.config/mcp-gway/catalog.json`.
 
 - Marker `~/.config/mcp-gway/.local_unrestricted` (epoch, `0o600`, 72h TTL) — fail-closed: missing, expired, or invalid → deny.
 - Any syntactically valid basename allowed while marker fresh; otherwise deny.
@@ -247,7 +252,7 @@ Pre-commit is already in place (`.pre-commit-config.yaml` — `ruff` v0.16.4, `r
 │  CLI (click)              │  Gateway (Starlette + uvicorn, CSP)      │
 │  - add remote/local       │  - POST /mcp (JSON-RPC)                  │
 │  - remove/inspect/list    │  - GET  /mcp (SSE endpoint event)        │
-│  - refresh --auth         │  - POST /mcp/messages?session_id=...     │
+│  - refresh --auth         │  - POST /mcp/messages?session_id=... (alias) │
 │  - serve --host 127.0.0.1 │  - GET  /health                          │
 │  (local-first default)    │  - GET  /ready, /live, /metrics           │
 ├──────────────────────────────────────────────────────────────────────┤
@@ -270,7 +275,7 @@ Pre-commit is already in place (`.pre-commit-config.yaml` — `ruff` v0.16.4, `r
 ```
 
 - **Sin Node** en runtime ni CI: sin UI ni assets vendoreados, `ruff` único linter, `uv_build` backend.
-- **Release híbrido** (ADR-007): `push tags v*` → `uv build` + `pypi-publish` (GA `v1.5.0` tag manual) + `workflow_run Tests completed` → `python-semantic-release@v9` para `fix/perf` patches auto. `concurrency: release`, `fetch-depth:0`, `[tool.semantic_release]` sync `pyproject.toml` + `__init__.py` (`1.5.0` exacta).
+- **Release híbrido** (ADR-007): `push tags v*` → `uv build` + `pypi-publish` (GA `v1.5.0` tag manual) + `workflow_run Tests completed` → `python-semantic-release@v10 (>=10.0.0, uv.lock 10.6.1)` para `fix/perf` patches auto. `concurrency: release`, `fetch-depth:0`, `[tool.semantic_release]` sync `pyproject.toml` + `__init__.py` (`1.5.0` exacta).
 
 ## License
 

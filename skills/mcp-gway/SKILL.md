@@ -79,11 +79,14 @@ from `MCP_GWAY_LOG_LEVEL`/`LOG_LEVEL`, then `MCP_GWAY_ENV`).
   without `MCP_GWAY_ALLOW_REMOTE=1` → `Error: binding to non-loopback host ...`
   + `exit 2`. With opt-in → `WARNING: server exposed on non-loopback` in log;
   never expose without firewall/auth in front.
-- `local` is default-deny: `MCP_GWAY_ALLOW_LOCAL_COMMANDS="npx,uvx,python3"`
+- `local` is default-deny: `MCP_GWAY_ALLOW_LOCAL_COMMANDS="npx,uvx,python3,bunx"`
   allow-list (CSV basenames, case-insensitive). Empty = deny. `*`, paths, and
   invalid entries are denied + warn (`core/policy.py:16-80`). `--cwd` must be an
   absolute path. Denylisted env vars (`PATH`, `LD_PRELOAD`, `PYTHONPATH`, …)
-  are rejected.
+  are rejected. Nota CISO opt-in: `bunx` solo como recomendado en documentación
+  (no default en código, default-deny vacío se mantiene); solo opt-in con
+  pin + owner + regate 90d; `bun` runtime sigue fuera; denylist
+  `BUN_*`/`NPM_*`/`UV_*`/`NODE_*` + PATH controlado; prohibido `*`, paths o shell.
 - `remote --url` has an SSRF-guard (`models.py:115-163`): only `http|https`;
   private/loopback/link-local/reserved/multicast hosts rejected
   (`localhost` only allowed under test harness).

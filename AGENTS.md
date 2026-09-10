@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-**MCP Gateway** — A standalone Python CLI that aggregates multiple MCP servers behind a single headless HTTP/SSE endpoint with Code Mode (v1.5.0 GA, CLI-managed, no UI).
+**MCP Gateway** — A standalone Python CLI that aggregates multiple MCP servers behind a single headless HTTP/SSE endpoint with Code Mode (v2.0.0 interno, CLI-only, headless, sin dashboard/catalog).
+
+> **Nota interna:** ver `CHANGELOG.md` v2.0.0 (2026-09-10). Release interno no publicado — no anuncio externo.
 
 ## Tech Stack
 
@@ -14,20 +16,23 @@
 - **Sandbox**: starlark-pyo3
 - **Testing**: pytest + pytest-asyncio (185 tests)
 - **Linting**: ruff
+- **Nota**: `htpy` retirado en v2.0.0, `httpx` kept.
 
 ## Project Structure
 
 ```
 src/mcp_gway/
-├── __init__.py          # Package version (1.5.0)
+├── __init__.py          # Package version (2.0.0)
 ├── models.py            # Pydantic models (MCPServerConfig OpenCode-only local|remote, ToolInfo, OAuthConfig)
 ├── registry.py          # .pyi file CRUD (servers/ directory) — única fuente de verdad
 ├── sandbox.py           # Starlark sandbox (hermetic execution)
 ├── server_proxy.py      # MCP server wrapper for sandbox
 ├── code_mode.py         # 4 meta-tools orchestrator
-├── gateway.py           # HTTP/SSE server (JSON-RPC 2.0), headless, local-first 127.0.0.1 + CSP
+├── gateway.py           # HTTP/SSE server (JSON-RPC 2.0), headless, local-first 127.0.0.1 + CSP — 5 paths lógicos vivos: /mcp (GET+POST), /health, /ready, /live, /metrics (gateway.py:166-175, 7 Route entries; /mcp/messages es alias POST al mismo handler _mcp_post, no endpoint independiente)
 ├── cli.py               # CLI commands (add/remove/update/list/inspect/refresh/serve --host 127.0.0.1)
 └── oauth.py             # OAuth2 support (dynamic registration, token storage)
+
+> **Retirado en v2.0.0 (no servir):** dashboard (`/dashboard`, `/api/servers`, `/static`, `/` alias) y catalog (`/api/catalog`, `/dashboard/catalog`, Bifrost fetch, `~/.config/mcp-gway/catalog.json`). Gestión CLI-only.
 
 tests/
 ├── test_models.py       # Model validation tests
@@ -60,7 +65,12 @@ uv run ruff format --check src/ tests/   # Format check (CI parity)
 mcp-gway add <name> --type remote --url <url> [--header "KEY=VALUE"] [--oauth-client-id ID] [--oauth-client-secret SECRET] [--oauth-scope SCOPE] [--timeout 5000] [--enabled] [--oauth-port 8989]
 # Shell-history warning: no secretos reales en --header/--oauth-client-secret; preferir `refresh --auth`.
 mcp-gway add <name> --type local --command "npx -y my-mcp" [--env KEY=VALUE] [--cwd /path] [--tools "*"]
-# Local default-deny: `local` requiere allow-list MCP_GWAY_ALLOW_LOCAL_COMMANDS="npx,uvx,python3" (vacío = deny); `*` inválido → deny + warn.
+# Local default-deny: `local` requiere allow-list MCP_GWAY_ALLOW_LOCAL_COMMANDS="npx,uvx,python3,bunx" (vacío = deny); `*` inválido → deny + warn.
+# feat-006 allow-list + break-glass 72h (ADR-009 docs/architecture/adr-009-dynamic-local-commands.md,
+#   src/mcp_gway/core/policy.py): default-deny empty MCP_GWAY_ALLOW_LOCAL_COMMANDS;
+#   CSV basenames, `*` inválido; UNRESTRICTED_TTL 72*3600; break-glass MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL=1
+#   + marker ~/.config/mcp-gway/.local_unrestricted (epoch, 0o600, 72h TTL); vars MCP_GWAY_ALLOW_LOCAL_COMMANDS
+#   / MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL / MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD (no renombrar).
 # Full options: 13 flags (cli.py:45-95): --type/--url/--command/--header/--env/--cwd/--oauth-client-id/--oauth-client-secret/--oauth-scope/--timeout/--enabled/--oauth-port/--tools
 # Only --type local|remote (cli.py:50). No --args, no --docs-url. Legacy http|stdio|sse|streamable-http rejected by click.
 mcp-gway remove <name>
@@ -91,13 +101,18 @@ mcp-gway serve [--host 127.0.0.1] [--port 8080]   # default local-first; 0.0.0.0
 ## Deployment
 
 - **PyPI**: Hybrid workflow `.github/workflows/release.yml` — `on: push tags v*` **+** `on: workflow_run Tests completed` (ver ADR-007)
-  - `push v*` → `uv build` + `pypi-publish` determinístico (GA manual `v1.5.0` via tag, CEO GO)
-  - `workflow_run` → `python-semantic-release@v9` para patches automáticos `fix/perf` → minor/patch sin tag manual
+  - `push v*` → `uv build` + `pypi-publish` determinístico (GA interno `v2.0.0` via tag, nota interna no publicada — no anuncio externo)
+  - `workflow_run` → `python-semantic-release@v10 (>=10.0.0, uv.lock 10.6.1)` para patches automáticos `fix/perf` → minor/patch sin tag manual
   - Condición: `if: push || workflow_run.conclusion == 'success'` + `concurrency: release` + `fetch-depth: 0`
-- **Version**: `1.5.0` sincronizada `pyproject.toml:project.version` + `src/mcp_gway/__init__.py:__version__` (`[tool.semantic_release]`)
+- **Version**: `2.0.0` sincronizada `pyproject.toml:project.version` + `src/mcp_gway/__init__.py:__version__` (`[tool.semantic_release]`)
 - **Build**: `uv_build` backend — sin Node en CI (`ruff` único linter)
 
 ## Key Patterns
+
+### Endpoints vivos + Retiro dashboard/catalog
+
+- **Vivos (v2.0.0):** `/mcp` (GET+POST), `/health`, `/ready`, `/live`, `/metrics` (`gateway.py:166-175`, 7 Route entries; `/mcp/messages` es alias POST al mismo handler `_mcp_post`, no endpoint independiente). Gestión CLI-only.
+- **Retirados (no servir):** dashboard (`/dashboard`, `/api/servers`, `/static`, `/` alias) y catalog (`/api/catalog`, `/dashboard/catalog`, Bifrost fetch, `~/.config/mcp-gway/catalog.json` — borrar caché vieja manualmente).
 
 ### Registry (.pyi + .json) — Única fuente
 
@@ -110,6 +125,12 @@ mcp-gway serve [--host 127.0.0.1] [--port 8080]   # default local-first; 0.0.0.0
 - `serve --host 127.0.0.1` default. Desvío requiere `MCP_GWAY_ALLOW_REMOTE=1`; si no → `sys.exit(2)`.
 - `remote --url` con SSRF-guard (`models.py:115-163`): hosts privados/loopback/link-local rechazados; ejemplo vivo `https://api.example.com/mcp`.
 - Si `host not in (127.0.0.1, ::1, localhost)` → log `warning` + banner consola; `X-Warning: exposed` solo en `GET /metrics` → `403` (observability/health.py:127-139).
+- feat-006 allow-list + break-glass 72h (`src/mcp_gway/core/policy.py`, ADR-009):
+  - default-deny con `MCP_GWAY_ALLOW_LOCAL_COMMANDS` vacío; ejemplo recomendado `"npx,uvx,python3,bunx"`.
+  - CSV basenames case-insensitive, `*`/paths inválidos → deny + warn.
+  - Nota CISO opt-in: `bunx` solo recomendado en docs (no default en código, default-deny vacío se mantiene), solo opt-in con pin + owner + regate 90d; `bun` runtime fuera; denylist `BUN_*`/`NPM_*`/`UV_*`/`NODE_*` + PATH controlado; prohibido `*`, paths o shell.
+  - Break-glass `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL=1` + marker `~/.config/mcp-gway/.local_unrestricted` (epoch, `0o600`, 72h TTL).
+  - No renombrar `MCP_GWAY_ALLOW_LOCAL_COMMANDS` / `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL` / `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD` (`VIA_DASHBOARD` inerte desde v2.0.0 headless CLI-only).
 
 ### OAuth Flow
 
