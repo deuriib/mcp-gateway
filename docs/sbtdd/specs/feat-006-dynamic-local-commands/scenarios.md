@@ -22,7 +22,7 @@ tags: [local, security]
 
 ## Feature: Dynamic local commands
 As an operator
-I want allow-listed local binaries to be addable from CLI and Dashboard
+I want allow-listed local binaries to be addable from CLI
 So that npm-global PATH tools work without static hardcode, without opening RCE.
 
 ### Scenario: Happy path
@@ -44,11 +44,6 @@ Then 403 `command not allowed` with `reason_code=not_allowlisted`.
 Given `MCP_GWAY_ALLOW_LOCAL_COMMANDS=*`
 When POST `/api/servers` local
 Then 403 deny + warn logged.
-
-### Scenario: Error case via disabled
-Given allow-listed binary but `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD=0`
-When POST `/api/servers` local
-Then 403 `reason_code=via_dashboard_disabled`.
 
 ### Scenario: Error case non-loopback
 Given `Gateway(registry, host="0.0.0.0")` with allow-listed binary
@@ -80,7 +75,7 @@ Given unrestricted marker epoch older than 72h
 When POST local with unlisted binary
 Then 403 `not_allowlisted` (unrestricted inactive).
 
-### Scenario: Edge case CLI without VIA
-Given `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD=0` but binary allow-listed
+### Scenario: Edge case CLI allow-list
+Given allow-list `MCP_GWAY_ALLOW_LOCAL_COMMANDS=mybin` and `which(mybin)` resolves
 When CLI `add --type local --command "mybin"`
-Then success (CLI ignores VIA).
+Then success.

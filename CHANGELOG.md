@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## Unreleased
+- **breaking**: removed dashboard (`/dashboard`, `/api/servers`, `/static`, `/` alias) and catalog (`/api/catalog`, `/dashboard/catalog`, Bifrost fetch, `~/.config/mcp-gway/catalog.json` cache). Gateway serves `/mcp`, `/health`, `/ready`, `/live`, `/metrics` only; management is CLI-only. Dropped `htpy` dependency (`httpx` kept). Delete stale cache manually: `rm ~/.config/mcp-gway/catalog.json`.
+
 ## Unreleased — feat-006 Dynamic Local Commands
 
 - **feat-006**: Dynamic-no-static local allow-list + 72h break-glass ([ADR-009](docs/architecture/adr-009-dynamic-local-commands.md))

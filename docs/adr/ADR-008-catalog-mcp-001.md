@@ -1,3 +1,5 @@
+> SUPERSEDED 2026-09-10: catalog removed (Bifrost fetch, cache, `/api/catalog`, `/dashboard/catalog`). Kept for history.
+
 # ADR-008: Catalogo MCPs curado — CATALOG-001 (Bifrost local-first)
 
 ## Status

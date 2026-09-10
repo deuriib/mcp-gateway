@@ -28,9 +28,9 @@ Implement ADR-009 adapted per CISO HARD names; close PATCH bypass; prove with AC
 - Status: Done
 - Commit: 896b281 `feat(policy): add dynamic local allow-list with unrestricted TTL`
 
-### WU-002: Dashboard + catalog + transport gates
-- Title: POST/PATCH/refresh/catalog re-gate + which-resolve exec
-- AC ref: AC-001..AC-003, AC-006..AC-010
+### WU-002: Policy + transport gates
+- Title: POST/PATCH/refresh re-gate + which-resolve exec
+- AC ref: AC-001..AC-003, AC-007..AC-010
 - BR/EC: BR-005..BR-006, BR-008..BR-010, BR-013..BR-014
 - Status: Done
 - Commit: 7eb8028 `fix(dashboard): re-gate local POST PATCH refresh catalog with policy`
@@ -61,6 +61,6 @@ Implement ADR-009 adapted per CISO HARD names; close PATCH bypass; prove with AC
 - BR-001 ↔ validate_cmd ↔ AC-011 syntax part ↔ WU-001
 - BR-003 ↔ get_allow_list ↔ AC-001..AC-003 ↔ WU-001/WU-002
 - BR-004 ↔ is_unrestricted_active ↔ AC-004..AC-005 ↔ WU-001
-- BR-005 ↔ check_basename_allowed via/host ↔ AC-006..AC-007 ↔ WU-002
+- BR-005 removed 2026-09-10 (VIA/host gate retired with dashboard); AC-007 host deny retained as historical ↔ WU-002
 - BR-009 ↔ PATCH re-gate ↔ AC-009 ↔ WU-002
-- BR-010 ↔ refresh/catalog ↔ AC-010 ↔ WU-002
+- BR-010 ↔ refresh re-gate ↔ AC-010 ↔ WU-002

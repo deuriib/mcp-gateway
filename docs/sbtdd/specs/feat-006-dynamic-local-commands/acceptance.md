@@ -53,19 +53,12 @@ tags: [local, security, acceptance]
 - **Test Data**: epoch `now-73h`
 - **Traces**: BR-004
 
-### AC-006: VIA disabled denies dashboard
-- **Given** allow-list `mybin`, `VIA=0`
-- **When** POST local `["mybin"]`
-- **Then** 403 `via_dashboard_disabled`
-- **Test Data**: `VIA=0`
-- **Traces**: BR-005
-
 ### AC-007: Non-loopback denies
 - **Given** `Gateway(registry, host="0.0.0.0")`, allow-list `mybin`
 - **When** POST local `["mybin"]`
 - **Then** 403 `non_loopback_denied`
 - **Test Data**: host `0.0.0.0`
-- **Traces**: BR-005, BR-016
+- **Traces**: host loopback gate (serve-level; former BR-005 removed 2026-09-10)
 
 ### AC-008: Binary missing actionable
 - **Given** allow-list `mybin`, `resolve_binary→None`
@@ -95,8 +88,8 @@ tags: [local, security, acceptance]
 - **Test Data**: `relative/path`, `PATH`, `DYLD_FOO`
 - **Traces**: BR-011, BR-012
 
-### AC-012: CLI ignores VIA + audit clean
-- **Given** `VIA=0`, allow-list `mybin`, `resolve_binary→/usr/bin/mybin`
+### AC-012: CLI allow-list + audit clean
+- **Given** allow-list `mybin`, `resolve_binary→/usr/bin/mybin`
 - **When** CLI `add --type local --command "mybin"` and `refresh`
 - **Then** exit 0; logs contain `reason=allow_list` without secret values
 - **Test Data**: `mybin`, env `FOO=bar` masked in registry GET

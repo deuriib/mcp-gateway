@@ -1,4 +1,5 @@
 # SPEC-2026-08-26 — Observability Design (Hybrid Pragmatic — Approach C)
+> PARTIAL SUPERSEDE 2026-09-10: dashboard-rendered surfaces removed (`/dashboard`, `/api/servers`, `/static`, ops card, `/api/health`, `htpy`). JSON probes (`/health`, `/ready`, `/live`, `/metrics`), stdlib logging, correlation IDs, and MetricsRegistry requirements below remain binding. Dashboard-only rows (BR-OBS-008 ops card, EC-OBS-09 HX polling, `/api/health` contract) are historical.
 
 ## Status: Approved (CEO GO Act 1+2) — Binding
 ## Version: 0.8.0-draft — 2026-08-26
