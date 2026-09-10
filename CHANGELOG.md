@@ -1,15 +1,18 @@
 # CHANGELOG
 
-## Unreleased
+## v2.0.0 (2026-09-10)
 - **breaking**: removed dashboard (`/dashboard`, `/api/servers`, `/static`, `/` alias) and catalog (`/api/catalog`, `/dashboard/catalog`, Bifrost fetch, `~/.config/mcp-gway/catalog.json` cache). Gateway serves `/mcp`, `/health`, `/ready`, `/live`, `/metrics` only; management is CLI-only. Dropped `htpy` dependency (`httpx` kept). Delete stale cache manually: `rm ~/.config/mcp-gway/catalog.json`.
-
-## Unreleased — feat-006 Dynamic Local Commands
 
 - **feat-006**: Dynamic-no-static local allow-list + 72h break-glass ([ADR-009](docs/architecture/adr-009-dynamic-local-commands.md))
   - Default-deny: empty `MCP_GWAY_ALLOW_LOCAL_COMMANDS` denies all `local`; CSV basenames, `*` invalid.
   - Operative CISO values: default-deny BR-002..BR-016 (single syntax rule, allow-list, 72h TTL, VIA+loopback gate, `which`-only spawn, `cwd`/env gates, audit `***`), break-glass `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL=1` + marker `~/.config/mcp-gway/.local_unrestricted` (epoch, `0o600`, 72h TTL).
   - Closes PATCH `from_edit` bypass; re-gates POST/PATCH/refresh/catalog + CLI `add`/`refresh`; Dashboard `ALLOW = VIA=1 AND (unrestricted OR in allow-list) AND serve-host loopback`.
   - Env vars (do not rename): `MCP_GWAY_ALLOW_LOCAL_COMMANDS`, `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL`, `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD`.
+
+### Migration
+- Endpoints servidos solo `/mcp`, `/health`, `/ready`, `/live`, `/metrics`; gestión CLI-only.
+- Delete stale cache: `rm ~/.config/mcp-gway/catalog.json`.
+- Vars: `MCP_GWAY_ALLOW_LOCAL_COMMANDS` / `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL` / `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD`.
 
 ## v0.9.1 (2026-08-25)
 
