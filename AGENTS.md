@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**MCP Gateway** — A standalone Python CLI that aggregates multiple MCP servers behind a single headless HTTP/SSE endpoint with Code Mode (v1.4.1 GA, CLI-managed, no UI).
+**MCP Gateway** — A standalone Python CLI that aggregates multiple MCP servers behind a single headless HTTP/SSE endpoint with Code Mode (v1.5.0 GA, CLI-managed, no UI).
 
 ## Tech Stack
 
@@ -19,8 +19,8 @@
 
 ```
 src/mcp_gway/
-├── __init__.py          # Package version (1.4.1)
-├── models.py            # Pydantic models (MCPServerConfig OpenCode + MCPClientConfig deprecated compat, ToolInfo, ConnectionType)
+├── __init__.py          # Package version (1.5.0)
+├── models.py            # Pydantic models (MCPServerConfig OpenCode-only local|remote, ToolInfo, OAuthConfig)
 ├── registry.py          # .pyi file CRUD (servers/ directory) — única fuente de verdad
 ├── sandbox.py           # Starlark sandbox (hermetic execution)
 ├── server_proxy.py      # MCP server wrapper for sandbox
@@ -58,10 +58,11 @@ uv run ruff format --check src/ tests/   # Format check (CI parity)
 
 # CLI — OpenCode format (primary)
 mcp-gway add <name> --type remote --url <url> [--header "KEY=VALUE"] [--oauth-client-id ID] [--oauth-client-secret SECRET] [--oauth-scope SCOPE] [--timeout 5000] [--enabled] [--oauth-port 8989]
-mcp-gway add <name> --type local --command "npx -y my-mcp" [--env KEY=VALUE] [--cwd /path] [--args '["..."]' (deprecated compat)] [--tools "*"]
-# Full options: see README.md Options table (12+ flags: --type/--url/--command/--header/--env/--cwd/--oauth-* /--timeout/--enabled/--tools/--args/--docs-url)
-# Deprecated (still works, use remote/local instead):
-# mcp-gway add <name> --type <http|stdio|sse|streamable-http> [...]
+# Shell-history warning: no secretos reales en --header/--oauth-client-secret; preferir `refresh --auth`.
+mcp-gway add <name> --type local --command "npx -y my-mcp" [--env KEY=VALUE] [--cwd /path] [--tools "*"]
+# Local default-deny: `local` requiere allow-list MCP_GWAY_ALLOW_LOCAL_COMMANDS="npx,uvx,python3" (vacío = deny); `*` inválido → deny + warn.
+# Full options: 13 flags (cli.py:45-95): --type/--url/--command/--header/--env/--cwd/--oauth-client-id/--oauth-client-secret/--oauth-scope/--timeout/--enabled/--oauth-port/--tools
+# Only --type local|remote (cli.py:50). No --args, no --docs-url. Legacy http|stdio|sse|streamable-http rejected by click.
 mcp-gway remove <name>
 mcp-gway list
 mcp-gway inspect <name>
@@ -69,7 +70,7 @@ mcp-gway refresh [<name>] [--auth] [--oauth-port <port>]
 mcp-gway serve [--host 127.0.0.1] [--port 8080]   # default local-first; 0.0.0.0 requiere MCP_GWAY_ALLOW_REMOTE=1
 ```
 
-> **Local-first warning:** `serve` bindea `127.0.0.1` por defecto. `--host 0.0.0.0` sin `MCP_GWAY_ALLOW_REMOTE=1` → `exit 2` + `Error: binding to non-loopback ...`. Con `MCP_GWAY_ALLOW_REMOTE=1` → `WARNING: server exposed on non-loopback` en log + header `X-Warning: exposed`.
+> **Local-first warning:** `serve` bindea `127.0.0.1` por defecto. `--host 0.0.0.0` sin `MCP_GWAY_ALLOW_REMOTE=1` → `exit 2` + `Error: binding to non-loopback ...`. Con `MCP_GWAY_ALLOW_REMOTE=1` → `WARNING: server exposed on non-loopback` en log; `X-Warning: exposed` solo en `GET /metrics` → `403` cuando se expone sin opt-in. No exponer `0.0.0.0` sin firewall/auth delante.
 
 ## Code Conventions
 
@@ -90,10 +91,10 @@ mcp-gway serve [--host 127.0.0.1] [--port 8080]   # default local-first; 0.0.0.0
 ## Deployment
 
 - **PyPI**: Hybrid workflow `.github/workflows/release.yml` — `on: push tags v*` **+** `on: workflow_run Tests completed` (ver ADR-007)
-  - `push v*` → `uv build` + `pypi-publish` determinístico (GA manual `v1.4.1` via tag, CEO GO)
+  - `push v*` → `uv build` + `pypi-publish` determinístico (GA manual `v1.5.0` via tag, CEO GO)
   - `workflow_run` → `python-semantic-release@v9` para patches automáticos `fix/perf` → minor/patch sin tag manual
   - Condición: `if: push || workflow_run.conclusion == 'success'` + `concurrency: release` + `fetch-depth: 0`
-- **Version**: `1.4.1` sincronizada `pyproject.toml:project.version` + `src/mcp_gway/__init__.py:__version__` (`[tool.semantic_release]`)
+- **Version**: `1.5.0` sincronizada `pyproject.toml:project.version` + `src/mcp_gway/__init__.py:__version__` (`[tool.semantic_release]`)
 - **Build**: `uv_build` backend — sin Node en CI (`ruff` único linter)
 
 ## Key Patterns
@@ -107,7 +108,8 @@ mcp-gway serve [--host 127.0.0.1] [--port 8080]   # default local-first; 0.0.0.0
 ### Local-First Security
 
 - `serve --host 127.0.0.1` default. Desvío requiere `MCP_GWAY_ALLOW_REMOTE=1`; si no → `sys.exit(2)`.
-- Si `host not in (127.0.0.1, ::1, localhost)` → log `warning` + respuesta incluye `X-Warning: exposed`.
+- `remote --url` con SSRF-guard (`models.py:115-163`): hosts privados/loopback/link-local rechazados; ejemplo vivo `https://api.example.com/mcp`.
+- Si `host not in (127.0.0.1, ::1, localhost)` → log `warning` + banner consola; `X-Warning: exposed` solo en `GET /metrics` → `403` (observability/health.py:127-139).
 
 ### OAuth Flow
 
@@ -115,7 +117,7 @@ mcp-gway serve [--host 127.0.0.1] [--port 8080]   # default local-first; 0.0.0.0
 2. Discover OAuth metadata from authorization server
 3. Dynamic client registration (RFC 7591)
 4. PKCE authorization code flow
-5. Token storage in `~/.config/mcp-gway/tokens/` (ver `oauth.py:run_oauth_flow`)
+5. Token storage in `~/.config/mcp-gway/tokens/` (`0o600` via `_secure_atomic_write`, ver `oauth.py:run_oauth_flow`; preferir `refresh --auth`, manual solo con `chmod 600`)
 
 ### SSE Transport
 

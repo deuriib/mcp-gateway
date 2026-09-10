@@ -4,11 +4,11 @@
 [![Python](https://img.shields.io/pypi/pyversions/mcp-gway)](https://pypi.org/project/mcp-gway/)
 [![License](https://img.shields.io/pypi/l/mcp-gway)](https://github.com/deuriib/mcp-gateway/blob/main/LICENSE)
 
-A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) servers behind a single headless HTTP/SSE endpoint with **Code Mode** — reducing LLM input token usage by up to 92% when using multiple MCP servers. Headless gateway (**v1.4.1 GA**): CLI-managed, no UI dependencies.
+A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) servers behind a single headless HTTP/SSE endpoint with **Code Mode** — reducing LLM input token usage by up to 92% when using multiple MCP servers. Headless gateway (**v1.5.0 GA**): CLI-managed, no UI dependencies.
 
 ## Features
 
-- **Multi-Server Aggregation** — Connect to multiple MCP servers (HTTP, SSE, Stdio, Streamable HTTP) and expose them through a single endpoint
+- **Multi-Server Aggregation** — Connect to multiple MCP servers (`remote` / `local`, OpenCode format) and expose them through a single endpoint
 - **Code Mode** — 4 meta-tools that let LLMs discover and use tools dynamically without loading all schemas upfront
 - **OAuth 2.0 Support** — Built-in OAuth flow with dynamic client registration (RFC 7591) and token storage
 - **Hermetic Sandbox** — Starlark-based sandbox for safe code execution
@@ -35,13 +35,16 @@ OpenCode schema — `remote` / `local` with transport auto-detection. This is th
 
 ```bash
 # Remote — auto-detects transport (streamable-http → sse → http)
-mcp-gway add youtube --type remote --url http://localhost:3001/mcp
+mcp-gway add youtube --type remote --url https://api.example.com/mcp
+# SSRF-guard: private/loopback/link-local hosts rejected (src/mcp_gway/models.py:115-163); localhost solo en tests.
 
 # Remote with headers
 mcp-gway add supabase --type remote --url https://mcp.supabase.com/mcp --header "Authorization=Bearer TOKEN"
 
 # Remote with pre-registered OAuth
 mcp-gway add supabase --type remote --url https://mcp.supabase.com/mcp --oauth-client-id ID --oauth-client-secret SECRET --oauth-scope "openid profile"
+
+> **Shell-history warning:** no pases secretos reales en `--header` / `--oauth-client-secret` (quedan en `~/.bash_history` / `ps`). Prefiere `mcp-gway refresh <name> --auth` o variables de entorno efímeras.
 
 # Remote with timeout and enable toggle
 mcp-gway add api --type remote --url https://api.example.com/mcp --timeout 10000 --enabled
@@ -59,17 +62,9 @@ mcp-gway serve --host 127.0.0.1 --port 8080
 curl -s http://127.0.0.1:8080/health | jq
 ```
 
-### Deprecated Format (still works)
+### Server Types (only `remote` / `local`)
 
-Old `--type http|stdio|sse|streamable-http` syntax is kept for backward compat and internally mapped to `remote`/`local`. Prefer `remote`/`local` for new configs.
-
-```bash
-# Equivalent old syntax — prefer remote/local above
-mcp-gway add youtube --type http --url http://localhost:3001/mcp
-mcp-gway add filesystem --type stdio --command npx --args '["-y", "@anthropic/mcp-filesystem"]'
-mcp-gway add supabase --type streamable-http --url https://mcp.supabase.com/mcp
-mcp-gway add legacy --type sse --url https://example.com/sse
-```
+`--type` only accepts `local|remote` (`cli.py:50`). Legacy values `http|stdio|sse|streamable-http` are rejected by click, and `--args` / `--docs-url` do not exist. For `local`, `--command` is a single string (split via `shlex`).
 
 ## Management — CLI-Only
 
@@ -85,6 +80,7 @@ mcp-gway serve --port 8080            # bindea 127.0.0.1
 # Exponer en 0.0.0.0 requiere opt-in explícito
 MCP_GWAY_ALLOW_REMOTE=1 mcp-gway serve --host 0.0.0.0 --port 8080
 # └─ log warning "server exposed on non-loopback host"
+# Protege con firewall + auth reversa: nunca expongas 0.0.0.0 sin firewall/auth delante.
 
 # Sin opt-in → error controlado
 mcp-gway serve --host 0.0.0.0
@@ -92,15 +88,15 @@ mcp-gway serve --host 0.0.0.0
 # exit 2
 ```
 
-## Observability — Logs + Metrics + Health (Approach C, v1.4.1)
+## Observability — Logs + Metrics + Health (Approach C, v1.5.0)
 
-> **Zero vendor lock-in:** stdlib `json` logs (no `structlog`), vendored `MetricsRegistry` (no `prometheus_client`), correlation via `X-Request-ID` + `contextvars`, health probes `/health|/ready|/live` + Prometheus text `/metrics`. Local-first + masking `***` preserved; if somehow bound non-loopback, `/metrics` returns `403` + `X-Warning: exposed`.
+> **Zero vendor lock-in:** stdlib `json` logs (no `structlog`), vendored `MetricsRegistry` (no `prometheus_client`), correlation via `X-Request-ID` + `contextvars`, health probes `/health|/ready|/live` + Prometheus text `/metrics`. Local-first + masking `***` preserved; `X-Warning: exposed` solo en `GET /metrics` → `403`.
 
 **Health & Metrics:**
 
 ```bash
 curl -s http://127.0.0.1:8080/health | jq
-# {"status":"ok","version":"1.4.1","checks":{"registry":"ok","routes":"ok"},"uptime_seconds":42}
+# {"status":"ok","version":"1.5.0","checks":{"registry":"ok","routes":"ok"},"uptime_seconds":42}
 curl -s http://127.0.0.1:8080/ready | jq   # 200 ready / 503 not_ready (registry/routes/event_loop checks)
 curl -s http://127.0.0.1:8080/live | jq    # 200 alive — no FS I/O, <5ms
 curl -s http://127.0.0.1:8080/metrics | head -n 20
@@ -121,7 +117,7 @@ uv run mcp-gway serve --port 8080 2>&1 | head   # each line valid JSON: timestam
 - Labels bounded: `path` collapsed to `/mcp` or `/mcp/messages` (all other routes recorded as-is), server sanitized `[^A-Za-z0-9_]`→`_` 32 chars.
 - Metrics: `http_requests_total`, `http_request_duration_seconds` (buckets 0.005..5), `mcp_tool_calls_total{server,tool,status}`, `discovery_duration_seconds`, `sandbox_execute_total{status}`, `registry_operations_total{op}`, `gateway_sessions_active`.
 
-**Local-first gating:** `/metrics` never leaks secrets; if somehow bound non-loopback without `MCP_GWAY_ALLOW_REMOTE=1`, `serve` exits 2; if bypassed, `/metrics` returns `403` + `X-Warning: exposed`.
+**Local-first gating:** `/metrics` never leaks secrets; `serve` on non-loopback without `MCP_GWAY_ALLOW_REMOTE=1` exits 2; `X-Warning: exposed` only on `GET /metrics` → `403` (src/mcp_gway/observability/health.py:127-139).
 
 ## Connect from Claude Desktop
 
@@ -149,9 +145,9 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 | `mcp-gway refresh [<name>] [--auth] [--oauth-port <port>]` | Refresh connection and re-discover tools |
 | `mcp-gway serve [--host 127.0.0.1] [--port <port>]` | Start gateway (MCP + health probes). Default `127.0.0.1`; `0.0.0.0` necesita `MCP_GWAY_ALLOW_REMOTE=1` |
 
-> **Backward compat:** `mcp-gway add --type http|stdio|sse|streamable-http` still works (deprecated). `http`/`sse`/`streamable-http` → `remote` (with `resolved_transport` cached), `stdio` → `local`. Use `remote`/`local` going forward.
+> **Types:** only `--type local|remote` (`cli.py:50`). Legacy `http|stdio|sse|streamable-http` are rejected by click. There is no `--args` / `--docs-url`.
 
-Options for `add` (OpenCode) — 12+ flags grouped by scope:
+Options for `add` (OpenCode) — 13 flags (cli.py:45-95):
 
 | Option | Description |
 |--------|-------------|
@@ -168,8 +164,6 @@ Options for `add` (OpenCode) — 12+ flags grouped by scope:
 | `--timeout <ms>` | Connection timeout in ms (default 5000) |
 | `--enabled / --no-enabled` | Enable/disable without removal (default enabled) |
 | `--tools <list>` | Comma-separated tool filter (default `*` = all) |
-| `--args <json>` | JSON array of extra args — deprecated compat, used with `stdio`/`local` |
-| `--docs-url <url>` | Deprecated — accepted for compat but not persisted (legacy) |
 
 ## Local Commands — Dynamic Allow-List (feat-006)
 
@@ -211,12 +205,13 @@ When connected, the gateway exposes 4 meta-tools:
 For servers requiring OAuth (e.g., Supabase):
 
 ```bash
-# Trigger OAuth flow
+# Trigger OAuth flow (preferido — no deja secretos en shell-history)
 mcp-gway refresh supabase --auth
 
-# Or store token manually
+# Or store token manually (solo fallback; chmod 600 obligatorio)
 mkdir -p ~/.config/mcp-gway/tokens
 echo '{"access_token": "YOUR_TOKEN"}' > ~/.config/mcp-gway/tokens/supabase.json
+chmod 600 ~/.config/mcp-gway/tokens/supabase.json
 ```
 
 ## Development
@@ -247,7 +242,7 @@ Pre-commit is already in place (`.pre-commit-config.yaml` — `ruff` v0.16.4, `r
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        MCP Gateway v1.4.1 GA                         │
+│                        MCP Gateway v1.5.0 GA                         │
 ├──────────────────────────────────────────────────────────────────────┤
 │  CLI (click)              │  Gateway (Starlette + uvicorn, CSP)      │
 │  - add remote/local       │  - POST /mcp (JSON-RPC)                  │
@@ -275,7 +270,7 @@ Pre-commit is already in place (`.pre-commit-config.yaml` — `ruff` v0.16.4, `r
 ```
 
 - **Sin Node** en runtime ni CI: sin UI ni assets vendoreados, `ruff` único linter, `uv_build` backend.
-- **Release híbrido** (ADR-007): `push tags v*` → `uv build` + `pypi-publish` (GA `v1.4.1` tag manual) + `workflow_run Tests completed` → `python-semantic-release@v9` para `fix/perf` patches auto. `concurrency: release`, `fetch-depth:0`, `[tool.semantic_release]` sync `pyproject.toml` + `__init__.py` (`1.4.1` exacta).
+- **Release híbrido** (ADR-007): `push tags v*` → `uv build` + `pypi-publish` (GA `v1.5.0` tag manual) + `workflow_run Tests completed` → `python-semantic-release@v9` para `fix/perf` patches auto. `concurrency: release`, `fetch-depth:0`, `[tool.semantic_release]` sync `pyproject.toml` + `__init__.py` (`1.5.0` exacta).
 
 ## License
 
