@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 ALLOW_LIST_ENV = "MCP_GWAY_ALLOW_LOCAL_COMMANDS"
 UNRESTRICTED_ENV = "MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL"
-VIA_DASHBOARD_ENV = "MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD"
 
 MARKER_NAME = ".local_unrestricted"
 UNRESTRICTED_TTL_SECONDS = 72 * 3600
@@ -122,10 +121,6 @@ def is_unrestricted_active(now: float | None = None) -> bool:
         return False
 
 
-def is_via_dashboard_allowed() -> bool:
-    return os.environ.get(VIA_DASHBOARD_ENV, "1") == "1"
-
-
 def validate_command_syntax(command: list[str]) -> str:  # noqa: TRY004
     if not isinstance(command, list):
         raise ValueError("command must be list [reason=invalid_syntax]")  # noqa: TRY004
@@ -167,29 +162,7 @@ def resolve_binary(basename: str) -> str | None:
         return None
 
 
-def check_basename_allowed(
-    basename: str, *, via_dashboard: bool, host_loopback: bool
-) -> PolicyDecision:
-    if via_dashboard:
-        if not is_via_dashboard_allowed():
-            return PolicyDecision(
-                allowed=False,
-                reason_code="via_dashboard_disabled",
-                message=(
-                    "local servers not allowed via dashboard "
-                    "(set MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD=1) "
-                    "[reason=via_dashboard_disabled]"
-                ),
-            )
-        if not host_loopback:
-            return PolicyDecision(
-                allowed=False,
-                reason_code="non_loopback_denied",
-                message=(
-                    "local servers denied on non-loopback host "
-                    "[reason=non_loopback_denied]"
-                ),
-            )
+def check_basename_allowed(basename: str, *, host_loopback: bool) -> PolicyDecision:
     if is_unrestricted_active():
         return PolicyDecision(
             allowed=True, reason_code="unrestricted", message="allowed (unrestricted)"
@@ -213,7 +186,6 @@ def check_basename_allowed(
 def check_local_command(
     command: list[str] | None,
     *,
-    via_dashboard: bool = False,
     host_loopback: bool = True,
     require_binary: bool = True,
 ) -> PolicyDecision:
@@ -229,9 +201,7 @@ def check_local_command(
         return PolicyDecision(
             allowed=False, reason_code="invalid_syntax", message=str(e)
         )
-    gate = check_basename_allowed(
-        basename, via_dashboard=via_dashboard, host_loopback=host_loopback
-    )
+    gate = check_basename_allowed(basename, host_loopback=host_loopback)
     if not gate.allowed:
         return gate
     if require_binary:

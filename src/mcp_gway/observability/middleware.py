@@ -29,34 +29,6 @@ def _get_request_id(request: Request) -> str:
 
 
 def path_template(path: str) -> str:
-    if path.startswith("/api/servers/"):
-        # /api/servers, /api/servers/{name}, /api/servers/{name}/refresh etc
-        # Normalize to /api/servers or /api/servers/{name} or /api/servers/{name}/refresh etc but bound cardinality
-        # For metrics we want to template the name segment
-        # Patterns: /api/servers/{name}, /api/servers/{name}/refresh, /api/servers/{name}/reveal, /api/servers/{name}/oauth/start, /api/servers/{name}/oauth/status
-        # Also /dashboard/servers/{name}
-        # Simple: if path == /api/servers -> keep, if path starts with /api/servers/<something> -> map first segment after to {name}
-        remainder = path[len("/api/servers/") :]
-        if not remainder:
-            return "/api/servers"
-        parts = remainder.split("/")
-        # parts[0] is name
-        if len(parts) == 1:
-            return "/api/servers/{name}"
-        # more segments
-        suffix = "/".join(parts[1:])
-        # keep suffix literal but with name templated
-        # e.g., refresh, reveal, oauth/start
-        # For oauth we need to bound: /api/servers/{name}/oauth/start -> keep as is with {name}
-        return f"/api/servers/{{name}}/{suffix}"
-    if path.startswith("/dashboard/servers/"):
-        remainder = path[len("/dashboard/servers/") :]
-        if not remainder:
-            return "/dashboard/servers"
-        parts = remainder.split("/")
-        if len(parts) == 1:
-            return "/dashboard/servers/{name}"
-        return f"/dashboard/servers/{{name}}/{'/'.join(parts[1:])}"
     if path.startswith("/mcp"):
         # keep as /mcp or /mcp/messages
         if path.startswith("/mcp/messages"):

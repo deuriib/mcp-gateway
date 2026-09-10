@@ -1,4 +1,4 @@
-"""Core install helpers - shared between dashboard and catalog (no HTTP)."""
+"""Core install helpers - discovery and persist for CLI (no HTTP)."""
 
 from __future__ import annotations
 
@@ -99,7 +99,6 @@ async def discover_and_persist(
     config: MCPServerConfig,
     *,
     host_loopback: bool = True,
-    via_dashboard: bool = True,
 ) -> list[Any]:
     try:
         tools = await _acquire_and_discover(config)
@@ -114,7 +113,6 @@ async def discover_and_persist(
 
         decision = check_local_command(
             list(config.command or []),
-            via_dashboard=via_dashboard,
             host_loopback=host_loopback,
             require_binary=True,
         )

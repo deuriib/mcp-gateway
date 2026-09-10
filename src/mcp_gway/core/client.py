@@ -50,9 +50,7 @@ async def _create_local_transport(
     cmd_list: list[str] | None = getattr(config, "command", None)
     if not cmd_list:
         raise ValueError("command required for local")
-    decision = check_local_command(
-        list(cmd_list), via_dashboard=False, require_binary=True
-    )
+    decision = check_local_command(list(cmd_list), require_binary=True)
     audit_local_action("spawn", config.name, cmd_list[0], decision)
     if not decision.allowed:
         if decision.reason_code == "binary_not_found":

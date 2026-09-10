@@ -53,7 +53,7 @@ async def handle_health(request: Request) -> JSONResponse:
     )
     reg_status, _ = check_registry(registry)
     routes_status, _ = check_routes(request.app)
-    checks = {"registry": reg_status, "dashboard": routes_status}
+    checks = {"registry": reg_status, "routes": routes_status}
     body: dict[str, Any] = {
         "status": "ok",
         "version": __version__,
@@ -126,7 +126,7 @@ async def handle_live(request: Request) -> JSONResponse:
 
 async def handle_metrics(request: Request) -> PlainTextResponse | JSONResponse:
     # Local-first gating
-    host = getattr(request.app.state, "dashboard_host", "127.0.0.1")
+    host = getattr(request.app.state, "serve_host", "127.0.0.1")
     # If host is non-loopback without allow_remote, process would have exited, but if somehow exposed, return 403
     if host not in ("127.0.0.1", "::1", "localhost"):
         import os

@@ -144,9 +144,7 @@ def add(
         except Exception as e:
             click.echo(f"Error: invalid local config: {e}", err=True)
             sys.exit(1)
-        decision = check_local_command(
-            list(cmd_parts), via_dashboard=False, require_binary=True
-        )
+        decision = check_local_command(list(cmd_parts), require_binary=True)
         audit_local_action(
             "cli_add", name, cmd_parts[0] if cmd_parts else None, decision
         )
@@ -227,7 +225,7 @@ def add(
         from mcp_gway.core.policy import audit_local_action as _audit2
         from mcp_gway.core.policy import check_local_command as _check2
 
-        _re = _check2(list(cmd_parts), via_dashboard=False, require_binary=True)
+        _re = _check2(list(cmd_parts), require_binary=True)
         _audit2("cli_add_regate", name, cmd_parts[0] if cmd_parts else None, _re)
         if not _re.allowed:
             click.echo(f"Error: {_re.message}", err=True)
@@ -388,7 +386,7 @@ def serve(host: str, port: int, log_level: str | None) -> None:
 
     if not is_loopback:
         logger = logging.getLogger(__name__)
-        logger.warning("dashboard exposed on non-loopback host %s", host)
+        logger.warning("server exposed on non-loopback host %s", host)
     t0 = time.monotonic()
     gateway = Gateway(registry, host=host)
     elapsed_ms = int((time.monotonic() - t0) * 1000)
@@ -421,9 +419,6 @@ def serve(host: str, port: int, log_level: str | None) -> None:
     )
     label_w = 9
     click.echo(
-        f"  {_c('Dashboard'.ljust(label_w), dim=True)} {_c(glyph_arr, dim=True)} {_c(f'{base_url}/dashboard', fg='cyan')}"
-    )
-    click.echo(
         f"  {_c('MCP'.ljust(label_w), dim=True)} {_c(glyph_arr, dim=True)} {_c(f'{base_url}/mcp', fg='cyan')}"
     )
     click.echo(
@@ -434,7 +429,7 @@ def serve(host: str, port: int, log_level: str | None) -> None:
     )
     if not is_loopback:
         click.echo(
-            f"  {_c(f'{glyph_warn} exposed on non-loopback', fg='yellow', bold=True)} {_c(f'-- dashboard reachable at {host}', dim=True)} {_c('(MCP_GWAY_ALLOW_REMOTE=1)', dim=True)}"
+            f"  {_c(f'{glyph_warn} exposed on non-loopback', fg='yellow', bold=True)} {_c(f'-- server reachable at {host}', dim=True)} {_c('(MCP_GWAY_ALLOW_REMOTE=1)', dim=True)}"
         )
     env_hint = (
         os.environ.get("MCP_GWAY_ENV")
@@ -512,7 +507,7 @@ def refresh(name: str | None, auth: bool, oauth_port: int) -> None:
             from mcp_gway.core.policy import audit_local_action, check_local_command
 
             decision = check_local_command(
-                list(config.command or []), via_dashboard=False, require_binary=True
+                list(config.command or []), require_binary=True
             )
             audit_local_action(
                 "cli_refresh",
