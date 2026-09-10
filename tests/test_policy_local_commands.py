@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from mcp_gway.core.policy import check_local_command
+import pytest
+
+from mcp_gway.core.policy import check_environment, check_local_command
 
 
 def test_local_command_requires_binary():
@@ -36,3 +38,31 @@ def test_ac012_cli_add_local(monkeypatch, tmp_path) -> None:
             main, ["add", "clibin", "--type", "local", "--command", "mybin"]
         )
         assert result.exit_code == 0, result.output
+
+
+@pytest.mark.parametrize(
+    "var",
+    [
+        "PATH",
+        "NODE_PATH",
+        "NODE_EXTRA_CA_CERTS",
+        "NODE_TLS_REJECT_UNAUTHORIZED",
+        "NPM_CONFIG_FOO",
+        "BUN_FOO",
+        "UV_FOO",
+        "DYLD_FOO",
+    ],
+)
+def test_env_denylist_exact_and_prefixes_denied(var) -> None:
+    with pytest.raises(ValueError, match=r"denied_env"):
+        check_environment({var: "x"})
+
+
+@pytest.mark.parametrize("var", ["path", "node_path", "npm_config_foo"])
+def test_env_denylist_case_insensitive(var) -> None:
+    with pytest.raises(ValueError, match=r"denied_env"):
+        check_environment({var: "x"})
+
+
+def test_env_node_env_allowed() -> None:
+    assert check_environment({"NODE_ENV": "production"}) == {"NODE_ENV": "production"}

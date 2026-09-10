@@ -30,9 +30,12 @@ ENV_DENYLIST_EXACT = frozenset(
         "PYTHONPATH",
         "PYTHONHOME",
         "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_EXTRA_CA_CERTS",
+        "NODE_TLS_REJECT_UNAUTHORIZED",
     }
 )
-ENV_DENYLIST_PREFIXES = ("DYLD_",)
+ENV_DENYLIST_PREFIXES = ("DYLD_", "NPM_CONFIG_", "BUN_", "UV_")
 
 _ARG_RE = re.compile(r"^[A-Za-z0-9_./:@-]{1,80}$")
 _BASENAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$")
