@@ -6,7 +6,7 @@ Accepted — 2026-08-25 — Vasquez CTO Gate for v0.7.0 GA
 ## Context
 - pyproject.toml y src/mcp_gway/__init__.py en 0.6.0, objetivo GA es 0.7.0
 - branch master ahead origin/master by 2 commits (fix hardening), working tree DIRTY con 5 archivos modificados (dashboard/api.py 899 líneas, routes.py, views.py, gateway.py, registry.py) + 2 tests untracked
-- release.yml actual solo dispara via `workflow_run` Tests completed en main/master usando python-semantic-release@v9 + uv build + pypa/gh-action-pypi-publish
+- release.yml actual solo dispara via `workflow_run` Tests completed en main/master usando python-semantic-release@v10 (>=10.0.0, uv.lock 10.6.1) + uv build + pypa/gh-action-pypi-publish
 - AGENTS.md Deployment especifica `on: push tags v*` con uv_build — mismatch crítico
 - Semver config: minor_tags=["feat"], patch_tags=["fix","perf"] — sin feat desde v0.6.0, semantic-release NO bumpeará a 0.7.0 automáticamente
 - ruff/pytest verdes (181 passed) pero sobre tree dirty — bloquea tag limpio
@@ -32,7 +32,7 @@ jobs:
     steps:
       - checkout@v7 fetch-depth 0
       - setup-python@v7 (3.12) + setup-uv@v10 + uv sync
-      - semantic-release@v9 sólo si event_name == 'workflow_run' (id: release)
+      - semantic-release@v10 (>=10.0.0, uv.lock 10.6.1) sólo si event_name == 'workflow_run' (id: release)
       - uv build si (event_name == 'push' OR steps.release.outputs.released == 'true')
       - pypi-publish si mismo condicional
 ```
