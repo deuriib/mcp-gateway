@@ -183,7 +183,7 @@ export MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL=1
 unset MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL
 ```
 
-- Nota CISO opt-in: `bunx` solo como recomendado en documentación (no default en código, default-deny vacío se mantiene); solo opt-in con pin + owner + regate 90d; `bun` runtime sigue fuera; denylist `BUN_*`/`NPM_*`/`UV_*`/`NODE_*` + PATH controlado; prohibido `*`, paths o shell.
+- Nota CISO opt-in: `bunx` solo como recomendado en documentación (no default en código, default-deny vacío se mantiene); solo opt-in con pin + owner + regate 90d; `bun` runtime sigue fuera; denylist EXACT PATH,PATHEXT,SYSTEMROOT,COMSPEC,LD_PRELOAD,LD_LIBRARY_PATH,PYTHONPATH,PYTHONHOME,NODE_OPTIONS,NODE_PATH,NODE_EXTRA_CA_CERTS,NODE_TLS_REJECT_UNAUTHORIZED + PREFIXES DYLD_,NPM_CONFIG_,BUN_,UV_ + PATH controlado (`NODE_ENV` permitido, no denylisted); prohibido `*`, paths o shell.
 - `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD` inerte desde v2.0.0 (headless CLI-only, sin dashboard).
 - Tag `v2.0.0` interno no publicado — no anuncio externo. Tras actualizar, borra la caché vieja manualmente: `rm ~/.config/mcp-gway/catalog.json`.
 

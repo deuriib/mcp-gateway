@@ -40,7 +40,7 @@ Allow dynamic local MCP binaries via allow-list without static hardcode, closing
 | BR-009 | PATCH `from_edit` re-gates with same policy (fix bypass) | Must |
 | BR-010 | Refresh re-gate with same policy | Must |
 | BR-011 | `cwd` absolute + realpath + `is_dir`, else `invalid_cwd` | Must |
-| BR-012 | Env denylist `PATH,PATHEXT,SYSTEMROOT,COMSPEC,LD_PRELOAD,LD_LIBRARY_PATH,DYLD_*,PYTHONPATH,PYTHONHOME,NODE_OPTIONS` | Must |
+| BR-012 | Env denylist EXACT PATH,PATHEXT,SYSTEMROOT,COMSPEC,LD_PRELOAD,LD_LIBRARY_PATH,PYTHONPATH,PYTHONHOME,NODE_OPTIONS,NODE_PATH,NODE_EXTRA_CA_CERTS,NODE_TLS_REJECT_UNAUTHORIZED + PREFIXES DYLD_,NPM_CONFIG_,BUN_,UV_ (`NODE_ENV` permitido) | Must |
 | BR-013 | Audit logs action/name/binary/reason only, secrets masked `***` | Must |
 | BR-014 | Actionable errors: `binary not found in PATH` vs `command not allowed`, with `reason_code` | Must |
 | BR-015 | Timeout 5000ms default, discovery semaphore 3 | Should |

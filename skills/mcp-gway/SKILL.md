@@ -85,8 +85,8 @@ from `MCP_GWAY_LOG_LEVEL`/`LOG_LEVEL`, then `MCP_GWAY_ENV`).
   absolute path. Denylisted env vars (`PATH`, `LD_PRELOAD`, `PYTHONPATH`, …)
   are rejected. Nota CISO opt-in: `bunx` solo como recomendado en documentación
   (no default en código, default-deny vacío se mantiene); solo opt-in con
-  pin + owner + regate 90d; `bun` runtime sigue fuera; denylist
-  `BUN_*`/`NPM_*`/`UV_*`/`NODE_*` + PATH controlado; prohibido `*`, paths o shell.
+   pin + owner + regate 90d; `bun` runtime sigue fuera; denylist
+   EXACT PATH,PATHEXT,SYSTEMROOT,COMSPEC,LD_PRELOAD,LD_LIBRARY_PATH,PYTHONPATH,PYTHONHOME,NODE_OPTIONS,NODE_PATH,NODE_EXTRA_CA_CERTS,NODE_TLS_REJECT_UNAUTHORIZED + PREFIXES DYLD_,NPM_CONFIG_,BUN_,UV_ + PATH controlado (`NODE_ENV` permitido, no denylisted); prohibido `*`, paths o shell.
 - `remote --url` has an SSRF-guard (`models.py:115-163`): only `http|https`;
   private/loopback/link-local/reserved/multicast hosts rejected
   (`localhost` only allowed under test harness).

@@ -128,7 +128,7 @@ mcp-gway serve [--host 127.0.0.1] [--port 8080]   # default local-first; 0.0.0.0
 - feat-006 allow-list + break-glass 72h (`src/mcp_gway/core/policy.py`, ADR-009):
   - default-deny con `MCP_GWAY_ALLOW_LOCAL_COMMANDS` vacío; ejemplo recomendado `"npx,uvx,python3,bunx"`.
   - CSV basenames case-insensitive, `*`/paths inválidos → deny + warn.
-  - Nota CISO opt-in: `bunx` solo recomendado en docs (no default en código, default-deny vacío se mantiene), solo opt-in con pin + owner + regate 90d; `bun` runtime fuera; denylist `BUN_*`/`NPM_*`/`UV_*`/`NODE_*` + PATH controlado; prohibido `*`, paths o shell.
+  - Nota CISO opt-in: `bunx` solo recomendado en docs (no default en código, default-deny vacío se mantiene), solo opt-in con pin + owner + regate 90d; `bun` runtime fuera; denylist EXACT PATH,PATHEXT,SYSTEMROOT,COMSPEC,LD_PRELOAD,LD_LIBRARY_PATH,PYTHONPATH,PYTHONHOME,NODE_OPTIONS,NODE_PATH,NODE_EXTRA_CA_CERTS,NODE_TLS_REJECT_UNAUTHORIZED + PREFIXES DYLD_,NPM_CONFIG_,BUN_,UV_ + PATH controlado (`NODE_ENV` permitido, no denylisted); prohibido `*`, paths o shell.
   - Break-glass `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL=1` + marker `~/.config/mcp-gway/.local_unrestricted` (epoch, `0o600`, 72h TTL).
   - No renombrar `MCP_GWAY_ALLOW_LOCAL_COMMANDS` / `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL` / `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD` (`VIA_DASHBOARD` inerte desde v2.0.0 headless CLI-only).
 

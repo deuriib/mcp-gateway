@@ -15,7 +15,7 @@ Static `_ALLOWED_COMMANDS={npx,node,python,python3,uvx}` blocks npm-global PATH 
   - CLI (add/refresh) uses allow-list/unrestricted only, ignores VIA.
 - Execution: `shutil.which(basename)` + `Path.resolve`; spawn only `which(basename)`; never `shell=True`/`cmd /c`/`sh -c`. `stdio_transport.resolve_windows_command` is basename→which on all platforms. `core/client._create_local_transport` re-checks policy + `cwd` strict + env before spawn.
 - Same gate enforced in CLI `add`/`refresh` (re-validated before persist).
-- `cwd` strict at gates: absolute + `resolve()` + `is_dir`, else `invalid_cwd`. Env denylist: `PATH,PATHEXT,SYSTEMROOT,COMSPEC,LD_PRELOAD,LD_LIBRARY_PATH,DYLD_*,PYTHONPATH,PYTHONHOME,NODE_OPTIONS` → `denied_env`.
+- `cwd` strict at gates: absolute + `resolve()` + `is_dir`, else `invalid_cwd`. Env denylist EXACT PATH,PATHEXT,SYSTEMROOT,COMSPEC,LD_PRELOAD,LD_LIBRARY_PATH,PYTHONPATH,PYTHONHOME,NODE_OPTIONS,NODE_PATH,NODE_EXTRA_CA_CERTS,NODE_TLS_REJECT_UNAUTHORIZED + PREFIXES DYLD_,NPM_CONFIG_,BUN_,UV_ (`NODE_ENV` permitido, no denylisted) → `denied_env`.
 - Errors actionable with `reason_code`: `allow_list|unrestricted|not_allowlisted|via_dashboard_disabled|non_loopback_denied|binary_not_found|invalid_syntax|invalid_cwd|denied_env`. `binary not found in PATH` vs `command not allowed` distinct.
 - Audit `audit_local_action` logs action/name/binary/reason only.
 - Timeout 5000ms default, semaphore 3, local-first `serve 0.0.0.0` without `MCP_GWAY_ALLOW_REMOTE=1` → exit 2 + `X-Warning`.
