@@ -1,23 +1,4 @@
 {
   "version": 1,
-  "skills": {
-    "htmx": {
-      "source": "deuriib/agent-skills",
-      "sourceType": "github",
-      "skillPath": "skills/htmx/SKILL.md",
-      "computedHash": "a92edd98bf3485c9e6282c86977eeaa59c6ec2695f4b59fdfe7f8b06d9029c43"
-    },
-    "htpy": {
-      "source": "deuriib/agent-skills",
-      "sourceType": "github",
-      "skillPath": "skills/htpy/SKILL.md",
-      "computedHash": "4f1e5f77614816780535eb2e34db41577e392be9bf54969f289cd25e24b1e80a"
-    },
-    "mcp-gway": {
-      "source": "deuriib/agent-skills",
-      "sourceType": "github",
-      "skillPath": "skills/mcp-gway/SKILL.md",
-      "computedHash": "85a9015d724eb431250e19e484e75564d263ac1c447c63a8ed7a19c91a1465b5"
-    }
-  }
+  "skills": {}
 }
