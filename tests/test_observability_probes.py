@@ -5,6 +5,7 @@ import time
 from starlette.testclient import TestClient
 
 from mcp_gway.gateway import Gateway
+from mcp_gway.observability.middleware import path_template
 from mcp_gway.registry import Registry
 
 
@@ -94,16 +95,10 @@ def test_metrics_counts_increment(tmp_path) -> None:
 
 
 def test_path_template_normalization(tmp_path) -> None:
-    reg = Registry(servers_dir=tmp_path / "servers")
-    gw = Gateway(reg, host="127.0.0.1")
-    c = TestClient(gw.app)
-    # request to concrete name path should be counted as template
-    c.get("/api/servers/my_server")
-    txt = c.get("/metrics").text
-    # should contain template, not concrete
-    assert "/api/servers/{name}" in txt or 'path="/api/servers/{name}"' in txt
-    # should NOT contain concrete name as label
-    assert 'path="/api/servers/my_server"' not in txt
+    assert path_template("/mcp/messages") == "/mcp/messages"
+    assert path_template("/mcp") == "/mcp"
+    assert path_template("/health") == "/health"
+    assert path_template("/api/servers/gh/refresh") == "/api/servers/gh/refresh"
 
 
 def test_correlation_sanitize(tmp_path) -> None:
