@@ -75,3 +75,6 @@ servers/
 junit.xml
 .agents/
 .worktrees/
+
+# AI
+.claude/skills/
