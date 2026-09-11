@@ -541,6 +541,81 @@ def refresh(name: str | None, auth: bool, oauth_port: int) -> None:
         click.echo(f"\nDone. Refreshed {len(names)} servers.")
 
 
+@main.group(name="local-unrestricted")
+def local_unrestricted() -> None:
+    """Manage break-glass unrestricted marker (explicit only)."""
+
+
+@local_unrestricted.command(name="enable")
+def local_unrestricted_enable() -> None:
+    """Create break-glass marker (72h TTL, 0o600 on posix)."""
+    from mcp_gway.core.policy import (
+        UNRESTRICTED_ENV,
+        UNRESTRICTED_TTL_SECONDS,
+        create_unrestricted_marker,
+        unrestricted_status,
+    )
+
+    path = create_unrestricted_marker()
+    status = unrestricted_status()
+    ttl_hours = UNRESTRICTED_TTL_SECONDS // 3600
+    click.echo(
+        f"Break-glass marker created: {path} (TTL {ttl_hours}h, 0o600 on posix)."
+    )
+    if os.environ.get(UNRESTRICTED_ENV) != "1":
+        click.echo(
+            f"Note: {UNRESTRICTED_ENV}!=1, still inactive. "
+            f'$env:{UNRESTRICTED_ENV}="1" to activate.',
+        )
+    elif not status.active:
+        click.echo(f"Note: marker state={status.state}, still inactive.")
+    else:
+        click.echo(f"Active for {ttl_hours}h. Run `mcp-gway refresh` to retry locals.")
+
+
+@local_unrestricted.command(name="disable")
+def local_unrestricted_disable() -> None:
+    """Remove break-glass marker (explicit only)."""
+    from mcp_gway.core.policy import UNRESTRICTED_ENV, remove_unrestricted_marker
+
+    try:
+        removed = remove_unrestricted_marker()
+    except OSError as e:
+        click.echo(f"Error: break-glass marker remove failed: {e}", err=True)
+        raise click.ClickException("break-glass marker remove failed") from e
+    if removed:
+        click.echo("Break-glass marker removed.")
+    else:
+        click.echo("Break-glass marker not present.")
+    click.echo(
+        f"Also run Remove-Item Env:\\{UNRESTRICTED_ENV} "
+        f"to unset $env:{UNRESTRICTED_ENV}."
+    )
+
+
+@local_unrestricted.command(name="status")
+def local_unrestricted_status() -> None:
+    """Show break-glass env + marker state without side effects."""
+    from mcp_gway.core.policy import (
+        UNRESTRICTED_ENV,
+        UNRESTRICTED_TTL_SECONDS,
+        marker_path,
+        unrestricted_status,
+    )
+
+    status = unrestricted_status()
+    env_set = os.environ.get(UNRESTRICTED_ENV) == "1"
+    click.echo(f"env {UNRESTRICTED_ENV}={'1' if env_set else 'unset'}")
+    click.echo(f"marker {marker_path()} exists={status.marker_exists}")
+    click.echo(f"state={status.state} active={status.active}")
+    if status.age_seconds is not None:
+        click.echo(
+            f"age_seconds={int(status.age_seconds)} ttl={UNRESTRICTED_TTL_SECONDS}"
+        )
+    if status.expires_in_seconds is not None:
+        click.echo(f"expires_in_seconds={int(status.expires_in_seconds)}")
+
+
 @main.command(name="mcp")
 @click.option(
     "--log-level",
