@@ -50,6 +50,16 @@ class ServerFactory:
         import re
         import time
 
+        if not isinstance(server, str) or not server.strip():
+            from mcp_gway.gateway import InvalidParamsError
+
+            raise InvalidParamsError(
+                "call_tool requires server [reason=invalid_params]"
+            )
+        if not isinstance(tool, str) or not tool.strip():
+            from mcp_gway.gateway import InvalidParamsError
+
+            raise InvalidParamsError("call_tool requires tool [reason=invalid_params]")
         start = time.perf_counter()
         status = "ok"
         try:
@@ -134,13 +144,22 @@ class ServerFactory:
 
     def _get_tool_names(self, server_name: str) -> list[str]:
         """Extract tool names from the server's .pyi stub."""
+        import re as _re
+
         content = self._registry.read_pyi(server_name)
         names: list[str] = []
         for line in content.splitlines():
             if line.startswith("def "):
                 name = line.split("def ")[1].split("(")[0].strip()
-                if name:
-                    names.append(name)
+                if not name:
+                    continue
+                m = _re.search(r"\[original:\s*([^\]]+)\]", line)
+                if m:
+                    orig = m.group(1).strip()
+                    if orig:
+                        names.append(orig)
+                        continue
+                names.append(name)
         return names
 
 

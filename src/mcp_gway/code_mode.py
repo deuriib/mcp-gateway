@@ -61,5 +61,16 @@ class CodeMode:
         return self.registry.get_tool_docs(server, tool)
 
     def execute_tool_code(self, code: str) -> str:
+        from mcp_gway.gateway import InvalidParamsError
+
+        if not isinstance(code, str) or not code.strip():
+            raise InvalidParamsError(
+                "executeToolCode requires non-empty code [reason=invalid_params]"
+            )
         result = self.sandbox.execute(code)
-        return str(result)
+        try:
+            return str(result)
+        except Exception as e:
+            raise RuntimeError(
+                f"result serialization failed: {type(e).__name__}"
+            ) from None

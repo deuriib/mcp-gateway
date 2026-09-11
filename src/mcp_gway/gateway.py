@@ -51,6 +51,30 @@ class _CSPMiddleware(BaseHTTPMiddleware):
 
 PROTOCOL_VERSION = "2024-11-05"
 
+
+class InvalidParamsError(ValueError):
+    """Raised for JSON-RPC -32602 Invalid params (missing/bad tool arguments)."""
+
+
+_REASON_RE = __import__("re").compile(r"\[reason=([A-Za-z0-9_]+)\]")
+
+
+def _safe_error_data(exc: BaseException) -> dict[str, str] | None:
+    """Extract safe, actionable error data without leaking secrets.
+
+    Only surfaces allow-listed [reason=...] tokens plus exception type.
+    Never includes raw messages (they may contain headers/tokens/paths).
+    """
+    try:
+        msg = str(exc)
+    except Exception:
+        return {"type": type(exc).__name__}
+    m = _REASON_RE.search(msg)
+    if m:
+        return {"type": type(exc).__name__, "reason": m.group(1)}
+    return {"type": type(exc).__name__}
+
+
 CODE_MODE_TOOLS = [
     {
         "name": "listToolFiles",
@@ -239,6 +263,12 @@ class Gateway:
         try:
             result = self._handle_method(method, params)
             response = {"jsonrpc": "2.0", "id": req_id, "result": result}
+        except InvalidParamsError as e:
+            data = _safe_error_data(e)
+            err: dict[str, Any] = {"code": -32602, "message": "Invalid params"}
+            if data:
+                err["data"] = data
+            response = {"jsonrpc": "2.0", "id": req_id, "error": err}
         except ValueError as e:
             msg = str(e)
             if msg.startswith(("Unknown method", "Unknown tool")):
@@ -248,17 +278,23 @@ class Gateway:
                     "error": {"code": -32601, "message": "Method not found"},
                 }
             else:
-                response = {
-                    "jsonrpc": "2.0",
-                    "id": req_id,
-                    "error": {"code": -32603, "message": "Internal error"},
-                }
-        except Exception:
-            response = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {"code": -32603, "message": "Internal error"},
-            }
+                data = _safe_error_data(e)
+                err2: dict[str, Any] = {"code": -32603, "message": "Internal error"}
+                if data:
+                    err2["data"] = data
+                response = {"jsonrpc": "2.0", "id": req_id, "error": err2}
+        except (FileNotFoundError, PermissionError) as e:
+            data = _safe_error_data(e)
+            err3: dict[str, Any] = {"code": -32603, "message": "Internal error"}
+            if data:
+                err3["data"] = data
+            response = {"jsonrpc": "2.0", "id": req_id, "error": err3}
+        except Exception as e:
+            data = _safe_error_data(e)
+            err4: dict[str, Any] = {"code": -32603, "message": "Internal error"}
+            if data:
+                err4["data"] = data
+            response = {"jsonrpc": "2.0", "id": req_id, "error": err4}
 
         if session_id and session_id in self._sessions:
             info = self._sessions[session_id]
@@ -366,6 +402,10 @@ class Gateway:
             if name == "listToolFiles":
                 result = self.code_mode.list_tool_files()
             elif name == "readToolFile":
+                if not isinstance(arguments, dict) or not arguments.get("fileName"):
+                    raise InvalidParamsError(
+                        "readToolFile requires fileName [reason=invalid_params]"
+                    )
                 result = self.code_mode.read_tool_file(
                     fileName=arguments["fileName"],
                     startLine=arguments.get("startLine"),
@@ -378,10 +418,28 @@ class Gateway:
                     tool_label = _san(str(arguments.get("tool", str(name))))
                 except Exception:
                     pass
+                if (
+                    not isinstance(arguments, dict)
+                    or not arguments.get("server")
+                    or not arguments.get("tool")
+                ):
+                    raise InvalidParamsError(
+                        "getToolDocs requires server and tool [reason=invalid_params]"
+                    )
                 result = self.code_mode.get_tool_docs(
                     server=arguments["server"], tool=arguments["tool"]
                 )
             elif name == "executeToolCode":
+                if not isinstance(arguments, dict) or not isinstance(
+                    arguments.get("code"), str
+                ):
+                    raise InvalidParamsError(
+                        "executeToolCode requires code string [reason=invalid_params]"
+                    )
+                if not arguments["code"].strip():
+                    raise InvalidParamsError(
+                        "executeToolCode requires non-empty code [reason=invalid_params]"
+                    )
                 result = self.code_mode.execute_tool_code(code=arguments["code"])
             else:
                 status = "error"

@@ -94,14 +94,15 @@ class StdioAdapter:
 
 
 class _CappedLineReader:
-    """Bounded NDJSON line reader without unbounded buffering.
+    """Bounded NDJSON line reader using ``readline`` framing.
 
-    Reads in 8 KiB chunks and returns at most one ``\\n``-terminated line
-    per call. If 1 MiB elapses without a newline, the remainder of the
-    line is discarded (chunked, never stored) and the call reports
-    ``overlong=True`` so the caller can emit ``-32700`` without OOM.
-    Extra bytes after the first newline are kept as pending for the
-    next call, preserving framing.
+    Uses ``stdin.readline(limit)`` so one call returns at most one
+    ``\\n``-terminated line and returns promptly after the newline —
+    never blocking for more bytes than the current line holds. If the
+    line exceeds ``MAX_LINE_BYTES``, the remainder is discarded in
+    bounded chunks and the call reports ``overlong=True`` so the caller
+    can emit ``-32700`` without OOM. Extra bytes are never buffered
+    beyond the current line, preserving framing.
     """
 
     def __init__(self, stdin: Any) -> None:
@@ -111,7 +112,20 @@ class _CappedLineReader:
             self._binary = isinstance(probe, (bytes, bytearray))
         except Exception:
             self._binary = False
-        self._pending: Any = b"" if self._binary else ""
+
+    def _byte_len(self, data: Any) -> int:
+        if isinstance(data, (bytes, bytearray)):
+            return len(data)
+        return len(data.encode("utf-8", errors="ignore"))
+
+    def _readline(self, limit: int) -> Any:
+        readline = getattr(self._stdin, "readline", None)
+        if callable(readline):
+            return readline(limit)
+        data = self._stdin.read(limit)
+        if not isinstance(data, (str, bytes, bytearray)):
+            raise TypeError(f"unexpected read type: {type(data).__name__}")
+        return data
 
     def readline_capped(self) -> tuple[Any | None, bool, bool]:
         """Return ``(line, overlong, eof)``.
@@ -121,74 +135,37 @@ class _CappedLineReader:
         discarded, ``eof`` with ``line is None`` means clean EOF.
         """
         nl: Any = b"\n" if self._binary else "\n"
-        empty: Any = b"" if self._binary else ""
-        pending = self._pending
-        if pending:
-            idx = pending.find(nl)
-            if idx != -1:
-                self._pending = pending[idx + 1 :]
-                return pending[: idx + 1], False, False
-            chunks: list[Any] = [pending]
-            total = (
-                len(pending)
-                if self._binary
-                else len(pending.encode("utf-8", errors="ignore"))
-            )
-            self._pending = empty
-        else:
-            chunks = []
-            total = 0
-        while True:
-            try:
-                data = self._stdin.read(_READ_CHUNK)
-            except Exception:
-                if chunks:
-                    line = b"".join(chunks) if self._binary else "".join(chunks)
-                    return line, total > MAX_LINE_BYTES, False
-                return None, False, True
-            if data == "" or data == b"":
-                if chunks:
-                    line = b"".join(chunks) if self._binary else "".join(chunks)
-                    return line, total > MAX_LINE_BYTES, False
-                return None, False, True
-            idx = data.find(nl)
-            if idx != -1:
-                part = data[: idx + 1]
-                rest = data[idx + 1 :]
-                plen = (
-                    len(part)
-                    if self._binary
-                    else len(part.encode("utf-8", errors="ignore"))
-                )
-                total += plen
-                if total > MAX_LINE_BYTES:
-                    self._pending = rest
-                    return None, True, False
-                chunks.append(part)
-                self._pending = rest
-                line = b"".join(chunks) if self._binary else "".join(chunks)
-                return line, False, False
-            plen = (
-                len(data)
-                if self._binary
-                else len(data.encode("utf-8", errors="ignore"))
-            )
-            total += plen
-            if total > MAX_LINE_BYTES:
-                self._pending = empty
-                while True:
-                    try:
-                        nxt = self._stdin.read(_READ_CHUNK)
-                    except Exception:
-                        break
-                    if nxt == "" or nxt == b"":
-                        break
-                    nidx = nxt.find(nl)
-                    if nidx != -1:
-                        self._pending = nxt[nidx + 1 :]
-                        break
+        try:
+            line = self._readline(MAX_LINE_BYTES + 2)
+        except TypeError:
+            return None, False, True
+        except Exception:
+            return None, False, True
+        if line == "" or line == b"":
+            return None, False, True
+        if not isinstance(line, (str, bytes, bytearray)):
+            return None, False, True
+        if line.endswith(nl):
+            if self._byte_len(line) > MAX_LINE_BYTES:
                 return None, True, False
-            chunks.append(data)
+            return line, False, False
+        if self._byte_len(line) <= MAX_LINE_BYTES:
+            return line, False, False
+        try:
+            while True:
+                try:
+                    nxt = self._readline(MAX_LINE_BYTES + 2)
+                except Exception:
+                    break
+                if nxt == "" or nxt == b"":
+                    break
+                if not isinstance(nxt, (str, bytes, bytearray)):
+                    break
+                if nxt.endswith(nl):
+                    break
+        except Exception:
+            pass
+        return None, True, False
 
 
 async def run_stdio_async(

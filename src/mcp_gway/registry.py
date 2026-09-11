@@ -235,16 +235,26 @@ class Registry:
         return tools
 
     def get_tool_docs(self, server: str, tool: str) -> str:
+        import re as _re
+
         content = self.read_pyi(server)
         lines = content.splitlines()
+        candidates = {tool, _re.sub(r"[^A-Za-z0-9_]", "_", tool)}
+        for c in tuple(candidates):
+            if c and c[0].isdigit():
+                candidates.add(f"_{c}")
         in_tool = False
         doc_lines: list[str] = []
         for line in lines:
-            if line.startswith(f"def {tool}("):
-                in_tool = True
-                doc_lines.append(line)
-                continue
-            if in_tool:
+            if line.startswith("def "):
+                hit = any(line.startswith(f"def {c}(") for c in candidates)
+                if hit:
+                    in_tool = True
+                    doc_lines.append(line)
+                    continue
+                if in_tool:
+                    break
+            elif in_tool:
                 if line.startswith("def ") or (
                     line.strip()
                     and not line.startswith(" ")
@@ -257,31 +267,53 @@ class Registry:
         return "\n".join(doc_lines)
 
     def _generate_pyi(self, config: MCPServerConfig, tools: list[ToolInfo]) -> str:
+        import re as _re
+
         name = config.name
         lines = [
             f"# {name} server tools",
             f"# Usage: {name}.tool_name(param=value)",
             f'# For detailed docs: use getToolDocs(server="{name}", tool="tool_name")',
+            "# Note: hyphenated MCP names are exposed sanitized (hyphens -> underscores).",
+            "# Use sanitized names in executeToolCode structs; call_tool accepts originals.",
             "",
         ]
         for tool in tools:
             sig = self._make_signature(tool)
-            lines.append(f"def {sig} -> dict:  # {tool.description}")
+            desc = tool.description or ""
+            first_line = desc.splitlines()[0] if desc else ""
+            safe = _re.sub(r"[^A-Za-z0-9_]", "_", tool.name)
+            if safe and safe[0].isdigit():
+                safe = f"_{safe}"
+            if safe != tool.name:
+                lines.append(
+                    f"def {sig} -> dict:  # {first_line} [original: {tool.name}]"
+                )
+            else:
+                lines.append(f"def {sig} -> dict:  # {first_line}")
             lines.append("    ...")
             lines.append("")
         return "\n".join(lines)
 
     def _make_signature(self, tool: ToolInfo) -> str:
+        import re as _re
+
         params = []
         schema = tool.input_schema.get("properties", {})
         required = tool.input_schema.get("required", [])
         for param_name, param_info in schema.items():
             py_type = self._json_type_to_python(param_info.get("type", "string"))
+            safe_param = _re.sub(r"[^A-Za-z0-9_]", "_", param_name)
+            if safe_param and safe_param[0].isdigit():
+                safe_param = f"_{safe_param}"
             if param_name in required:
-                params.append(f"{param_name}: {py_type}")
+                params.append(f"{safe_param}: {py_type}")
             else:
-                params.append(f"{param_name}: {py_type} = None")
-        return f"{tool.name}({', '.join(params)})"
+                params.append(f"{safe_param}: {py_type} = None")
+        safe_name = _re.sub(r"[^A-Za-z0-9_]", "_", tool.name)
+        if safe_name and safe_name[0].isdigit():
+            safe_name = f"_{safe_name}"
+        return f"{safe_name}({', '.join(params)})"
 
     @staticmethod
     def _json_type_to_python(json_type: str) -> str:
