@@ -49,6 +49,8 @@ class _CSPMiddleware(BaseHTTPMiddleware):
         return response
 
 
+PROTOCOL_VERSION = "2024-11-05"
+
 CODE_MODE_TOOLS = [
     {
         "name": "listToolFiles",
@@ -237,11 +239,25 @@ class Gateway:
         try:
             result = self._handle_method(method, params)
             response = {"jsonrpc": "2.0", "id": req_id, "result": result}
-        except Exception as e:
+        except ValueError as e:
+            msg = str(e)
+            if msg.startswith(("Unknown method", "Unknown tool")):
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32601, "message": "Method not found"},
+                }
+            else:
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32603, "message": "Internal error"},
+                }
+        except Exception:
             response = {
                 "jsonrpc": "2.0",
                 "id": req_id,
-                "error": {"code": -1, "message": str(e)},
+                "error": {"code": -32603, "message": "Internal error"},
             }
 
         if session_id and session_id in self._sessions:
@@ -315,9 +331,11 @@ class Gateway:
             return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
 
     def _handle_method(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        if method == "ping":
+            return {}
         if method == "initialize":
             return {
-                "protocolVersion": "2024-11-05",
+                "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {"tools": {}},
                 "serverInfo": {"name": "mcp-gway", "version": __version__},
             }

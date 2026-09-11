@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sys
 from contextvars import ContextVar
 from datetime import UTC, datetime
 
@@ -65,7 +66,7 @@ def setup_logging(level: str) -> None:
         for handler in logger.handlers:
             handler.setLevel(py_level)
         return
-    handler = logging.StreamHandler()
+    handler = logging.StreamHandler(sys.stderr)
     handler.setLevel(py_level)
     handler.setFormatter(JSONFormatter())
     logger.addHandler(handler)

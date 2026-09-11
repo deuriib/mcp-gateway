@@ -541,5 +541,69 @@ def refresh(name: str | None, auth: bool, oauth_port: int) -> None:
         click.echo(f"\nDone. Refreshed {len(names)} servers.")
 
 
+@main.command(name="mcp")
+@click.option(
+    "--log-level",
+    type=click.Choice(
+        ["trace", "debug", "info", "warning", "error", "critical"], case_sensitive=False
+    ),
+    default=None,
+    help="Log level (overrides MCP_GWAY_LOG_LEVEL/LOG_LEVEL and MCP_GWAY_ENV)",
+)
+@click.option(
+    "--registry-dir",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=str),
+    default=None,
+    help="Registry servers directory (default ~/.config/mcp-gway/servers)",
+)
+def mcp_cmd(log_level: str | None, registry_dir: str | None) -> None:
+    """Run gateway in stdio/local mode (NDJSON over stdin/stdout)."""
+    resolved_level = _resolve_log_level(log_level)
+    from mcp_gway.observability.logging import setup_logging
+
+    setup_logging(resolved_level)
+    servers_dir = (
+        Path(registry_dir).expanduser()
+        if registry_dir
+        else Path.home() / ".config" / "mcp-gway" / "servers"
+    )
+    registry = Registry(servers_dir=servers_dir)
+    # NB: mcp_gway.stdio is server-side NDJSON (we serve stdin/stdout);
+    # mcp_gway.stdio_transport is client-side (we connect to children).
+    # Keep these imports separate — do not merge or rename (import churn).
+    from mcp_gway.gateway import Gateway
+    from mcp_gway.stdio import run_stdio_async
+
+    gateway = Gateway(registry)
+    try:
+        names = registry.list()
+    except Exception:
+        names = []
+    import logging as _logging
+
+    _logger = _logging.getLogger("mcp_gway.mcp")
+    try:
+        import os as _os
+
+        _pid = _os.getpid()
+    except Exception:
+        _pid = -1
+    _logger.info(
+        "mcp mode ready: %d servers from %s (pid=%s, log-level=%s)",
+        len(names),
+        str(servers_dir),
+        _pid,
+        resolved_level,
+    )
+    click.echo(
+        f"[mcp] ready: {len(names)} server(s) from {servers_dir} "
+        f"(pid={_pid}, log-level={resolved_level}) — "
+        "stdout is pure NDJSON, logs go to stderr",
+        err=True,
+    )
+    code = asyncio.run(run_stdio_async(gateway, sys.stdin, sys.stdout, sys.stderr))
+    sys.exit(code)
+
+
 if __name__ == "__main__":
     main()

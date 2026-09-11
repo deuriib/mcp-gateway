@@ -1,4 +1,14 @@
-"""Stdio transport helpers — command resolution and noise-filtered client."""
+"""Client-side stdio transport helpers — command resolution and noise-filtered client.
+
+This module is the **client side**: ``filtered_stdio_client`` connects *to*
+child MCP servers spawned locally and filters noise (non-JSON banners,
+``Exception`` items) from their stdout so the MCP SDK dispatcher only sees
+valid messages.
+
+Contrast with :mod:`mcp_gway.stdio` which is the **server side**: NDJSON
+over stdin/stdout served by ``mcp-gway mcp`` itself. Do not confuse the
+two — this file spawns children (policy-gated); ``stdio.py`` never does.
+"""
 
 from __future__ import annotations
 
