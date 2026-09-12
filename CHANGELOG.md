@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v2.2.0 (2026-09-11)
+- **feat**: add `AI` directory to `.gitignore` so local Claude skills are never committed (`a559bbc`). Version bump only — no runtime changes.
+
+## v2.1.2 (2026-09-11)
+- **fix(policy)**: harden break-glass marker create/remove/status with explicit CLI (`mcp-gway local-unrestricted enable|disable|status`) — marker ops distinguish missing vs failure and fail closed (`416ef38`).
+
+## v2.1.1 (2026-09-11)
+- **fix(mcp)**: typed JSON-RPC errors `-32602` (invalid params) / `-32603` (internal) with `data` carrying safe `[reason=...]` tokens; `.pyi` stub sanitization; parameter validation on tool calls (`dd8e52b`).
+
+## v2.1.0 (2026-09-11)
+- **feat(mcp)**: stdio local mode — `mcp-gway mcp` serves NDJSON JSON-RPC over stdin/stdout (usable as an OpenCode `type: local` server via `command: [mcp-gway, mcp]`), with hardened client-side transport (`filtered_stdio_client`) that drops non-JSON noise from child servers (`cec3277`).
+
+## v2.0.1 (2026-09-10)
+- **fix(policy)**: expand environment denylist — exact `PATH, PATHEXT, SYSTEMROOT, COMSPEC, LD_PRELOAD, LD_LIBRARY_PATH, PYTHONPATH, PYTHONHOME, NODE_OPTIONS, NODE_PATH, NODE_EXTRA_CA_CERTS, NODE_TLS_REJECT_UNAUTHORIZED` + prefixes `DYLD_, NPM_CONFIG_, BUN_, UV_` (`e9d4d5f`).
+- **docs**: allow-list wording sync — exact denylist and `bunx` opt-in CISO note (pin + owner + regate 90d; runtime stays out) (`2b26b3d`, `218148f`).
+- **docs(release)**: sync ADR-007 to `python-semantic-release` v10 (`ce89db7`).
+- **tests**: drop legacy monkeypatch paths in transport tests (`814c0db`).
+
 ## v2.0.0 (2026-09-10)
 - **breaking**: removed dashboard (`/dashboard`, `/api/servers`, `/static`, `/` alias) and catalog (`/api/catalog`, `/dashboard/catalog`, Bifrost fetch, `~/.config/mcp-gway/catalog.json` cache). Gateway serves `/mcp`, `/health`, `/ready`, `/live`, `/metrics` only; management is CLI-only. Dropped `htpy` dependency (`httpx` kept). Delete stale cache manually: `rm ~/.config/mcp-gway/catalog.json`.
 
