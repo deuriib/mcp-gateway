@@ -1,14 +1,14 @@
 ---
 name: mcp-gway
-description: Manage MCP servers with the mcp-gway CLI (v1.5.0) — add/remove/update/list/inspect/refresh/serve plus Code Mode discovery. Use when operating the gateway CLI.
+description: Manage MCP servers with the mcp-gway CLI (v2.2.0) — add/remove/update/list/inspect/refresh/serve/mcp/local-unrestricted plus Code Mode discovery. Use when operating the gateway CLI.
 ---
 
-# mcp-gway CLI — v1.5.0
+# mcp-gway CLI — v2.2.0
 
 Standalone Python CLI (`mcp-gway = "mcp_gway.cli:main"`). OpenCode format only.
 Registry (`servers/*.json` + `servers/*.pyi`) is the single source of truth.
 
-## Commands (7)
+## Commands (9)
 
 | Command | Signature (from `src/mcp_gway/cli.py`) |
 |---------|----------------------------------------|
@@ -19,6 +19,8 @@ Registry (`servers/*.json` + `servers/*.pyi`) is the single source of truth.
 | `inspect` | `mcp-gway inspect <name>` |
 | `serve` | `mcp-gway serve [--host 127.0.0.1] [--port 8080] [--log-level LEVEL]` |
 | `refresh` | `mcp-gway refresh [<name>] [--auth] [--oauth-port <port>]` |
+| `mcp` | `mcp-gway mcp [--log-level LEVEL] [--registry-dir PATH]` — server-side NDJSON (stdin→JSON-RPC, stdout→responses); usable as OpenCode `type: local` with `command: [mcp-gway, mcp]` |
+| `local-unrestricted` | `mcp-gway local-unrestricted enable\|disable\|status` — break-glass marker 72h (0o600), explicit only |
 
 ## `add` — full flags (13, `cli.py:45-95`)
 
@@ -44,7 +46,7 @@ mcp-gway add tools --type local --command "python -m my_mcp_server" --env MY_VAR
 Rules: `--command` required for `local`; `--url` required for `remote`.
 Tool filter: `--tools "a,b"` restricts discovery; `"*"` keeps all.
 
-## `serve` / `refresh` / others
+## `serve` / `refresh` / `mcp` / `local-unrestricted` / others
 
 ```bash
 mcp-gway list
@@ -57,6 +59,15 @@ mcp-gway refresh <name> --auth     # force OAuth re-auth (also: --oauth-port 898
 mcp-gway serve --port 8080                     # binds 127.0.0.1 by default
 mcp-gway serve --host 127.0.0.1 --port 8080
 curl -s http://127.0.0.1:8080/health | jq
+
+# Server-side NDJSON: expose this gateway as an MCP server over stdio
+mcp-gway mcp --log-level info     # reads JSON-RPC 2.0 from stdin, answers on stdout (logs → stderr)
+# OpenCode: { "type": "local", "command": ["mcp-gway", "mcp"] }
+
+# Break-glass 72h (explicit only — env alone never activates)
+mcp-gway local-unrestricted enable
+mcp-gway local-unrestricted status        # disabled|marker-missing|expired|future|marker-insecure|marker-unreadable|marker-invalid|active
+mcp-gway local-unrestricted disable
 ```
 
 `serve` flags: `--host` (default `127.0.0.1`), `--port` (int, default `8080`),
