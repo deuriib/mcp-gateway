@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 
 from mcp_gway.gateway import Gateway
 from mcp_gway.registry import Registry

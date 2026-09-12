@@ -111,9 +111,9 @@ async def _create_remote_transport(
                     except Exception:
                         pass
         elif headers:
-            import httpx
+            import httpx2
 
-            async with httpx.AsyncClient(headers=headers) as hc:
+            async with httpx2.AsyncClient(headers=headers) as hc:
                 async with streamable_http_client(url, http_client=hc) as (
                     read,
                     write,

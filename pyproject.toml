@@ -9,7 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.4.2",
-    "httpx>=0.28.1",
+    "httpx2>=2.12.0",
     "mcp>=2.0.0",
     "starlark-pyo3>=2026.1.1",
     "starlette>=1.6.0",

@@ -16,9 +16,9 @@ async def _try_streamable_http(
 
         async with asyncio.timeout(timeout / 1000):
             if headers:
-                import httpx
+                import httpx2
 
-                async with httpx.AsyncClient(headers=headers) as hc:
+                async with httpx2.AsyncClient(headers=headers) as hc:
                     async with streamable_http_client(url, http_client=hc) as (
                         read,
                         write,
@@ -48,9 +48,11 @@ async def _try_http(
     url: str, timeout: int = 5000, headers: dict[str, str] | None = None
 ) -> bool:
     try:
-        import httpx
+        import httpx2
 
-        async with httpx.AsyncClient(timeout=timeout / 1000, headers=headers) as client:
+        async with httpx2.AsyncClient(
+            timeout=timeout / 1000, headers=headers
+        ) as client:
             response = await client.post(
                 url,
                 json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},

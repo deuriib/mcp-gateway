@@ -16,7 +16,7 @@
 - **Sandbox**: starlark-pyo3
 - **Testing**: pytest + pytest-asyncio (242 tests)
 - **Linting**: ruff
-- **Nota**: `htpy` retirado en v2.0.0, `httpx` kept.
+- **Nota**: `htpy` retirado en v2.0.0; `httpx` v1 eliminado en favor de `httpx2` (dependencia directa, alineada con mcp v2 y starlette 1.6).
 
 ## Project Structure
 
@@ -31,7 +31,7 @@ src/mcp_gway/
 ├── code_mode.py         # 4 meta-tools orchestrator
 ├── gateway.py           # HTTP/SSE server (JSON-RPC 2.0), headless, local-first 127.0.0.1 + CSP — 5 paths lógicos vivos: /mcp (GET+POST), /health, /ready, /live, /metrics (gateway.py:194-200, 7 Route entries; /mcp/messages es alias POST al mismo handler _mcp_post, no endpoint independiente)
 ├── cli.py               # CLI commands (add/remove/update/list/inspect/refresh/serve/mcp/local-unrestricted --host 127.0.0.1)
-├── oauth.py             # OAuth2 support (dynamic registration, token storage); usa httpx2 (transitiva vía mcp)
+├── oauth.py             # OAuth2 support (dynamic registration, token storage); usa httpx2 (dependencia directa)
 ├── transport.py         # Shim deprecado → mcp_gway.core.transport (DeprecationWarning; eliminar en next major)
 ├── stdio.py             # SERVIDOR-side NDJSON: lee JSON-RPC 2.0 de stdin, responde por stdout (`mcp-gway mcp`)
 ├── stdio_transport.py   # CLIENT-side: filtered_stdio_client conecta a niños MCP y filtra ruido no-JSON de su stdout
