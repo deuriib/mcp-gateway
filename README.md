@@ -143,8 +143,8 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 | `mcp-gway list` | List all connected servers |
 | `mcp-gway inspect` | Show tool signatures for a server |
 | `mcp-gway refresh [<name>] [--auth] [--oauth-port <port>]` | Refresh connection and re-discover tools |
-| `mcp-gway serve [--host 127.0.0.1] [--port <port>]` | Start gateway (MCP + health probes). Default `127.0.0.1`; `0.0.0.0` necesita `MCP_GWAY_ALLOW_REMOTE=1` |
-| `mcp-gway mcp [--log-level LEVEL] [--registry-dir PATH]` | Server-side NDJSON mode: reads JSON-RPC 2.0 from stdin, answers on stdout (usable as an OpenCode `type: local` server: `command: [mcp-gway, mcp]`) |
+| `mcp-gway serve [--transport stdio\|http\|sse] [--host 127.0.0.1] [--port <port>] [--log-level LEVEL] [--registry-dir PATH]` | Start gateway (default `stdio`; `--host/--port` only with `http\|sse`). `http`/`sse` share `Gateway.app`; stdio keeps stdout pure NDJSON. Default `127.0.0.1`; `0.0.0.0` necesita `MCP_GWAY_ALLOW_REMOTE=1` |
+| `mcp-gway mcp [--log-level LEVEL] [--registry-dir PATH]` | DEPRECATED hidden alias: `serve --transport stdio` equiv `mcp` — mismo loop NDJSON y mismos args a `_serve_stdio`, modulo aviso de deprecacion en stderr (solo `mcp`). Prefer `command: [mcp-gway, serve, --transport, stdio]` for OpenCode `type: local` |
 | `mcp-gway local-unrestricted enable\|disable\|status` | Break-glass marker 72h (explicit only) — enable/remove, or status without side effects |
 
 > **Types:** only `--type local|remote` (`cli.py:50`). Legacy `http|stdio|sse|streamable-http` are rejected by click. There is no `--args` / `--docs-url`.

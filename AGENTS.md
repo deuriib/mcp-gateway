@@ -14,7 +14,7 @@
 - **HTTP Server**: Starlette + uvicorn
 - **MCP SDK**: mcp v2.0.0
 - **Sandbox**: starlark-pyo3
-- **Testing**: pytest + pytest-asyncio (242 tests)
+- **Testing**: pytest + pytest-asyncio (255 tests)
 - **Linting**: ruff
 - **Nota**: `htpy` retirado en v2.0.0; `httpx` v1 eliminado en favor de `httpx2` (dependencia directa, alineada con mcp v2 y starlette 1.6).
 
@@ -30,10 +30,10 @@ src/mcp_gway/
 ├── server_factory.py    # Server structs + sync call wrappers for the sandbox
 ├── code_mode.py         # 4 meta-tools orchestrator
 ├── gateway.py           # HTTP/SSE server (JSON-RPC 2.0), headless, local-first 127.0.0.1 + CSP — 5 paths lógicos vivos: /mcp (GET+POST), /health, /ready, /live, /metrics (gateway.py:194-200, 7 Route entries; /mcp/messages es alias POST al mismo handler _mcp_post, no endpoint independiente)
-├── cli.py               # CLI commands (add/remove/update/list/inspect/refresh/serve/mcp/local-unrestricted --host 127.0.0.1)
+├── cli.py               # CLI commands (add/remove/update/list/inspect/refresh/serve --transport stdio|http|sse/mcp-hidden/local-unrestricted --host 127.0.0.1)
 ├── oauth.py             # OAuth2 support (dynamic registration, token storage); usa httpx2 (dependencia directa)
 ├── transport.py         # Shim deprecado → mcp_gway.core.transport (DeprecationWarning; eliminar en next major)
-├── stdio.py             # SERVIDOR-side NDJSON: lee JSON-RPC 2.0 de stdin, responde por stdout (`mcp-gway mcp`)
+├── stdio.py             # SERVIDOR-side NDJSON: lee JSON-RPC 2.0 de stdin, responde por stdout (`mcp-gway serve --transport stdio`; `mcp` alias deprecado)
 ├── stdio_transport.py   # CLIENT-side: filtered_stdio_client conecta a niños MCP y filtra ruido no-JSON de su stdout
 ├── core/
 │   ├── __init__.py      # Re-exports (create_client_transport, detect_transport, discover_tools, parse_envs/headers, refresh_server)
@@ -75,7 +75,7 @@ tests/
 docs/
 ├── specs/SPEC-UI-001.md (+ SCENARIOS/ACCEPTANCE)  # SUPERSEDED 2026-09-10 (retirado; headless, CLI-only)
 ├── adr/ADR-007-release-workflow-hybrid.md, ADR-008-catalog-mcp-001.md
-├── architecture/adr-009-dynamic-local-commands.md
+├── architecture/adr-009-dynamic-local-commands.md, adr-010-unified-serve.md
 ├── sbtdd/specs/feat-006-dynamic-local-commands/   # spec + scenarios + acceptance + verify
 ├── superpowers/plans/                             # Planes fechados (históricos)
 └── superpowers/specs/2026-08-2X-*                 # Specs de diseño (históricos)
@@ -88,7 +88,7 @@ docs/
 uv sync --all-groups                     # Install dependencies (dev group includes pre-commit)
 uv run pre-commit install                # Install git hooks (once per clone)
 uv run pre-commit run --all-files        # Run hooks on all files
-uv run pytest -v                         # Run tests (242 tests)
+uv run pytest -v                         # Run tests (255 tests)
 uv run ruff check src/ tests/            # Lint (CI parity)
 uv run ruff format --check src/ tests/   # Format check (CI parity)
 
@@ -108,8 +108,8 @@ mcp-gway remove <name>
 mcp-gway list
 mcp-gway inspect <name>
 mcp-gway refresh [<name>] [--auth] [--oauth-port <port>]
-mcp-gway serve [--host 127.0.0.1] [--port 8080]   # default local-first; 0.0.0.0 requiere MCP_GWAY_ALLOW_REMOTE=1
-mcp-gway mcp [--log-level LEVEL] [--registry-dir PATH]  # SERVIDOR-side NDJSON: lee JSON-RPC de stdin, responde por stdout (usable como OpenCode type: local con command: [mcp-gway, mcp])
+mcp-gway serve [--transport stdio|http|sse] [--host 127.0.0.1] [--port 8080] [--log-level LEVEL] [--registry-dir PATH]  # default --transport stdio; --host/--port only with http|sse (con stdio → exit 2); 0.0.0.0 requiere MCP_GWAY_ALLOW_REMOTE=1
+# mcp-gway mcp [--log-level LEVEL] [--registry-dir PATH]  # DEPRECATED hidden alias: avisa '[mcp] deprecated, use serve --transport stdio' y delega a _serve_stdio(); stdout puro NDJSON (usable como OpenCode type: local con command: [mcp-gway, serve, --transport, stdio])
 mcp-gway local-unrestricted enable|disable|status  # break-glass explícito: crear/remover marker 72h (0o600), o status sin side effects
 ```
 

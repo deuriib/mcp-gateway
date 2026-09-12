@@ -1,9 +1,10 @@
-"""Server-side NDJSON transport for `mcp-gway mcp` (stdin/stdout).
+"""Server-side NDJSON transport for `mcp-gway serve --transport stdio` (stdin/stdout).
 
 This module is the **server side**: it reads JSON-RPC 2.0 requests as NDJSON
 from stdin and writes one JSON response per line to stdout. Invoked as
-``mcp-gway mcp`` and usable as an OpenCode ``type: local`` server with
-``command: [mcp-gway, mcp]``.
+``mcp-gway serve --transport stdio`` (default) and usable as an OpenCode
+``type: local`` server with ``command: [mcp-gway, serve, --transport, stdio]``.
+``mcp-gway mcp`` remains as a deprecated hidden alias.
 
 Contrast with :mod:`mcp_gway.stdio_transport` which is the **client side**:
 ``filtered_stdio_client`` connects *to* child MCP servers and filters noise

@@ -340,19 +340,71 @@ def _resolve_log_level(explicit: str | None) -> str:
     return "info"
 
 
-@main.command()
-@click.option("--host", default="127.0.0.1", help="Bind host")
-@click.option("--port", default=8080, type=int, help="Bind port")
-@click.option(
-    "--log-level",
-    type=click.Choice(
-        ["trace", "debug", "info", "warning", "error", "critical"], case_sensitive=False
-    ),
-    default=None,
-    help="Log level (overrides MCP_GWAY_LOG_LEVEL/LOG_LEVEL and MCP_GWAY_ENV)",
-)
-def serve(host: str, port: int, log_level: str | None) -> None:
-    """Start the gateway server."""
+def _serve_stdio(log_level: str | None, registry_dir: str | None) -> None:
+    """Serve NDJSON JSON-RPC over stdin/stdout (stdio transport)."""
+    resolved_level = _resolve_log_level(log_level)
+    from mcp_gway.observability.logging import setup_logging
+
+    setup_logging(resolved_level)
+    servers_dir = (
+        Path(registry_dir).expanduser()
+        if registry_dir
+        else Path.home() / ".config" / "mcp-gway" / "servers"
+    )
+    import logging as _logging
+
+    _logger = _logging.getLogger("mcp_gway.mcp")
+    try:
+        registry = Registry(servers_dir=servers_dir)
+        # NB: mcp_gway.stdio is server-side NDJSON (we serve stdin/stdout);
+        # mcp_gway.stdio_transport is client-side (we connect to children).
+        # Keep these imports separate — do not merge or rename (import churn).
+        from mcp_gway.gateway import Gateway
+        from mcp_gway.stdio import run_stdio_async
+
+        gateway = Gateway(registry)
+    except Exception as e:
+        click.echo(
+            f"Error: invalid --registry-dir {servers_dir} [reason={e}]", err=True
+        )
+        sys.exit(2)
+    try:
+        names = registry.list()
+    except Exception as e:
+        _logger.warning("could not list registry %s [reason=%s]", str(servers_dir), e)
+        names = []
+    try:
+        import os as _os
+
+        _pid = _os.getpid()
+    except Exception:
+        _pid = -1
+    _logger.info(
+        "mcp mode ready: %d servers from %s (pid=%s, log-level=%s)",
+        len(names),
+        str(servers_dir),
+        _pid,
+        resolved_level,
+    )
+    click.echo(
+        f"[mcp] ready: {len(names)} server(s) from {servers_dir} "
+        f"(pid={_pid}, log-level={resolved_level}) — "
+        "stdout is pure NDJSON, logs go to stderr",
+        err=True,
+    )
+    try:
+        code = asyncio.run(run_stdio_async(gateway, sys.stdin, sys.stdout, sys.stderr))
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except (EOFError, BrokenPipeError):
+        sys.exit(0)
+    sys.exit(code)
+
+
+def _serve_http(
+    host: str, port: int, log_level: str | None, registry_dir: str | None
+) -> None:
+    """Serve the HTTP/SSE gateway app (http and sse share Gateway.app)."""
     import time
 
     import uvicorn
@@ -380,18 +432,30 @@ def serve(host: str, port: int, log_level: str | None) -> None:
             err=True,
         )
         sys.exit(2)
-    registry = _get_registry()
+    servers_dir = (
+        Path(registry_dir).expanduser()
+        if registry_dir
+        else Path.home() / ".config" / "mcp-gway" / "servers"
+    )
     from mcp_gway import __version__
-    from mcp_gway.gateway import Gateway
 
     if not is_loopback:
         logger = logging.getLogger(__name__)
         logger.warning("server exposed on non-loopback host %s", host)
     t0 = time.monotonic()
-    gateway = Gateway(registry, host=host)
+    try:
+        registry = Registry(servers_dir=servers_dir)
+        from mcp_gway.gateway import Gateway
+
+        gateway = Gateway(registry, host=host)
+        names = registry.list()
+    except Exception as e:
+        click.echo(
+            f"Error: invalid --registry-dir {servers_dir} [reason={e}]", err=True
+        )
+        sys.exit(2)
     elapsed_ms = int((time.monotonic() - t0) * 1000)
 
-    names = registry.list()
     n = len(names)
     if n == 0:
         server_line = "no servers yet — add one with `mcp-gway add`"
@@ -449,13 +513,73 @@ def serve(host: str, port: int, log_level: str | None) -> None:
     click.echo(f"  {_c('Press Ctrl+C to stop', dim=True)}")
     click.echo("")
 
-    uvicorn.run(
-        gateway.app,
-        host=host,
-        port=port,
-        log_level=resolved_level,
-        access_log=resolved_level in ("trace", "debug", "info"),
-    )
+    try:
+        uvicorn.run(
+            gateway.app,
+            host=host,
+            port=port,
+            log_level=resolved_level,
+            access_log=resolved_level in ("trace", "debug", "info"),
+        )
+    except Exception as e:
+        click.echo(f"Error: serve failed to bind {host}:{port} [reason={e}]", err=True)
+        sys.exit(1)
+
+
+@main.command()
+@click.option(
+    "--transport",
+    type=click.Choice(["stdio", "http", "sse"]),
+    default="stdio",
+    show_default=True,
+    help="Transport to serve (stdio default; http and sse share the same app)",
+)
+@click.option("--host", default="127.0.0.1", help="Bind host (http|sse only)")
+@click.option(
+    "--port",
+    default=8080,
+    type=click.IntRange(1, 65535),
+    help="Bind port (http|sse only)",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(
+        ["trace", "debug", "info", "warning", "error", "critical"], case_sensitive=False
+    ),
+    default=None,
+    help="Log level (overrides MCP_GWAY_LOG_LEVEL/LOG_LEVEL and MCP_GWAY_ENV)",
+)
+@click.option(
+    "--registry-dir",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=str),
+    default=None,
+    help="Registry servers directory (default ~/.config/mcp-gway/servers)",
+)
+@click.pass_context
+def serve(
+    ctx: click.Context,
+    transport: str,
+    host: str,
+    port: int,
+    log_level: str | None,
+    registry_dir: str | None,
+) -> None:
+    """Start the gateway server (default stdio; --host/--port only with http|sse)."""
+    # WHY: fail hard on transport×options mismatch, never silently ignore (ADR-010).
+    if transport == "stdio":
+        for _opt in ("host", "port"):
+            _src = ctx.get_parameter_source(_opt)
+            if _src is not None and _src != click.core.ParameterSource.DEFAULT:
+                click.echo(
+                    "Error: --host/--port only apply to --transport http|sse",
+                    err=True,
+                )
+                sys.exit(2)
+        _serve_stdio(log_level, registry_dir)
+    elif transport in ("http", "sse"):
+        _serve_http(host, port, log_level, registry_dir)
+    else:
+        raise click.BadParameter(f"unknown transport '{transport}'")
 
 
 @main.command()
@@ -616,7 +740,7 @@ def local_unrestricted_status() -> None:
         click.echo(f"expires_in_seconds={int(status.expires_in_seconds)}")
 
 
-@main.command(name="mcp")
+@main.command(name="mcp", hidden=True)
 @click.option(
     "--log-level",
     type=click.Choice(
@@ -632,52 +756,9 @@ def local_unrestricted_status() -> None:
     help="Registry servers directory (default ~/.config/mcp-gway/servers)",
 )
 def mcp_cmd(log_level: str | None, registry_dir: str | None) -> None:
-    """Run gateway in stdio/local mode (NDJSON over stdin/stdout)."""
-    resolved_level = _resolve_log_level(log_level)
-    from mcp_gway.observability.logging import setup_logging
-
-    setup_logging(resolved_level)
-    servers_dir = (
-        Path(registry_dir).expanduser()
-        if registry_dir
-        else Path.home() / ".config" / "mcp-gway" / "servers"
-    )
-    registry = Registry(servers_dir=servers_dir)
-    # NB: mcp_gway.stdio is server-side NDJSON (we serve stdin/stdout);
-    # mcp_gway.stdio_transport is client-side (we connect to children).
-    # Keep these imports separate — do not merge or rename (import churn).
-    from mcp_gway.gateway import Gateway
-    from mcp_gway.stdio import run_stdio_async
-
-    gateway = Gateway(registry)
-    try:
-        names = registry.list()
-    except Exception:
-        names = []
-    import logging as _logging
-
-    _logger = _logging.getLogger("mcp_gway.mcp")
-    try:
-        import os as _os
-
-        _pid = _os.getpid()
-    except Exception:
-        _pid = -1
-    _logger.info(
-        "mcp mode ready: %d servers from %s (pid=%s, log-level=%s)",
-        len(names),
-        str(servers_dir),
-        _pid,
-        resolved_level,
-    )
-    click.echo(
-        f"[mcp] ready: {len(names)} server(s) from {servers_dir} "
-        f"(pid={_pid}, log-level={resolved_level}) — "
-        "stdout is pure NDJSON, logs go to stderr",
-        err=True,
-    )
-    code = asyncio.run(run_stdio_async(gateway, sys.stdin, sys.stdout, sys.stderr))
-    sys.exit(code)
+    """Deprecated alias for serve --transport stdio."""
+    click.echo("[mcp] deprecated, use serve --transport stdio", err=True)
+    _serve_stdio(log_level, registry_dir)
 
 
 if __name__ == "__main__":

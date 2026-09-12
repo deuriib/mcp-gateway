@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## Unreleased
+- **feat(cli)**: unified `serve --transport [stdio|http|sse]` (default `stdio`); `--registry-dir` is now a common `serve` option; `--host/--port` only apply to `http|sse` (with `stdio` → `Error: --host/--port only apply to --transport http|sse` + exit 2, never warn-and-ignore).
+- **deprecation**: `mcp-gway mcp` is now a hidden alias (`hidden=True`): `serve --transport stdio` equiv `mcp` — mismo loop NDJSON y mismos args a `_serve_stdio()`, modulo aviso de deprecacion `[mcp] deprecated, use serve --transport stdio` en stderr (solo `mcp`, sin logica propia). Use `command: [mcp-gway, serve, --transport, stdio]` for OpenCode `type: local`.
+- **compat**: local-first intact (`127.0.0.1` default, non-loopback without `MCP_GWAY_ALLOW_REMOTE=1` → exit 2 legacy text); `http`/`sse` share the same `Gateway.app`; stdio keeps stdout pure NDJSON (banners `err=True`).
+
 ## v2.2.0 (2026-09-11)
 - **feat**: add `AI` directory to `.gitignore` so local Claude skills are never committed (`a559bbc`). Version bump only — no runtime changes.
 

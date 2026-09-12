@@ -17,9 +17,9 @@ Registry (`servers/*.json` + `servers/*.pyi`) is the single source of truth.
 | `update` | `mcp-gway update <name> --tools <csv>` (`--tools` required) |
 | `list` | `mcp-gway list` |
 | `inspect` | `mcp-gway inspect <name>` |
-| `serve` | `mcp-gway serve [--host 127.0.0.1] [--port 8080] [--log-level LEVEL]` |
+| `serve` | `mcp-gway serve [--transport stdio\|http\|sse] [--host 127.0.0.1] [--port 8080] [--log-level LEVEL] [--registry-dir PATH]` (default `stdio`; `--host/--port` only with `http\|sse`) |
 | `refresh` | `mcp-gway refresh [<name>] [--auth] [--oauth-port <port>]` |
-| `mcp` | `mcp-gway mcp [--log-level LEVEL] [--registry-dir PATH]` — server-side NDJSON (stdin→JSON-RPC, stdout→responses); usable as OpenCode `type: local` with `command: [mcp-gway, mcp]` |
+| `mcp` | `mcp-gway mcp [--log-level LEVEL] [--registry-dir PATH]` — DEPRECATED hidden alias: `serve --transport stdio` equiv `mcp` (mismo loop NDJSON y mismos args a `_serve_stdio`, modulo aviso de deprecacion en stderr solo `mcp`); prefer `command: [mcp-gway, serve, --transport, stdio]` for OpenCode `type: local` |
 | `local-unrestricted` | `mcp-gway local-unrestricted enable\|disable\|status` — break-glass marker 72h (0o600), explicit only |
 
 ## `add` — full flags (13, `cli.py:45-95`)
@@ -61,8 +61,8 @@ mcp-gway serve --host 127.0.0.1 --port 8080
 curl -s http://127.0.0.1:8080/health | jq
 
 # Server-side NDJSON: expose this gateway as an MCP server over stdio
-mcp-gway mcp --log-level info     # reads JSON-RPC 2.0 from stdin, answers on stdout (logs → stderr)
-# OpenCode: { "type": "local", "command": ["mcp-gway", "mcp"] }
+mcp-gway serve --transport stdio --log-level info   # reads JSON-RPC 2.0 from stdin, answers on stdout (logs → stderr)
+# OpenCode: { "type": "local", "command": ["mcp-gway", "serve", "--transport", "stdio"] }
 
 # Break-glass 72h (explicit only — env alone never activates)
 mcp-gway local-unrestricted enable

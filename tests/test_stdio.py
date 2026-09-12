@@ -160,12 +160,14 @@ def test_cli_mcp_options() -> None:
     from mcp_gway.cli import main
 
     runner = CliRunner()
-    result = runner.invoke(main, ["mcp", "--help"])
+    result = runner.invoke(main, ["serve", "--help"])
     assert result.exit_code == 0
+    assert "--transport" in result.output
+    assert "stdio" in result.output
     assert "--log-level" in result.output
     assert "--registry-dir" in result.output
-    assert "--host" not in result.output
-    assert "--port" not in result.output
+    assert "--host" in result.output
+    assert "--port" in result.output
 
 
 @pytest.mark.asyncio
@@ -365,9 +367,12 @@ def test_no_stdout_prints_in_mcp_path() -> None:
         if s.startswith("print("):
             assert "file=stderr" in s or "file = stderr" in s, s
     assert "stdout.write" in stdio_src
+    serve_src = inspect.getsource(cli_mod._serve_stdio)
+    assert "err=True" in serve_src
+    assert "run_stdio_async" in serve_src
     mcp_src = inspect.getsource(cli_mod.mcp_cmd.callback)
-    assert "err=True" in mcp_src
-    assert "run_stdio_async" in mcp_src
+    assert "deprecated" in mcp_src.lower()
+    assert "_serve_stdio" in mcp_src
 
 
 def test_stdio_vs_transport_docstrings_crosslinked() -> None:
