@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## Unreleased
+- **cleanup**: remove legacy env-based log-level inference — `_resolve_log_level` now reads only `MCP_GWAY_LOG_LEVEL` (`--log-level` overrides; default `info`). Dropped `MCP_GWAY_ENV`, `ENV`, `ENVIRONMENT`, `APP_ENV`, `DEBUG`, `LOG_LEVEL` fallbacks and the serve banner `env <hint>` echo. Purged inert `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD` from docs (code already removed in v2.0.0; AGENTS.md/README.md updated).
 - **feat(cli)**: unified `serve --transport [stdio|http|sse]` (default `stdio`); `--registry-dir` is now a common `serve` option; `--host/--port` only apply to `http|sse` (with `stdio` → `Error: --host/--port only apply to --transport http|sse` + exit 2, never warn-and-ignore).
 - **deprecation**: `mcp-gway mcp` is now a hidden alias (`hidden=True`): `serve --transport stdio` equiv `mcp` — mismo loop NDJSON y mismos args a `_serve_stdio()`, modulo aviso de deprecacion `[mcp] deprecated, use serve --transport stdio` en stderr (solo `mcp`, sin logica propia). Use `command: [mcp-gway, serve, --transport, stdio]` for OpenCode `type: local`.
 - **compat**: local-first intact (`127.0.0.1` default, non-loopback without `MCP_GWAY_ALLOW_REMOTE=1` → exit 2 legacy text); `http`/`sse` share the same `Gateway.app`; stdio keeps stdout pure NDJSON (banners `err=True`).

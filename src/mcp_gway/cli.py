@@ -308,35 +308,11 @@ def inspect(name: str) -> None:
 def _resolve_log_level(explicit: str | None) -> str:
     if explicit:
         return explicit.lower()
-    for key in ("MCP_GWAY_LOG_LEVEL", "LOG_LEVEL"):
-        val = os.environ.get(key)
-        if val:
-            v = val.strip().lower()
-            if v in ("trace", "debug", "info", "warning", "warn", "error", "critical"):
-                return "warning" if v == "warn" else v
-    env = (
-        (
-            os.environ.get("MCP_GWAY_ENV")
-            or os.environ.get("ENV")
-            or os.environ.get("ENVIRONMENT")
-            or os.environ.get("APP_ENV")
-            or ""
-        )
-        .strip()
-        .lower()
-    )
-    if env in ("production", "prod", "prd", "prodution"):
-        return "warning"
-    if env in ("staging", "stage", "stg"):
-        return "info"
-    if env in ("test", "testing"):
-        return "warning"
-    if env in ("development", "dev", "local", "develop"):
-        if os.environ.get("DEBUG", "").lower() in ("1", "true", "yes"):
-            return "debug"
-        return "info"
-    if os.environ.get("DEBUG", "").lower() in ("1", "true", "yes"):
-        return "debug"
+    val = os.environ.get("MCP_GWAY_LOG_LEVEL")
+    if val:
+        v = val.strip().lower()
+        if v in ("trace", "debug", "info", "warning", "warn", "error", "critical"):
+            return "warning" if v == "warn" else v
     return "info"
 
 
@@ -495,21 +471,8 @@ def _serve_http(
         click.echo(
             f"  {_c(f'{glyph_warn} exposed on non-loopback', fg='yellow', bold=True)} {_c(f'-- server reachable at {host}', dim=True)} {_c('(MCP_GWAY_ALLOW_REMOTE=1)', dim=True)}"
         )
-    env_hint = (
-        os.environ.get("MCP_GWAY_ENV")
-        or os.environ.get("ENV")
-        or os.environ.get("ENVIRONMENT")
-        or os.environ.get("APP_ENV")
-        or ""
-    ).strip()
-    if env_hint or resolved_level != "info":
-        parts = []
-        if env_hint:
-            parts.append(f"env {env_hint.lower()}")
-        if resolved_level != "info":
-            parts.append(f"log {resolved_level}")
-        if parts:
-            click.echo(f"  {_c(' · '.join(parts), dim=True)}")
+    if resolved_level != "info":
+        click.echo(f"  {_c('log ' + resolved_level, dim=True)}")
     click.echo(f"  {_c('Press Ctrl+C to stop', dim=True)}")
     click.echo("")
 
@@ -547,7 +510,7 @@ def _serve_http(
         ["trace", "debug", "info", "warning", "error", "critical"], case_sensitive=False
     ),
     default=None,
-    help="Log level (overrides MCP_GWAY_LOG_LEVEL/LOG_LEVEL and MCP_GWAY_ENV)",
+    help="Log level (overrides MCP_GWAY_LOG_LEVEL; default info)",
 )
 @click.option(
     "--registry-dir",
@@ -747,7 +710,7 @@ def local_unrestricted_status() -> None:
         ["trace", "debug", "info", "warning", "error", "critical"], case_sensitive=False
     ),
     default=None,
-    help="Log level (overrides MCP_GWAY_LOG_LEVEL/LOG_LEVEL and MCP_GWAY_ENV)",
+    help="Log level (overrides MCP_GWAY_LOG_LEVEL; default info)",
 )
 @click.option(
     "--registry-dir",

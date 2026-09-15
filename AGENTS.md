@@ -101,7 +101,7 @@ mcp-gway add <name> --type local --command "npx -y my-mcp" [--env KEY=VALUE] [--
 #   src/mcp_gway/core/policy.py): default-deny empty MCP_GWAY_ALLOW_LOCAL_COMMANDS;
 #   CSV basenames, `*` inválido; UNRESTRICTED_TTL 72*3600; break-glass MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL=1
 #   + marker ~/.config/mcp-gway/.local_unrestricted (epoch, 0o600, 72h TTL); vars MCP_GWAY_ALLOW_LOCAL_COMMANDS
-#   / MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL / MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD (no renombrar).
+#   / MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL (no renombrar).
 # Full options: 13 flags (cli.py:45-95): --type/--url/--command/--header/--env/--cwd/--oauth-client-id/--oauth-client-secret/--oauth-scope/--timeout/--enabled/--oauth-port/--tools
 # Only --type local|remote (cli.py:50). No --args, no --docs-url. Legacy http|stdio|sse|streamable-http rejected by click.
 mcp-gway remove <name>
@@ -163,7 +163,7 @@ mcp-gway local-unrestricted enable|disable|status  # break-glass explícito: cre
   - CSV basenames case-insensitive, `*`/paths inválidos → deny + warn.
   - Nota CISO opt-in: `bunx` solo recomendado en docs (no default en código, default-deny vacío se mantiene), solo opt-in con pin + owner + regate 90d; `bun` runtime fuera; denylist EXACT PATH,PATHEXT,SYSTEMROOT,COMSPEC,LD_PRELOAD,LD_LIBRARY_PATH,PYTHONPATH,PYTHONHOME,NODE_OPTIONS,NODE_PATH,NODE_EXTRA_CA_CERTS,NODE_TLS_REJECT_UNAUTHORIZED + PREFIXES DYLD_,NPM_CONFIG_,BUN_,UV_ + PATH controlado (`NODE_ENV` permitido, no denylisted); prohibido `*`, paths o shell.
   - Break-glass `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL=1` + marker `~/.config/mcp-gway/.local_unrestricted` (epoch, `0o600`, 72h TTL).
-  - No renombrar `MCP_GWAY_ALLOW_LOCAL_COMMANDS` / `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL` / `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD` (`VIA_DASHBOARD` inerte desde v2.0.0 headless CLI-only).
+  - No renombrar `MCP_GWAY_ALLOW_LOCAL_COMMANDS` / `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL`.
 
 ### OAuth Flow
 

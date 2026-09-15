@@ -72,7 +72,7 @@ mcp-gway local-unrestricted disable
 
 `serve` flags: `--host` (default `127.0.0.1`), `--port` (int, default `8080`),
 `--log-level trace|debug|info|warning|error|critical` (default `None` → resolved
-from `MCP_GWAY_LOG_LEVEL`/`LOG_LEVEL`, then `MCP_GWAY_ENV`).
+from `MCP_GWAY_LOG_LEVEL`, else `info`).
 
 ## Guards — what does NOT exist
 

@@ -198,7 +198,6 @@ Remove-Item Env:\MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL  # 2. unsets env, returns to 
 ```
 
 - Nota CISO opt-in: `bunx` solo como recomendado en documentación (no default en código, default-deny vacío se mantiene); solo opt-in con pin + owner + regate 90d; `bun` runtime sigue fuera; denylist EXACT PATH,PATHEXT,SYSTEMROOT,COMSPEC,LD_PRELOAD,LD_LIBRARY_PATH,PYTHONPATH,PYTHONHOME,NODE_OPTIONS,NODE_PATH,NODE_EXTRA_CA_CERTS,NODE_TLS_REJECT_UNAUTHORIZED + PREFIXES DYLD_,NPM_CONFIG_,BUN_,UV_ + PATH controlado (`NODE_ENV` permitido, no denylisted); prohibido `*`, paths o shell.
-- `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD` inerte desde v2.0.0 (headless CLI-only, sin dashboard).
 - Tag `v2.0.0` interno no publicado — no anuncio externo. Tras actualizar, borra la caché vieja manualmente: `rm ~/.config/mcp-gway/catalog.json`.
 
 - Marker `~/.config/mcp-gway/.local_unrestricted` (epoch, `0o600`, 72h TTL) — fail-closed: missing, expired, future, insecure, unreadable, or invalid → deny. States via `mcp-gway local-unrestricted status`: `disabled` (env unset), `marker-missing`, `expired`, `future` (timestamp in the future), `marker-insecure` (permissions != `0o600` on posix), `marker-unreadable`, `marker-invalid`, `active`.
