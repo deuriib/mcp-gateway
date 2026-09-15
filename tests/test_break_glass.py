@@ -91,17 +91,18 @@ def test_wrong_mode_denies_posix(monkeypatch, tmp_path: Path) -> None:
     assert policy.unrestricted_status().state == "marker-insecure"
 
 
-def test_default_deny_empty_allow_list(monkeypatch, tmp_path: Path) -> None:
+def test_default_allow_list_when_env_empty(monkeypatch, tmp_path: Path) -> None:
+    """When MCP_GWAY_ALLOW_LOCAL_COMMANDS is empty/unset, defaults apply."""
     from mcp_gway.core import policy
 
     monkeypatch.delenv("MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL", raising=False)
     monkeypatch.setenv("MCP_GWAY_ALLOW_LOCAL_COMMANDS", "")
     _patch_marker(monkeypatch, tmp_path)
-    assert policy.get_allow_list() == set()
+    assert policy.get_allow_list() == {"npx", "bunx", "uvx", "pipx"}
     decision = policy.check_local_command(["mybin"], require_binary=False)
     assert decision.allowed is False
     assert decision.reason_code == "not_allowlisted"
-    assert "empty" in decision.message
+    assert "add to MCP_GWAY_ALLOW_LOCAL_COMMANDS" in decision.message
 
 
 def test_wildcard_invalid_denies(monkeypatch, tmp_path: Path) -> None:

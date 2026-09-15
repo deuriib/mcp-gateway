@@ -40,8 +40,18 @@ class StarlarkSandbox:
         self.globals = sl.Globals.extended_by([sl.LibraryExtension.StructType])
         self._modules: dict[str, object] = {}
         self._custom_globals: dict[str, object] = {}
-        self._custom_globals["print"] = _noop
+        self._logs: list[str] = []
+        self._last_logs: list[str] = []
+        self._custom_globals["print"] = self._capture_print
         self._metrics: object | None = None
+
+    def _capture_print(self, *args: object, **kwargs: object) -> None:
+        """Bifrost-style print capture: output goes to logs, not stdout."""
+        sep = str(kwargs.get("sep", " ")) if isinstance(kwargs, dict) else " "
+        try:
+            self._logs.append(sep.join(str(a) for a in args))
+        except Exception:
+            self._logs.append("<unprintable>")
 
     def set_global(self, name: str, value: object) -> None:
         """Set a custom global variable (e.g., call_tool function)."""
@@ -50,9 +60,14 @@ class StarlarkSandbox:
     def inject_server(self, name: str, server_proxy: object) -> None:
         self._modules[name] = server_proxy
 
+    def get_logs(self) -> list[str]:
+        """Return captured print() logs from the last execute() call."""
+        return list(getattr(self, "_last_logs", []))
+
     def execute(self, code: str, timeout: float = 30.0) -> object:
         start = time.perf_counter()
         status = "ok"
+        self._logs = []
         try:
             mod = sl.Module()
             preamble_lines: list[str] = []
@@ -102,11 +117,14 @@ class StarlarkSandbox:
                         f"Code execution timed out after {timeout}s. "
                         "Avoid infinite loops or long-running operations."
                     )
+            self._last_logs = list(self._logs)
             return result
         except SandboxTimeoutError:
+            self._last_logs = list(self._logs)
             raise
         except Exception:
             status = "error"
+            self._last_logs = list(self._logs)
             raise
         finally:
             duration = time.perf_counter() - start

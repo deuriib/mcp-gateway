@@ -17,7 +17,7 @@ def registry(tmp_path):
     config = MCPServerConfig(
         name="youtube",
         type="remote",
-        url="http://localhost:3001/mcp",
+        url="https://api.example.com/mcp",
     )
     tools = [ToolInfo(name="search", description="Search videos")]
     reg.add(config, tools)
@@ -209,9 +209,9 @@ async def test_post_to_expired_session_returns_404(gateway):
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_code_has_call_tool(gateway):
-    """executeToolCode sandbox should have call_tool injected."""
-    assert "call_tool" in gateway.code_mode.sandbox._custom_globals
+async def test_execute_tool_code_has_no_call_tool(gateway):
+    """executeToolCode sandbox should NOT have call_tool injected."""
+    assert "call_tool" not in gateway.code_mode.sandbox._custom_globals
 
 
 @pytest.mark.asyncio

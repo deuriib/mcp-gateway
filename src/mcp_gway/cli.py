@@ -21,16 +21,13 @@ def _get_registry() -> Registry:
     return Registry(servers_dir=Path.home() / ".config" / "mcp-gway" / "servers")
 
 
-def _is_local_config(config: MCPServerConfig) -> bool:
-    return config.type == "local"
-
-
-def _is_remote_config(config: MCPServerConfig) -> bool:
-    return config.type == "remote"
-
-
-def _get_config_url(config: MCPServerConfig) -> str | None:
-    return config.url
+# Single source of truth lives in mcp_gway.core.client; re-export here for
+# backward compatibility (triple-branch helpers were duplicated).
+from mcp_gway.core.client import (
+    _get_config_url,
+    _is_local_config,
+    _is_remote_config,
+)
 
 
 def _get_config_display_type(config: MCPServerConfig) -> str:
@@ -180,7 +177,8 @@ def add(
         click.echo(f"Error: Unknown connection type {conn_type}", err=True)
         sys.exit(1)
 
-    tool_filter = tools.split(",") if tools != "*" else ["*"]
+    tool_filter = [t.strip() for t in tools.split(",")] if tools != "*" else ["*"]
+    config.tools_to_execute = tool_filter
     click.echo(f"Discovering tools from {name}...")
     discovered = asyncio.run(discover_tools(config))
 

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-import stat
 from pathlib import Path
 from typing import Any
 
@@ -62,75 +60,11 @@ class Registry:
         return p
 
     def _atomic_write_text(self, path: Path, content: str) -> None:
-        if path.is_symlink():
-            raise ValueError("refusing to write through symlink")
-        try:
-            st = os.lstat(path) if path.exists() else None
-            if st is not None and stat.S_ISLNK(st.st_mode):
-                raise ValueError("refusing to write through symlink")
-        except ValueError:
-            raise
-        except Exception:
-            pass
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        if tmp.is_symlink():
-            raise ValueError("tmp path is symlink")
-        try:
-            st2 = os.lstat(tmp) if tmp.exists() else None
-            if st2 is not None and stat.S_ISLNK(st2.st_mode):
-                raise ValueError("tmp path is symlink")
-        except ValueError:
-            raise
-        except Exception:
-            pass
-        if tmp.exists():
-            try:
-                tmp.unlink()
-            except Exception:
-                pass
+        """Delegate to shared secureio helper (single symlink-safe impl)."""
+        from mcp_gway.secureio import secure_atomic_write_text
+
         self.servers_dir.mkdir(parents=True, exist_ok=True)
-        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(content)
-                f.flush()
-                try:
-                    os.fsync(f.fileno())
-                except Exception:
-                    pass
-        except Exception:
-            try:
-                os.unlink(tmp)
-            except Exception:
-                pass
-            raise
-        try:
-            os.chmod(tmp, 0o600)
-        except Exception:
-            pass
-        if path.is_symlink():
-            try:
-                os.unlink(tmp)
-            except Exception:
-                pass
-            raise ValueError("refusing to replace symlink")
-        try:
-            st_final = os.lstat(path) if path.exists() else None
-            if st_final is not None and stat.S_ISLNK(st_final.st_mode):
-                try:
-                    os.unlink(tmp)
-                except Exception:
-                    pass
-                raise ValueError("refusing to replace symlink")
-        except ValueError:
-            raise
-        except Exception:
-            pass
-        tmp.replace(path)
-        try:
-            os.chmod(path, 0o600)
-        except Exception:
-            pass
+        secure_atomic_write_text(path, content)
 
     def list(self) -> list[str]:
         return sorted(p.stem for p in self.servers_dir.glob("*.pyi"))
@@ -152,6 +86,9 @@ class Registry:
             "type": config.type,
             "enabled": config.enabled,
             "timeout": config.timeout,
+            "is_code_mode_client": getattr(config, "is_code_mode_client", True),
+            "tools_to_execute": getattr(config, "tools_to_execute", ["*"]),
+            "tools_to_auto_execute": getattr(config, "tools_to_auto_execute", []),
         }
         if config.type == "local":
             config_data["command"] = config.command
@@ -271,11 +208,11 @@ class Registry:
 
         name = config.name
         lines = [
-            f"# {name} server tools",
+            f"# servers/{name}.pyi",
             f"# Usage: {name}.tool_name(param=value)",
             f'# For detailed docs: use getToolDocs(server="{name}", tool="tool_name")',
             "# Note: hyphenated MCP names are exposed sanitized (hyphens -> underscores).",
-            "# Use sanitized names in executeToolCode structs; call_tool accepts originals.",
+            "# Use sanitized names in executeToolCode as Server.tool_name(...).",
             "",
         ]
         for tool in tools:

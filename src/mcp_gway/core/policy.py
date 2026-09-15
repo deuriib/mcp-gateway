@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 ALLOW_LIST_ENV = "MCP_GWAY_ALLOW_LOCAL_COMMANDS"
 UNRESTRICTED_ENV = "MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL"
 
+# Default allow-list when MCP_GWAY_ALLOW_LOCAL_COMMANDS is unset or empty.
+# Replaces the old default-deny: npx/bunx/uvx/pipx runner shims are allowed
+# out of the box; set the env var to override, break-glass still bypasses.
+DEFAULT_ALLOW_LIST = frozenset({"npx", "bunx", "uvx", "pipx"})
+
 MARKER_NAME = ".local_unrestricted"
 UNRESTRICTED_TTL_SECONDS = 72 * 3600
 
@@ -69,13 +74,15 @@ def marker_path() -> Path:
 def get_allow_list() -> set[str]:
     """Parse allow-list CSV; matching is case-insensitive (lowercased, deduped).
 
-    Entries are stripped; ``*``/paths/invalid are denied with warn.
+    When MCP_GWAY_ALLOW_LOCAL_COMMANDS is unset or blank, returns the
+    DEFAULT_ALLOW_LIST (npx, bunx, uvx, pipx). An explicit non-blank value
+    overrides the default. ``*``/paths/invalid entries are denied with warn.
     Callers compare ``basename.lower()`` against this set; PATH
     resolution itself stays platform-native.
     """
     raw = os.environ.get(ALLOW_LIST_ENV, "")
     if not raw.strip():
-        return set()
+        return set(DEFAULT_ALLOW_LIST)
     parts = [p.strip() for p in raw.split(",")]
     result: set[str] = set()
     for p in parts:
@@ -342,7 +349,8 @@ def check_basename_allowed(basename: str, *, host_loopback: bool) -> PolicyDecis
         detail = _break_glass_detail(status)
     elif not allow:
         detail = (
-            f"{ALLOW_LIST_ENV} empty; add binary to allow-list or run "
+            f"{ALLOW_LIST_ENV} has no valid entries (defaults are "
+            "npx,bunx,uvx,pipx); set it to include the binary or run "
             f"`mcp-gway local-unrestricted enable` with {UNRESTRICTED_ENV}=1"
         )
     else:

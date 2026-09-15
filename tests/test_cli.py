@@ -35,7 +35,7 @@ def test_inspect_server(runner, monkeypatch):
     monkeypatch.setattr("mcp_gway.core.discover_tools", mock_discover_tools)
     runner.invoke(
         main,
-        ["add", "youtube", "--type", "remote", "--url", "http://localhost:3001/mcp"],
+        ["add", "youtube", "--type", "remote", "--url", "https://api.example.com/mcp"],
     )
     result = runner.invoke(main, ["inspect", "youtube"])
     assert result.exit_code == 0
@@ -114,7 +114,7 @@ def test_refresh_server_tries_without_auth_first(tmp_path, monkeypatch):
     config = MCPServerConfig(
         name="myhttp",
         type="remote",
-        url="http://localhost:9999/mcp",
+        url="https://api.example.com/mcp",
     )
     registry.add(config, [ToolInfo(name="ping", description="Ping")])
 
@@ -159,7 +159,7 @@ def test_refresh_server_skips_oauth_when_no_auth_needed(tmp_path, monkeypatch):
     config = MCPServerConfig(
         name="public",
         type="remote",
-        url="http://localhost:9999/mcp",
+        url="https://api.example.com/mcp",
     )
     registry.add(config, [ToolInfo(name="ping", description="Ping")])
 
@@ -265,7 +265,7 @@ def test_refresh_continues_after_server_error(tmp_path, monkeypatch):
         config = MCPServerConfig(
             name=name,
             type="remote",
-            url=f"http://localhost:9999/{name}",
+            url=f"https://api.example.com/{name}",
         )
         registry.add(config, [ToolInfo(name="ping", description="Ping")])
 

@@ -17,6 +17,7 @@ from starlette.routing import Route
 
 from mcp_gway import __version__
 from mcp_gway.code_mode import CodeMode
+from mcp_gway.models import SSRF_IDLE_TIMEOUT, SSRF_MAX_BODY
 from mcp_gway.observability.health import (
     handle_health,
     handle_live,
@@ -32,15 +33,9 @@ from mcp_gway.observability.middleware import (
 from mcp_gway.registry import Registry
 
 
-class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        return response
+class _SecurityMiddleware(BaseHTTPMiddleware):
+    """Single security middleware (CSP + nosniff + DENY in one place)."""
 
-
-class _CSPMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = "default-src 'self'"
@@ -49,7 +44,29 @@ class _CSPMiddleware(BaseHTTPMiddleware):
         return response
 
 
+# Deprecated aliases: use _SecurityMiddleware (single). Kept for compatibility.
+class _SecurityHeadersMiddleware(_SecurityMiddleware):
+    pass
+
+
+class _CSPMiddleware(_SecurityMiddleware):
+    pass
+
+
 PROTOCOL_VERSION = "2024-11-05"
+
+# per-process concurrency bound for SSE streams (single event-loop process);
+# enforced with an async lock to make 129 concurrent GET /mcp -> 429 deterministic.
+MAX_CONCURRENT_SSE = 128
+MAX_SESSIONS = 128
+MAX_QUEUE = 32
+MAX_IDLE_SECONDS = SSRF_IDLE_TIMEOUT
+# Deprecated alias: use MAX_IDLE_SECONDS (single source of truth).
+MAX_IDLE = MAX_IDLE_SECONDS
+MAX_POST_CONCURRENT = 32
+MAX_BODY_BYTES = SSRF_MAX_BODY
+POST_ACQUIRE_TIMEOUT = 1.0
+POST_READ_TIMEOUT = 5.0
 
 
 class InvalidParamsError(ValueError):
@@ -68,6 +85,8 @@ def _safe_error_data(exc: BaseException) -> dict[str, str] | None:
     try:
         msg = str(exc)
     except Exception:
+        # WHY broad: str(exc) can raise anything (custom __str__); the safe
+        # fallback is type-only. Never includes raw messages (secret-safe).
         return {"type": type(exc).__name__}
     m = _REASON_RE.search(msg)
     if m:
@@ -78,18 +97,18 @@ def _safe_error_data(exc: BaseException) -> dict[str, str] | None:
 CODE_MODE_TOOLS = [
     {
         "name": "listToolFiles",
-        "description": "Returns a tree structure listing all virtual .pyi stub files available for connected MCP servers, organized by individual tool. Each tool has a corresponding file (e.g., servers/<serverName>/<toolName>.pyi) that contains compact Python signatures for that specific tool. The <toolName> shown in each filename is the exact canonical identifier exposed in executeToolCode. Safe workflow: listToolFiles -> readToolFile -> (optional) getToolDocs -> executeToolCode. Use readToolFile before executeToolCode to confirm the exact signature and parameters for the tool you want to call. Use getToolDocs if you need detailed documentation for a specific tool. In code, access tools via: server_name.tool_name(param=value). The server names used in code correspond to the human-readable names shown in this listing. This tool is generic and works with any set of servers connected at runtime. CALL THIS TOOL FIRST whenever the user references a server, tool, capability, or action that is not visible in your current tool list — connected MCP servers and their tools are NOT included in your top-level tool schema, so the only way to discover them is by calling listToolFiles. Examples that should trigger this tool: user names a server you don't recognize (e.g. 'localserver', 'mydb'), asks 'who am I on X', 'what can X do', 'does X have a tool for Y', or asks you to perform an action and you are unsure whether a matching tool exists. Do NOT tell the user a server or capability is unavailable until you have called listToolFiles and confirmed it is absent.",
+        "description": 'Lists the virtual .pyi stub files for connected CodeMode MCP servers (Bifrost CodeMode VFS). Default server-level binding returns servers/<server>.pyi per server (e.g., servers/filesystem.pyi); tool-level binding returns servers/<server>/<tool>.pyi per tool. The <tool> filename stem is the exact callable name for executeToolCode. Workflow: listToolFiles -> readToolFile -> (optional) getToolDocs -> executeToolCode. In code, call tools as Server.tool_name(param=value) (e.g., filesystem.read_file(path=".")). CALL THIS FIRST when the user names a server, tool, or capability not in your visible tool list — connected MCP servers are only discoverable here. Do NOT claim a server or capability is unavailable until listToolFiles confirms it is absent.',
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "readToolFile",
-        "description": "Reads a virtual .pyi stub file for a specific tool, returning its compact Python function signature. The fileName should be in format servers/<serverName>/<toolName>.pyi as listed by listToolFiles. The function performs case-insensitive matching and removes the .pyi extension. This is the authoritative source for the exact callable tool name and arguments to use in executeToolCode. The tool can be accessed in code via: serverName.tool_name(param=value) using the def name shown in the file. If the compact signature is not enough to understand the tool, use getToolDocs for detailed documentation. Workflow: listToolFiles -> readToolFile -> (optional) getToolDocs -> executeToolCode. IMPORTANT: If the response header shows 'Total lines: X (this is the complete file)', do NOT call this tool again with startLine/endLine - you already have the complete file.",
+        "description": "Reads a virtual .pyi stub: servers/<server>.pyi for the full server signature list, or servers/<server>/<tool>.pyi for a single tool (both listed by listToolFiles). Matching is case-insensitive and the .pyi extension is optional. Returns the authoritative callable name and arguments for executeToolCode as Server.tool_name(param=value). If the compact signature is insufficient, use getToolDocs. Workflow: listToolFiles -> readToolFile -> (optional) getToolDocs -> executeToolCode.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "fileName": {
                     "type": "string",
-                    "description": "Server to preview — e.g., youtube or servers/youtube.pyi",
+                    "description": "Stub to read — e.g., servers/filesystem.pyi or servers/filesystem/read_file.pyi",
                 },
                 "startLine": {
                     "type": "integer",
@@ -105,17 +124,17 @@ CODE_MODE_TOOLS = [
     },
     {
         "name": "getToolDocs",
-        "description": "Get detailed documentation for a specific tool including full parameter descriptions, types, and usage examples. Use this when the compact signature from readToolFile is not sufficient to understand how to use a tool. Requires both server name and tool name as parameters.",
+        "description": 'Get detailed documentation for a specific tool including full parameter descriptions, types, and usage examples. Use this when the compact signature from readToolFile is not sufficient to understand how to use a tool. Requires both server name and tool name as parameters (e.g., server="filesystem", tool="read_file").',
         "inputSchema": {
             "type": "object",
             "properties": {
                 "server": {
                     "type": "string",
-                    "description": "The server that owns the tool, like youtube",
+                    "description": "The server that owns the tool, like filesystem",
                 },
                 "tool": {
                     "type": "string",
-                    "description": "The tool you want to explore, like searchVideos",
+                    "description": "The tool you want to explore, like read_file",
                 },
             },
             "required": ["server", "tool"],
@@ -123,13 +142,13 @@ CODE_MODE_TOOLS = [
     },
     {
         "name": "executeToolCode",
-        "description": 'Executes Python code in a sandboxed Starlark interpreter with MCP server tool access. Servers are exposed as global objects: result = serverName.toolName(param="value"). This is the final step of the four-tool code mode workflow: listToolFiles -> readToolFile -> (optional) getToolDocs -> executeToolCode. If you have not already read a tool\'s .pyi stub in this conversation, do that before writing code. Do NOT guess callable tool names from natural language or stale assumptions; use the exact identifier returned by listToolFiles/readToolFile. STARLARK DIFFERENCES FROM PYTHON — READ BEFORE WRITING CODE: 1. NO try/except/finally/raise — error handling is not supported, and tool failures cannot be caught inside Starlark. 2. NO classes — use dicts and functions. 3. NO imports, direct network access, or direct filesystem access — use MCP tools instead. 4. NO is operator — use == for comparison. 5. NO f-strings — use % formatting: "Hello %s, count=%d" % (name, n). 6. Each executeToolCode call runs in a FRESH ISOLATED SCOPE — no variables, functions, or state persist between calls. Re-fetch data or store it via MCP tools (e.g., SQLite, FileSystem) if needed across calls. SYNTAX NOTES: • Synchronous calls — NO async/await: result = server.tool(arg="value") • Use keyword arguments: server.tool(param="value") NOT server.tool({"param": "value"}) • Access dict values with brackets: result["key"] NOT result.key • Use print() for logging/debugging • List comprehensions: [x for x in items if x["active"]] • String escapes work normally: "line1\\nline2" produces a newline • Triple-quoted strings for multiline: """multi\\nline""" • chr(10) for newline character, chr(9) for tab • To return a value, assign to \'result\': result = computed_value • MCP tool calls are timeout-limited; avoid long or infinite loops AVAILABLE BUILTINS: print, len, range, enumerate, zip, sorted, reversed, min, max, int, float, str, bool, list, dict, tuple, set, hasattr, getattr, type, chr, ord, any, all, hash, repr. RETRY POLICY: Retry after fixing syntax or logic errors, especially for read-only flows. Before rerunning code that already made tool calls, inspect prior outputs and avoid replaying stateful operations.',
+        "description": 'Executes Python-like (Starlark) code in a sandboxed interpreter with MCP tool access as Server.tool_name(param=value) (e.g., result = filesystem.read_file(path=".")). Final step of listToolFiles -> readToolFile -> (optional) getToolDocs -> executeToolCode; read the stub first and use the exact callable name shown. Security: L1 code validation (no imports/classes/file-IO/network primitives), L2 sandboxed runtime (no external modules, no filesystem/network/process access except via MCP tools, memory isolation), L3 bounded execution timeout, L4 Tool ACL (only tools_to_execute-allowed CodeMode servers/tools are visible). STARLARK RULES: no try/except/raise, no classes, no imports, no f-strings (use % formatting), no `is` (use ==), synchronous calls only, dict access via result["key"], assign output to `result`. Each call runs in a FRESH ISOLATED SCOPE (no state persists); print() output is captured to logs. Returns {"result": ..., "logs": [...]}.',
         "inputSchema": {
             "type": "object",
             "properties": {
                 "code": {
                     "type": "string",
-                    "description": 'Code that calls tools with result = call_tool("server-name", "tool-name", param1="value1", param2="value2") — set result to your final answer',
+                    "description": 'Starlark code calling tools as result = server_name.tool_name(param="value") — assign `result` to your final answer',
                 }
             },
             "required": ["code"],
@@ -156,6 +175,10 @@ class Gateway:
         self._sessions: dict[str, SessionInfo] = {}
         self.start_time: float = time.monotonic()
         self._last_loop_tick: float = time.monotonic()
+        self._heartbeat_task: asyncio.Task[None] | None = None
+        self._sse_lock = asyncio.Lock()
+        self._post_sem = asyncio.Semaphore(MAX_POST_CONCURRENT)
+        self._post_inflight = 0
         self.metrics = MetricsRegistry()
         # pre-register common metrics
         self.metrics.counter(
@@ -180,6 +203,13 @@ class Gateway:
             "registry_operations_total", "Registry add/remove/update counts", ["op"]
         )
         self.metrics.gauge("gateway_sessions_active", "Current SSE sessions", [])
+        self.metrics.gauge("gateway_post_inflight", "Current POST /mcp inflight", [])
+        self.metrics.counter(
+            "gateway_post_total", "POST /mcp count by status", ["status"]
+        )
+        self.metrics.counter(
+            "gateway_sse_dropped_total", "Dropped SSE messages (queue full)", ["reason"]
+        )
         registry.ensure()
         try:
             registry._metrics = self.metrics  # type: ignore[attr-defined]
@@ -189,6 +219,28 @@ class Gateway:
             self.code_mode.sandbox._metrics = self.metrics  # type: ignore[attr-defined]
         except Exception:
             pass
+        from contextlib import asynccontextmanager as _acm
+
+        gateway_self = self
+
+        @_acm
+        async def _lifespan(app):  # type: ignore[no-untyped-def]
+            try:
+                loop = asyncio.get_running_loop()
+                if (
+                    gateway_self._heartbeat_task is None
+                    or gateway_self._heartbeat_task.done()
+                ):
+                    gateway_self._heartbeat_task = loop.create_task(
+                        gateway_self._heartbeat()
+                    )
+            except RuntimeError:
+                pass
+            try:
+                yield
+            finally:
+                await gateway_self.aclose()
+
         self.app = Starlette(
             routes=[
                 Route("/health", self._health, methods=["GET"]),
@@ -198,12 +250,12 @@ class Gateway:
                 Route("/mcp", self._mcp_sse, methods=["GET"]),
                 Route("/mcp", self._mcp_post, methods=["POST"]),
                 Route("/mcp/messages", self._mcp_post, methods=["POST"]),
-            ]
+            ],
+            lifespan=_lifespan,
         )
-        # order outer→inner: Correlation→Metrics→Logging→CSP/Security
+        # order outer→inner: Correlation→Metrics→Logging→Security
         # Starlette last added = outermost, so add innermost first
-        self.app.add_middleware(_CSPMiddleware)
-        self.app.add_middleware(_SecurityHeadersMiddleware)
+        self.app.add_middleware(_SecurityMiddleware)
         self.app.add_middleware(LoggingMiddleware)
         self.app.add_middleware(MetricsMiddleware, registry=self.metrics)
         self.app.add_middleware(CorrelationMiddleware)
@@ -214,12 +266,24 @@ class Gateway:
         self.app.state.start_time = self.start_time  # type: ignore[attr-defined]
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(self._heartbeat())
+            self._heartbeat_task = loop.create_task(self._heartbeat())
         except RuntimeError:
             pass
 
+    async def aclose(self) -> None:
+        task = self._heartbeat_task
+        self._heartbeat_task = None
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+
     def _create_session(self, session_id: str) -> SessionInfo:
-        info = SessionInfo(queue=asyncio.Queue())
+        info = SessionInfo(queue=asyncio.Queue(maxsize=MAX_QUEUE))
         self._sessions[session_id] = info
         try:
             self.metrics.set("gateway_sessions_active", float(len(self._sessions)), {})
@@ -227,7 +291,9 @@ class Gateway:
             pass
         return info
 
-    def cleanup_expired_sessions(self, max_idle_seconds: float = 300.0) -> int:
+    def cleanup_expired_sessions(
+        self, max_idle_seconds: float = SSRF_IDLE_TIMEOUT
+    ) -> int:
         now = time.monotonic()
         expired = [
             sid
@@ -236,7 +302,18 @@ class Gateway:
         ]
         for sid in expired:
             info = self._sessions.pop(sid)
-            info.queue.put_nowait(None)
+            try:
+                info.queue.put_nowait(None)
+            except asyncio.QueueFull:
+                try:
+                    while True:
+                        info.queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                try:
+                    info.queue.put_nowait(None)
+                except asyncio.QueueFull:
+                    pass
         if expired:
             try:
                 self.metrics.set(
@@ -261,7 +338,16 @@ class Gateway:
             }
 
         try:
-            result = self._handle_method(method, params)
+            if (
+                method == "tools/call"
+                and isinstance(params, dict)
+                and params.get("name") == "executeToolCode"
+            ):
+                # Starlark sandbox blocks (ThreadPool wait + asyncio.run inside);
+                # never hold the event loop: offload the whole tool call.
+                result = await asyncio.to_thread(self._handle_method, method, params)
+            else:
+                result = self._handle_method(method, params)
             response = {"jsonrpc": "2.0", "id": req_id, "result": result}
         except InvalidParamsError as e:
             data = _safe_error_data(e)
@@ -299,29 +385,56 @@ class Gateway:
         if session_id and session_id in self._sessions:
             info = self._sessions[session_id]
             info.last_activity = time.monotonic()
-            await info.queue.put(response)
+            try:
+                info.queue.put_nowait(response)
+            except asyncio.QueueFull:
+                try:
+                    self.metrics.inc(
+                        "gateway_sse_dropped_total", {"reason": "queue_full"}
+                    )
+                except Exception:
+                    pass
 
         return response
 
     async def _heartbeat(self) -> None:
         while True:
             self._last_loop_tick = time.monotonic()
-            await asyncio.sleep(1)
+            try:
+                self.cleanup_expired_sessions(MAX_IDLE_SECONDS)
+            except Exception:
+                pass
+            await asyncio.sleep(30)
 
     async def _health(self, request: Request) -> JSONResponse:
         return await handle_health(request)
 
     async def _mcp_sse(self, request: Request) -> StreamingResponse:
-        session_id = str(uuid.uuid4())
-        info = self._create_session(session_id)
+        # per-process gate: lock makes concurrent check-and-create atomic,
+        # so 129 concurrent GET /mcp deterministically yields one 429.
+        async with self._sse_lock:
+            if len(self._sessions) >= MAX_CONCURRENT_SSE:
+                return JSONResponse(
+                    {"detail": "too many sessions"},
+                    status_code=429,
+                    headers={"Retry-After": "30"},
+                )  # type: ignore[return-value]
+            session_id = str(uuid.uuid4())
+            info = self._create_session(session_id)
 
         async def event_stream():
             try:
                 yield f"event: endpoint\ndata: /mcp/messages?session_id={session_id}\n\n"
                 while True:
-                    msg = await info.queue.get()
+                    try:
+                        msg = await asyncio.wait_for(
+                            info.queue.get(), timeout=MAX_IDLE_SECONDS
+                        )
+                    except TimeoutError:
+                        break
                     if msg is None:
                         break
+                    info.last_activity = time.monotonic()
                     yield f"event: message\ndata: {json.dumps(msg)}\n\n"
             finally:
                 self._sessions.pop(session_id, None)
@@ -343,27 +456,84 @@ class Gateway:
         )
 
     async def _mcp_post(self, request: Request) -> JSONResponse:
-        session_id = request.query_params.get("session_id")
-        body = await self._read_limited_json(request)
+        # Slow-loris guard: body is read OUTSIDE the POST slot with a bounded
+        # timeout so a stalled sender never holds concurrency budget.
+        # Slot wait itself is bounded -> 429 + Retry-After parity with SSE.
+        try:
+            body = await asyncio.wait_for(
+                self._read_limited_json(request), timeout=POST_READ_TIMEOUT
+            )
+        except TimeoutError:
+            try:
+                self.metrics.inc("gateway_post_total", {"status": "rejected"})
+            except Exception:
+                pass
+            return JSONResponse({"detail": "read timeout"}, status_code=408)
         if isinstance(body, JSONResponse):
+            try:
+                self.metrics.inc("gateway_post_total", {"status": "rejected"})
+            except Exception:
+                pass
             return body
-        response = await self._handle_post(body, session_id=session_id)
-        return JSONResponse(response)
+        try:
+            await asyncio.wait_for(
+                self._post_sem.acquire(), timeout=POST_ACQUIRE_TIMEOUT
+            )
+        except TimeoutError:
+            try:
+                self.metrics.inc("gateway_post_total", {"status": "rejected"})
+            except Exception:
+                pass
+            return JSONResponse(
+                {"detail": "too many requests"},
+                status_code=429,
+                headers={"Retry-After": "1"},
+            )
+        self._post_inflight += 1
+        try:
+            try:
+                self.metrics.set(
+                    "gateway_post_inflight", float(self._post_inflight), {}
+                )
+            except Exception:
+                # WHY broad: metrics must never break the request path; any
+                # registry error falls back to serving without instrumentation.
+                pass
+            try:
+                session_id = request.query_params.get("session_id")
+                response = await self._handle_post(body, session_id=session_id)
+                try:
+                    self.metrics.inc("gateway_post_total", {"status": "ok"})
+                except Exception:
+                    pass
+                return JSONResponse(response)
+            finally:
+                self._post_inflight -= 1
+                try:
+                    self.metrics.set(
+                        "gateway_post_inflight", float(self._post_inflight), {}
+                    )
+                except Exception:
+                    pass
+        finally:
+            self._post_sem.release()
 
     async def _read_limited_json(
         self, request: Request
     ) -> dict[str, Any] | JSONResponse:
         clen = request.headers.get("content-length")
-        if clen and clen.isdigit() and int(clen) > 1_048_576:
+        if clen and clen.isdigit() and int(clen) > MAX_BODY_BYTES:
             return JSONResponse({"detail": "payload too large"}, status_code=413)
         body = b""
         async for chunk in request.stream():
             body += chunk
-            if len(body) > 1_048_576:
+            if len(body) > MAX_BODY_BYTES:
                 return JSONResponse({"detail": "payload too large"}, status_code=413)
         try:
             return json.loads(body.decode("utf-8") if body else "{}")
-        except Exception:
+        except (ValueError, UnicodeError):
+            # WHY narrow: only malformed JSON/encoding maps to 400; stream
+            # errors already surfaced above, never mask cancellation.
             return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
 
     def _handle_method(self, method: str, params: dict[str, Any]) -> dict[str, Any]:

@@ -14,7 +14,7 @@ def registry(tmp_path):
     config = MCPServerConfig(
         name="youtube",
         type="remote",
-        url="http://localhost:3001/mcp",
+        url="https://api.example.com/mcp",
     )
     tools = [
         ToolInfo(

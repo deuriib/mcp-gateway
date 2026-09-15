@@ -56,4 +56,20 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.4",
     "python-semantic-release>=10.0.0",
+    "coverage[toml]>=7.16.0",
+    "pytest-cov>=7.1.0",
 ]
+
+[tool.coverage.run]
+branch = true
+source = ["src/mcp_gway"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+

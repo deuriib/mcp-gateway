@@ -5,10 +5,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 import re
 import secrets
-import stat
 import string
 import uuid
 import webbrowser
@@ -24,75 +22,10 @@ def _validate_server_name(name: str) -> None:
 
 
 def _secure_atomic_write(path: Path, content: str) -> None:
-    if path.is_symlink():
-        raise ValueError("refusing to write through symlink")
-    try:
-        st = os.lstat(path) if path.exists() else None
-        if st is not None and stat.S_ISLNK(st.st_mode):
-            raise ValueError("refusing to write through symlink")
-    except ValueError:
-        raise
-    except Exception:
-        pass
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    if tmp.is_symlink():
-        raise ValueError("tmp path is symlink")
-    try:
-        st2 = os.lstat(tmp) if tmp.exists() else None
-        if st2 is not None and stat.S_ISLNK(st2.st_mode):
-            raise ValueError("tmp path is symlink")
-    except ValueError:
-        raise
-    except Exception:
-        pass
-    if tmp.exists():
-        try:
-            tmp.unlink()
-        except Exception:
-            pass
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
-            f.flush()
-            try:
-                os.fsync(f.fileno())
-            except Exception:
-                pass
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except Exception:
-            pass
-        raise
-    try:
-        os.chmod(tmp, 0o600)
-    except Exception:
-        pass
-    if path.is_symlink():
-        try:
-            os.unlink(tmp)
-        except Exception:
-            pass
-        raise ValueError("refusing to replace symlink")
-    try:
-        st_final = os.lstat(path) if path.exists() else None
-        if st_final is not None and stat.S_ISLNK(st_final.st_mode):
-            try:
-                os.unlink(tmp)
-            except Exception:
-                pass
-            raise ValueError("refusing to replace symlink")
-    except ValueError:
-        raise
-    except Exception:
-        pass
-    tmp.replace(path)
-    try:
-        os.chmod(path, 0o600)
-    except Exception:
-        pass
+    """Delegate to the shared secureio helper (single symlink-safe impl)."""
+    from mcp_gway.secureio import secure_atomic_write_text
+
+    secure_atomic_write_text(path, content)
 
 
 import httpx2
@@ -101,6 +34,10 @@ from mcp.shared.auth import (
     OAuthClientMetadata,
     OAuthToken,
 )
+
+from mcp_gway.models import SSRF_IDLE_TIMEOUT, SSRF_TIMEOUT
+
+_OAUTH_HTTP_TIMEOUT = SSRF_TIMEOUT
 
 
 class FileTokenStorage:
@@ -242,7 +179,9 @@ class OAuthCallbackServer:
         if last_exc:
             raise last_exc
 
-    async def wait_for_callback(self, timeout: float = 300.0) -> dict[str, str] | None:
+    async def wait_for_callback(
+        self, timeout: float = SSRF_IDLE_TIMEOUT
+    ) -> dict[str, str] | None:
         """Wait for the OAuth callback."""
         try:
             await asyncio.wait_for(self._event.wait(), timeout=timeout)
@@ -286,74 +225,116 @@ def _parse_resource_metadata_url(www_auth: str) -> str | None:
     return None
 
 
+def _require_https_or_none(url: str | None) -> str | None:
+    """Return url when https, else None (fail-closed for OAuth discovery)."""
+    if not url:
+        return None
+    try:
+        from mcp_gway.models import _require_https
+
+        _require_https(url)
+    except ValueError:
+        return None
+    return url
+
+
 async def discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
     """Discover OAuth metadata from the server.
 
     First checks Protected Resource Metadata (RFC 8707) for the authorization server,
     then discovers OAuth metadata from that server. Supports WWW-Authenticate
-    header with resource_metadata per MCP spec.
+    header with resource_metadata per MCP spec. All URLs are https-only
+    fail-closed ([reason=https_only]); http candidates are skipped, never fetched.
     """
-    async with httpx2.AsyncClient(timeout=8.0) as client:
-        # Step 0: Try WWW-Authenticate header from 401 as per MCP OAuth spec
-        prm_from_header: str | None = None
+    from mcp_gway.models import _require_https, avalidate_url_ssrf, ssrf_get
+
+    try:
+        _require_https(server_url)
+    except ValueError:
+        return None
+
+    _discovery_timeout = SSRF_TIMEOUT
+    _ = (_discovery_timeout, _OAUTH_HTTP_TIMEOUT)
+    try:
+        await avalidate_url_ssrf(server_url)
+    except ValueError:
+        return None
+    # Step 0: Try WWW-Authenticate header from 401 as per MCP OAuth spec
+    prm_from_header: str | None = None
+    try:
+        resp = await ssrf_get(server_url)
+        if resp.status_code == 401:
+            www_auth = resp.headers.get("www-authenticate", "") or resp.headers.get(
+                "WWW-Authenticate", ""
+            )
+            prm_from_header = _parse_resource_metadata_url(www_auth)
+            if prm_from_header is not None:
+                try:
+                    _require_https(prm_from_header)
+                    await avalidate_url_ssrf(prm_from_header)
+                except ValueError:
+                    prm_from_header = None
+    except Exception:  # noqa: S112
+        pass
+
+    # Step 1: Try to get Protected Resource Metadata
+    parsed = urlparse(server_url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+    path = parsed.path or "/mcp"
+
+    prm_urls: list[str] = []
+    if prm_from_header:
+        prm_urls.append(prm_from_header)
+    prm_urls.extend(
+        [
+            f"{base_url}/.well-known/oauth-protected-resource{path}",
+            f"{base_url}/.well-known/oauth-protected-resource",
+        ]
+    )
+
+    auth_server_url = None
+    for url in prm_urls:
         try:
-            resp = await client.get(server_url, follow_redirects=True)
-            if resp.status_code == 401:
-                www_auth = resp.headers.get("www-authenticate", "") or resp.headers.get(
-                    "WWW-Authenticate", ""
-                )
-                prm_from_header = _parse_resource_metadata_url(www_auth)
+            _require_https(url)
+            await avalidate_url_ssrf(url)
+            response = await ssrf_get(url)
+            if response.status_code == 200:
+                prm = response.json()
+                auth_servers = prm.get("authorization_servers", [])
+                if auth_servers:
+                    cand = auth_servers[0]
+                    try:
+                        _require_https(cand)
+                        await avalidate_url_ssrf(cand)
+                    except ValueError:
+                        continue
+                    auth_server_url = cand
+                    break
         except Exception:  # noqa: S112
-            pass
+            continue
 
-        # Step 1: Try to get Protected Resource Metadata
-        parsed = urlparse(server_url)
-        base_url = f"{parsed.scheme}://{parsed.netloc}"
-        path = parsed.path or "/mcp"
+    # Step 2: Discover OAuth metadata from authorization server
+    if auth_server_url:
+        discovery_urls = [
+            f"{auth_server_url}/.well-known/oauth-authorization-server",
+            f"{auth_server_url}/.well-known/openid-configuration",
+        ]
+    else:
+        # Fallback to standard discovery on the server URL
+        discovery_urls = [
+            f"{base_url}/.well-known/oauth-authorization-server",
+            f"{base_url}/.well-known/openid-configuration",
+        ]
 
-        prm_urls: list[str] = []
-        if prm_from_header:
-            prm_urls.append(prm_from_header)
-        prm_urls.extend(
-            [
-                f"{base_url}/.well-known/oauth-protected-resource{path}",
-                f"{base_url}/.well-known/oauth-protected-resource",
-            ]
-        )
-
-        auth_server_url = None
-        for url in prm_urls:
-            try:
-                response = await client.get(url, follow_redirects=True)
-                if response.status_code == 200:
-                    prm = response.json()
-                    auth_servers = prm.get("authorization_servers", [])
-                    if auth_servers:
-                        auth_server_url = auth_servers[0]
-                        break
-            except Exception:  # noqa: S112
-                continue
-
-        # Step 2: Discover OAuth metadata from authorization server
-        if auth_server_url:
-            discovery_urls = [
-                f"{auth_server_url}/.well-known/oauth-authorization-server",
-                f"{auth_server_url}/.well-known/openid-configuration",
-            ]
-        else:
-            # Fallback to standard discovery on the server URL
-            discovery_urls = [
-                f"{base_url}/.well-known/oauth-authorization-server",
-                f"{base_url}/.well-known/openid-configuration",
-            ]
-
-        for url in discovery_urls:
-            try:
-                response = await client.get(url, follow_redirects=True)
-                if response.status_code == 200:
-                    return response.json()
-            except Exception:  # noqa: S112
-                continue
+    for url in discovery_urls:
+        try:
+            _require_https(url)
+            await avalidate_url_ssrf(url)
+            response = await ssrf_get(url)
+            if response.status_code == 200:
+                return response.json()
+        except Exception:  # noqa: S112
+            continue
 
     return None
 
@@ -386,15 +367,29 @@ async def run_oauth_flow(
     if output_callback is None:
         output_callback = lambda msg: None
 
+    from mcp_gway.models import _require_https, avalidate_url_ssrf, ssrf_post
+
+    _flow_timeout = SSRF_TIMEOUT
+    created_client: httpx2.AsyncClient | None = None
+    try:
+        _require_https(server_url)
+        await avalidate_url_ssrf(server_url)
+    except ValueError as e:
+        output_callback(f"Error: blocked server URL: {e}")
+        return None
+
     storage = FileTokenStorage(server_name)
 
     # Check for existing valid tokens
     existing_tokens = await storage.get_tokens()
     if existing_tokens and existing_tokens.access_token:
         output_callback("Using existing token...")
-        return httpx2.AsyncClient(
-            headers={"Authorization": f"Bearer {existing_tokens.access_token}"}
+        created_client = httpx2.AsyncClient(
+            timeout=_flow_timeout,
+            headers={"Authorization": f"Bearer {existing_tokens.access_token}"},
+            follow_redirects=False,
         )
+        return created_client
 
     # Discover OAuth metadata
     output_callback(f"Discovering OAuth metadata for {server_url}...")
@@ -415,6 +410,18 @@ async def run_oauth_flow(
 
     if not auth_endpoint or not token_endpoint:
         output_callback("Error: Missing authorization or token endpoint in metadata.")
+        return None
+    try:
+        _require_https(auth_endpoint)
+        _require_https(token_endpoint)
+        if registration_endpoint:
+            _require_https(registration_endpoint)
+        await avalidate_url_ssrf(auth_endpoint)
+        await avalidate_url_ssrf(token_endpoint)
+        if registration_endpoint:
+            await avalidate_url_ssrf(registration_endpoint)
+    except ValueError as e:
+        output_callback(f"Error: blocked OAuth endpoint: {e}")
         return None
 
     # Generate PKCE parameters
@@ -463,44 +470,43 @@ async def run_oauth_flow(
 
     if not is_manual and registration_endpoint:
         output_callback("Registering OAuth client...")
-        async with httpx2.AsyncClient() as http:
-            reg_request = {
-                "client_name": "MCP Gateway",
-                "redirect_uris": [callback_server.callback_url],
-                "grant_types": ["authorization_code", "refresh_token"],
-                "response_types": ["code"],
-                "token_endpoint_auth_method": "none",
-            }
-            try:
-                reg_response = await http.post(
-                    registration_endpoint,
-                    json=reg_request,
-                    headers={"Content-Type": "application/json"},
+        reg_request = {
+            "client_name": "MCP Gateway",
+            "redirect_uris": [callback_server.callback_url],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "none",
+        }
+        try:
+            reg_response = await ssrf_post(
+                registration_endpoint,
+                headers={"Content-Type": "application/json"},
+                json=reg_request,  # type: ignore[arg-type]
+            )
+            if reg_response.status_code in (200, 201):
+                reg_data = reg_response.json()
+                client_id = reg_data.get("client_id", client_id)
+                client_secret = reg_data.get("client_secret")
+                await storage.set_client_info(
+                    OAuthClientInformationFull(
+                        client_id=client_id,
+                        client_secret=client_secret,
+                        **{
+                            k: v
+                            for k, v in reg_data.items()
+                            if k not in ("client_id", "client_secret")
+                        },
+                    )
                 )
-                if reg_response.status_code in (200, 201):
-                    reg_data = reg_response.json()
-                    client_id = reg_data.get("client_id", client_id)
-                    client_secret = reg_data.get("client_secret")
-                    await storage.set_client_info(
-                        OAuthClientInformationFull(
-                            client_id=client_id,
-                            client_secret=client_secret,
-                            **{
-                                k: v
-                                for k, v in reg_data.items()
-                                if k not in ("client_id", "client_secret")
-                            },
-                        )
-                    )
-                    output_callback(f"Registered client: {client_id[:16]}...")
-                else:
-                    output_callback(
-                        f"Warning: Client registration failed ({reg_response.status_code}), using default client_id"
-                    )
-            except Exception as e:
+                output_callback(f"Registered client: {client_id[:16]}...")
+            else:
                 output_callback(
-                    f"Warning: Client registration failed: {e}, using default client_id"
+                    f"Warning: Client registration failed ({reg_response.status_code}), using default client_id"
                 )
+        except Exception as e:
+            output_callback(
+                f"Warning: Client registration failed: {e}, using default client_id"
+            )
 
     # Build authorization URL
     auth_params = {
@@ -523,10 +529,14 @@ async def run_oauth_flow(
 
     # Wait for callback
     output_callback("Waiting for authentication callback...")
-    callback_result = await callback_server.wait_for_callback(timeout=300.0)
+    callback_result = await callback_server.wait_for_callback(timeout=SSRF_IDLE_TIMEOUT)
 
     if not callback_result or not callback_result.get("code"):
         output_callback("Error: Authentication timed out or no code received.")
+        return None
+
+    if callback_result.get("state") != state:
+        output_callback("Error: OAuth state mismatch (possible CSRF).")
         return None
 
     # Exchange code for tokens
@@ -543,38 +553,50 @@ async def run_oauth_flow(
     if client_secret:
         token_data["client_secret"] = client_secret
 
-    async with httpx2.AsyncClient() as client:
-        try:
-            response = await client.post(
-                token_endpoint,
-                data=token_data,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
+    try:
+        response = await ssrf_post(
+            token_endpoint,
+            data=token_data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+        if response.status_code == 200:
+            token_response = response.json()
+            tokens = OAuthToken(
+                access_token=token_response.get("access_token", ""),
+                token_type=token_response.get("token_type", "Bearer"),
+                refresh_token=token_response.get("refresh_token"),
+                expires_in=token_response.get("expires_in"),
             )
+            await storage.set_tokens(tokens)
+            output_callback("Authentication successful!")
 
-            if response.status_code == 200:
-                token_response = response.json()
-                tokens = OAuthToken(
-                    access_token=token_response.get("access_token", ""),
-                    token_type=token_response.get("token_type", "Bearer"),
-                    refresh_token=token_response.get("refresh_token"),
-                    expires_in=token_response.get("expires_in"),
-                )
-                await storage.set_tokens(tokens)
-                output_callback("Authentication successful!")
-
-                return httpx2.AsyncClient(
-                    headers={"Authorization": f"Bearer {tokens.access_token}"}
-                )
-            else:
-                output_callback(
-                    f"Error: Token exchange failed with status {response.status_code}"
-                )
-                output_callback(f"Response: {response.text[:200]}")
-                return None
-
-        except Exception as e:
-            output_callback(f"Error during token exchange: {e}")
+            created_client = httpx2.AsyncClient(
+                timeout=_flow_timeout,
+                headers={"Authorization": f"Bearer {tokens.access_token}"},
+                follow_redirects=False,
+            )
+            return created_client
+        else:
+            output_callback(
+                f"Error: Token exchange failed with status {response.status_code}"
+            )
+            output_callback(f"Response: {response.text[:200]}")
+            if created_client is not None:
+                try:
+                    await created_client.aclose()
+                except Exception:
+                    pass
             return None
+
+    except Exception as e:
+        output_callback(f"Error during token exchange: {e}")
+        if created_client is not None:
+            try:
+                await created_client.aclose()
+            except Exception:
+                pass
+        return None
 
 
 async def get_authenticated_client(server_name: str) -> httpx2.AsyncClient | None:
@@ -587,6 +609,8 @@ async def get_authenticated_client(server_name: str) -> httpx2.AsyncClient | Non
 
     if tokens and tokens.access_token:
         return httpx2.AsyncClient(
-            headers={"Authorization": f"Bearer {tokens.access_token}"}
+            timeout=SSRF_TIMEOUT,
+            headers={"Authorization": f"Bearer {tokens.access_token}"},
+            follow_redirects=False,
         )
     return None

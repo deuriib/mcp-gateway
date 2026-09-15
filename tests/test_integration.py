@@ -55,7 +55,7 @@ def test_full_flow(tmp_path, monkeypatch):
     # Add server
     result = runner.invoke(
         main,
-        ["add", "youtube", "--type", "remote", "--url", "http://localhost:3001/mcp"],
+        ["add", "youtube", "--type", "remote", "--url", "https://api.example.com/mcp"],
     )
     assert result.exit_code == 0
     assert "2 tools" in result.output

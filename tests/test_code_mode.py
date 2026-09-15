@@ -1,5 +1,7 @@
 """Tests for Code Mode meta-tools."""
 
+import json
+
 import pytest
 
 from mcp_gway.code_mode import CodeMode
@@ -13,7 +15,7 @@ def code_mode(tmp_path):
     config = MCPServerConfig(
         name="youtube",
         type="remote",
-        url="http://localhost:3001/mcp",
+        url="https://api.example.com/mcp",
     )
     tools = [
         ToolInfo(
@@ -71,13 +73,7 @@ def test_get_tool_docs_unknown_tool(code_mode):
     assert "not found" in result.lower()
 
 
-# --- call_tool injection tests ---
-
-
-def test_sandbox_has_call_tool(code_mode):
-    """The sandbox should have call_tool injected."""
-    assert "call_tool" in code_mode.sandbox._custom_globals
-    assert callable(code_mode.sandbox._custom_globals["call_tool"])
+# --- Server struct injection ---
 
 
 def test_sandbox_has_server_structs(code_mode):
@@ -88,39 +84,32 @@ def test_sandbox_has_server_structs(code_mode):
     assert hasattr(struct, "get_video")
 
 
+def test_sandbox_no_call_tool(code_mode):
+    """call_tool should NOT be injected anymore."""
+    assert "call_tool" not in code_mode.sandbox._custom_globals
+
+
 def test_execute_code_with_server_struct(code_mode, monkeypatch):
     """Execute code that uses the injected server struct."""
 
-    # Mock the async MCP call to avoid real network
     async def mock_call_tool_async(config, tool_name, arguments):
         return {"query": arguments.get("query", ""), "items": []}
 
     monkeypatch.setattr(
         code_mode.server_factory, "_call_tool_async", mock_call_tool_async
     )
-    result = code_mode.execute_tool_code('result = youtube.search(query="test")')
-    assert "query" in result
-
-
-def test_execute_code_with_call_tool(code_mode, monkeypatch):
-    """Execute code that uses the call_tool function."""
-
-    async def mock_call_tool_async(config, tool_name, arguments):
-        return {"tool": tool_name, "args": arguments}
-
-    monkeypatch.setattr(
-        code_mode.server_factory, "_call_tool_async", mock_call_tool_async
+    result = json.loads(
+        code_mode.execute_tool_code('result = youtube.search(query="test")')
     )
-    result = code_mode.execute_tool_code(
-        'result = call_tool("youtube", "search", query="hello")'
-    )
-    assert "search" in result
+    assert result["result"]["query"] == "test"
+    assert result["logs"] == []
 
 
-def test_execute_code_call_tool_not_found(code_mode):
-    """call_tool should raise error for unknown server."""
-    with pytest.raises(Exception, match="nonexistent"):
-        code_mode.execute_tool_code('result = call_tool("nonexistent", "tool")')
+def test_execute_code_print_captured(code_mode):
+    """print() output should be captured in logs."""
+    result = json.loads(code_mode.execute_tool_code('print("hello")\nresult = 1'))
+    assert result["result"] == 1
+    assert result["logs"] == ["hello"]
 
 
 # --- Hyphenated tool name tests ---
@@ -133,7 +122,7 @@ def code_mode_hyphens(tmp_path):
     config = MCPServerConfig(
         name="context7",
         type="remote",
-        url="http://localhost:3002/mcp",
+        url="https://api.example.com/mcp",
     )
     tools = [
         ToolInfo(
@@ -166,10 +155,8 @@ def test_hyphenated_tools_injected(code_mode_hyphens):
     """Server with hyphenated tool names should be injected with sanitized attrs."""
     assert "context7" in code_mode_hyphens.sandbox._modules
     struct = code_mode_hyphens.sandbox._modules["context7"]
-    # Attribute names should be sanitized (underscores, not hyphens)
     assert hasattr(struct, "query_docs")
     assert hasattr(struct, "resolve_library_id")
-    # Original hyphenated names should NOT be attributes
     assert not hasattr(struct, "query-docs")
 
 
@@ -182,24 +169,77 @@ def test_execute_hyphenated_tool_via_struct(code_mode_hyphens, monkeypatch):
     monkeypatch.setattr(
         code_mode_hyphens.server_factory, "_call_tool_async", mock_call_tool_async
     )
-    # Use sanitized name (underscores) in Starlark code
-    result = code_mode_hyphens.execute_tool_code(
-        'result = context7.query_docs(library_id="react", query="hooks")'
+    result = json.loads(
+        code_mode_hyphens.execute_tool_code(
+            'result = context7.query_docs(library_id="react", query="hooks")'
+        )
     )
-    # But the MCP call should use the ORIGINAL hyphenated name
-    assert "query-docs" in result
+    assert result["result"]["tool"] == "query-docs"
 
 
-def test_execute_hyphenated_tool_via_call_tool(code_mode_hyphens, monkeypatch):
-    """call_tool should still work with original hyphenated tool names."""
+# --- Code validation ---
 
-    async def mock_call_tool_async(config, tool_name, arguments):
-        return {"tool": tool_name}
 
-    monkeypatch.setattr(
-        code_mode_hyphens.server_factory, "_call_tool_async", mock_call_tool_async
+def test_execute_rejects_imports(code_mode):
+    with pytest.raises(Exception, match="rejects"):
+        code_mode.execute_tool_code("import os\nresult = 1")
+
+
+def test_execute_rejects_classes(code_mode):
+    with pytest.raises(Exception, match="rejects"):
+        code_mode.execute_tool_code("class X:\n  pass\nresult = 1")
+
+
+# --- Agent Mode ---
+
+
+def test_classify_tool_calls_all_manual(code_mode):
+    """tools_to_auto_execute=[] (default) means all tool calls are manual."""
+    calls = [
+        {"server": "youtube", "tool": "search", "arguments": {}, "id": "1"},
+    ]
+    auto, manual = code_mode.classify_tool_calls(calls)
+    assert auto == []
+    assert len(manual) == 1
+
+
+def test_classify_tool_calls_all_auto(code_mode, monkeypatch):
+    """tools_to_auto_execute=['*'] means all are auto."""
+
+    def _always_auto(server, tool):
+        return True
+
+    monkeypatch.setattr(code_mode.server_factory, "is_auto_executable", _always_auto)
+    calls = [
+        {"server": "youtube", "tool": "search", "arguments": {}, "id": "1"},
+    ]
+    auto, manual = code_mode.classify_tool_calls(calls)
+    assert len(auto) == 1
+    assert manual == []
+
+
+def test_classify_tool_calls_partial_auto(tmp_path):
+    """Only named tools are auto."""
+    registry = Registry(servers_dir=tmp_path / "servers")
+    registry.add(
+        MCPServerConfig(
+            name="fs",
+            type="remote",
+            url="https://api.example.com/mcp",
+            tools_to_auto_execute=["read_file"],
+        ),
+        [
+            ToolInfo(name="read_file", description="read"),
+            ToolInfo(name="write_file", description="write"),
+        ],
     )
-    result = code_mode_hyphens.execute_tool_code(
-        'result = call_tool("context7", "resolve-library-id", library_name="react")'
-    )
-    assert "resolve-library-id" in result
+    cm = CodeMode(registry)
+    calls = [
+        {"server": "fs", "tool": "read_file", "arguments": {}},
+        {"server": "fs", "tool": "write_file", "arguments": {}},
+    ]
+    auto, manual = cm.classify_tool_calls(calls)
+    assert len(auto) == 1
+    assert auto[0]["tool"] == "read_file"
+    assert len(manual) == 1
+    assert manual[0]["tool"] == "write_file"

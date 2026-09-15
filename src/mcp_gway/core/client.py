@@ -82,109 +82,185 @@ async def _create_local_transport(
         yield read, write
 
 
+async def _require_authenticated_client(server_name: str) -> object:
+    """Fail-closed auth: never return None when force_auth is set.
+
+    Raises PermissionError when no tokens exist so callers can never pass
+    None into the SDK (which would silently downgrade to anonymous).
+    """
+    from mcp_gway.oauth import get_authenticated_client
+
+    http_client = await get_authenticated_client(server_name)
+    if http_client is None:
+        raise PermissionError(
+            "oauth authentication required but no tokens found [reason=auth_required]"
+        )
+    return http_client
+
+
 @asynccontextmanager
 async def _create_remote_transport(
     config: MCPServerConfig, *, force_auth: bool = False
 ) -> AsyncIterator[tuple[object, object]]:
+    """Remote transport via the SSRF port: https-only + async gate + pin + 8s/no-redirect httpx."""
+    from urllib.parse import urlparse as _up
+
+    from mcp_gway.models import (
+        SSRF_TIMEOUT,
+        _aresolve_host_ips,
+        _ensure_resolved_ips,
+        _normalize_host,
+        _pinned_dns,
+        _require_https,
+        avalidate_url_ssrf,
+    )
+
     url = config.url
     if not url:
         raise ValueError("url required for remote config")
+    _require_https(url)
+    await avalidate_url_ssrf(url)
+    host = _normalize_host(_up(url).hostname or "")
+    ips = await _aresolve_host_ips(host, use_cache=False)
+    _ensure_resolved_ips(ips)
     resolved_transport = getattr(config, "resolved_transport", None)
     headers = getattr(config, "headers", None)
     if resolved_transport == "streamable-http":
         from mcp.client.streamable_http import streamable_http_client
 
         if force_auth:
-            from mcp_gway.oauth import get_authenticated_client
-
-            http_client = await get_authenticated_client(config.name)
+            http_client = await _require_authenticated_client(config.name)
             try:
-                async with streamable_http_client(url, http_client=http_client) as (
-                    read,
-                    write,
-                ):
-                    yield read, write
+                async with _pinned_dns(host, ips):
+                    async with streamable_http_client(url, http_client=http_client) as (
+                        read,
+                        write,
+                    ):
+                        yield read, write
             finally:
                 if http_client is not None:
                     try:
                         await http_client.aclose()
                     except Exception:
+                        # WHY broad: transport teardown must not mask the
+                        # session error; close failures are best-effort.
                         pass
         elif headers:
             import httpx2
 
-            async with httpx2.AsyncClient(headers=headers) as hc:
-                async with streamable_http_client(url, http_client=hc) as (
-                    read,
-                    write,
-                ):
-                    yield read, write
+            async with httpx2.AsyncClient(
+                headers=headers, timeout=SSRF_TIMEOUT, follow_redirects=False
+            ) as hc:
+                async with _pinned_dns(host, ips):
+                    async with streamable_http_client(url, http_client=hc) as (
+                        read,
+                        write,
+                    ):
+                        yield read, write
         else:
-            async with streamable_http_client(url) as (
-                read,
-                write,
-            ):
-                yield read, write
+            import httpx2
+
+            async with httpx2.AsyncClient(
+                timeout=SSRF_TIMEOUT, follow_redirects=False
+            ) as hc:
+                async with _pinned_dns(host, ips):
+                    async with streamable_http_client(url, http_client=hc) as (
+                        read,
+                        write,
+                    ):
+                        yield read, write
     elif resolved_transport == "http":
+        import httpx2
         from mcp.client.sse import sse_client
+
+        def _factory(
+            headers: object = None, timeout: object = None, auth: object = None
+        ) -> object:
+            return httpx2.AsyncClient(
+                headers=headers,  # type: ignore[arg-type]
+                timeout=SSRF_TIMEOUT,
+                follow_redirects=False,
+                auth=auth,  # type: ignore[arg-type]
+            )
 
         sse_headers = None
         http_client = None
         if force_auth:
-            from mcp_gway.oauth import get_authenticated_client
-
-            http_client = await get_authenticated_client(config.name)
-            sse_headers = http_client.headers if http_client else None
+            http_client = await _require_authenticated_client(config.name)
+            sse_headers = http_client.headers
             try:
-                async with sse_client(url, headers=sse_headers) as (
-                    read,
-                    write,
-                ):
-                    yield read, write
+                async with _pinned_dns(host, ips):
+                    async with sse_client(
+                        url, headers=sse_headers, httpx_client_factory=_factory
+                    ) as (
+                        read,
+                        write,
+                    ):
+                        yield read, write
             finally:
                 if http_client is not None:
                     try:
                         await http_client.aclose()
                     except Exception:
+                        # WHY broad: same teardown rationale as above.
                         pass
         else:
             if headers:
                 sse_headers = headers
-            async with sse_client(url, headers=sse_headers) as (
-                read,
-                write,
-            ):
-                yield read, write
+            async with _pinned_dns(host, ips):
+                async with sse_client(
+                    url, headers=sse_headers, httpx_client_factory=_factory
+                ) as (
+                    read,
+                    write,
+                ):
+                    yield read, write
     else:
+        import httpx2
         from mcp.client.sse import sse_client
+
+        def _factory_default(
+            headers: object = None, timeout: object = None, auth: object = None
+        ) -> object:
+            return httpx2.AsyncClient(
+                headers=headers,  # type: ignore[arg-type]
+                timeout=SSRF_TIMEOUT,
+                follow_redirects=False,
+                auth=auth,  # type: ignore[arg-type]
+            )
 
         sse_headers = None
         http_client = None
         if force_auth:
-            from mcp_gway.oauth import get_authenticated_client
-
-            http_client = await get_authenticated_client(config.name)
-            sse_headers = http_client.headers if http_client else None
+            http_client = await _require_authenticated_client(config.name)
+            sse_headers = http_client.headers
             try:
-                async with sse_client(url, headers=sse_headers) as (
-                    read,
-                    write,
-                ):
-                    yield read, write
+                async with _pinned_dns(host, ips):
+                    async with sse_client(
+                        url, headers=sse_headers, httpx_client_factory=_factory_default
+                    ) as (
+                        read,
+                        write,
+                    ):
+                        yield read, write
             finally:
                 if http_client is not None:
                     try:
                         await http_client.aclose()
                     except Exception:
+                        # WHY broad: same teardown rationale as above.
                         pass
         else:
             if headers:
                 sse_headers = headers
-            async with sse_client(url, headers=sse_headers) as (
-                read,
-                write,
-            ):
-                yield read, write
+            async with _pinned_dns(host, ips):
+                async with sse_client(
+                    url, headers=sse_headers, httpx_client_factory=_factory_default
+                ) as (
+                    read,
+                    write,
+                ):
+                    yield read, write
 
 
 @asynccontextmanager

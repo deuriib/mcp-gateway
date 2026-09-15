@@ -18,7 +18,7 @@ def registry(tmp_path: Any) -> Registry:
     config = MCPServerConfig(
         name="youtube",
         type="remote",
-        url="http://localhost:3001/mcp",
+        url="https://api.example.com/mcp",
     )
     reg.add(config, [ToolInfo(name="search", description="Search videos")])
     return reg
