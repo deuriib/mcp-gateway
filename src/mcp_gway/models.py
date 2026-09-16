@@ -714,6 +714,10 @@ class MCPServerConfig(BaseModel):
 
     enabled: bool = True
     timeout: int = 5000
+    # FEAT-007 (BR-112): opt-in single retry when the TRANSPORT/connect phase
+    # fails (never after session.call_tool — non-idempotent side effects).
+    # Default off → zero behavior change for existing configs (ADR-012 decision 9).
+    retry_on_transport_error: bool = False
 
     # Bifrost CodeMode alignment: per-client opt-in + allow-list.
     # is_code_mode_client=False hides the server from CodeMode VFS/sandbox.

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from typing import Any
 
 from mcp_gway.registry import Registry
@@ -40,6 +41,8 @@ class ServerFactory:
 
     def __init__(self, registry: Registry) -> None:
         self._registry = registry
+        # FEAT-007: injected by Gateway (BR-111) — upstream tool telemetry.
+        self._metrics: object | None = None
 
     def is_auto_executable(self, server: str, tool: str) -> bool:
         """Bifrost Agent Mode classification: executable AND auto-approved."""
@@ -66,7 +69,15 @@ class ServerFactory:
     async def _call_tool_async(
         self, config: Any, tool_name: str, arguments: dict[str, Any]
     ) -> Any:
-        """Call an MCP tool asynchronously with a bounded per-config timeout."""
+        """Call an MCP tool asynchronously with a bounded per-config timeout.
+
+        FEAT-007 (BR-111/112/113): every call records upstream telemetry
+        (``upstream_tool_calls_total`` + ``upstream_tool_duration_seconds``,
+        classifying ``timeout`` vs ``error``). With opt-in
+        ``retry_on_transport_error`` the transport/connect/initialize phase is
+        retried exactly once — ``session.call_tool`` is never re-run, so a
+        non-idempotent tool cannot be executed twice on a transient blip.
+        """
         from mcp import ClientSession
 
         from mcp_gway.core import create_client_transport
@@ -78,12 +89,66 @@ class ServerFactory:
             timeout_sec = 5.0
         else:
             timeout_sec = raw_timeout / 1000
-        async with asyncio.timeout(timeout_sec):
-            async with create_client_transport(config) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    result = await session.call_tool(tool_name, arguments)
-                    return _extract_result(result)
+        server = getattr(config, "name", "unknown")
+        tool_label = _sanitize_identifier(tool_name) or "_other"
+        metrics = self._metrics
+        status = "error"
+        retried = False
+        start = time.perf_counter()
+        try:
+            from contextlib import AsyncExitStack
+
+            async def _setup(stack: Any) -> Any:
+                """Transport + initialize phase — the ONLY retry-eligible step.
+
+                At this point the tool call has not started, so re-running this
+                phase cannot duplicate a side effect (BR-112).
+                """
+                read, write = await stack.enter_async_context(
+                    create_client_transport(config)
+                )
+                session = await stack.enter_async_context(ClientSession(read, write))
+                await asyncio.wait_for(session.initialize(), timeout=timeout_sec)
+                return session
+
+            stack = AsyncExitStack()
+            try:
+                try:
+                    session = await _setup(stack)
+                except Exception:
+                    if not getattr(config, "retry_on_transport_error", False):
+                        raise
+                    retried = True
+                    await stack.aclose()
+                    stack = AsyncExitStack()
+                    session = await _setup(stack)
+                result = await asyncio.wait_for(
+                    session.call_tool(tool_name, arguments), timeout=timeout_sec
+                )
+                status = "ok"
+                return _extract_result(result)
+            finally:
+                await stack.aclose()
+        except BaseException as exc:  # noqa: BLE001 — telemetry classifies, then re-raises
+            status = "timeout" if isinstance(exc, TimeoutError) else "error"
+            raise
+        finally:
+            if metrics is not None:
+                try:
+                    metrics.inc(
+                        "upstream_tool_calls_total",
+                        {"server": server, "tool": tool_label, "status": status},
+                    )
+                    metrics.observe(
+                        "upstream_tool_duration_seconds",
+                        time.perf_counter() - start,
+                        {"server": server, "tool": tool_label},
+                    )
+                    if retried:
+                        metrics.inc("upstream_retries_total", {"server": server})
+                except Exception:
+                    # WHY broad: telemetry must never alter the tool outcome.
+                    pass
 
     def make_server_struct(self, server_name: str) -> object:
         """Create a Starlark-compatible server object.
