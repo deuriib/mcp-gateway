@@ -93,6 +93,7 @@ uv run ruff check src/ tests/            # Lint (CI parity)
 uv run ruff format --check src/ tests/   # Format check (CI parity)
 
 # CLI — OpenCode format (primary)
+# Alias: `mgw` is a 1:1 shortcut for `mcp-gway` (same `cli.main`); examples use canonical.
 mcp-gway add <name> --type remote --url <url> [--header "KEY=VALUE"] [--oauth-client-id ID] [--oauth-client-secret SECRET] [--oauth-scope SCOPE] [--timeout 5000] [--enabled] [--oauth-port 8989]
 # Shell-history warning: no secretos reales en --header/--oauth-client-secret; preferir `refresh --auth`.
 mcp-gway add <name> --type local --command "npx -y my-mcp" [--env KEY=VALUE] [--cwd /path] [--tools "*"]

@@ -20,6 +20,8 @@ A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) s
 pip install mcp-gway
 ```
 
+Both `mcp-gway` (canonical) and `mgw` (shortcut, 1:1) are exposed.
+
 Or with [mise](https://mise.jdx.dev/):
 
 ```bash

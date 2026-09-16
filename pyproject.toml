@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 mcp-gway = "mcp_gway.cli:main"
+mgw = "mcp_gway.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
