@@ -12,6 +12,7 @@ import logging
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Self
 
 import pytest
 from click.testing import CliRunner
@@ -22,10 +23,8 @@ from mcp_gway.models import MCPServerConfig, ToolInfo
 from mcp_gway.observability.logging import JSONFormatter
 from mcp_gway.observability.metrics import MetricsRegistry
 from mcp_gway.registry import Registry
-from mcp_gway.code_mode import CodeMode
 from mcp_gway.server_factory import ServerFactory
 from mcp_gway.stdio import StdioAdapter
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -90,7 +89,7 @@ class _FlakyCM:
         self.fails = fails
         self.enters = 0
 
-    def __call__(self, *_a: object, **_k: object) -> "_FlakyCM":
+    def __call__(self, *_a: object, **_k: object) -> _FlakyCM:
         """Make instance callable — matches create_client_transport(config) signature."""
         return self
 
@@ -111,11 +110,11 @@ class _FakeSession:
         self.fail_call = fail_call
         self.call_count = 0
 
-    def __call__(self, *_a: object, **_k: object) -> "_FakeSession":
+    def __call__(self, *_a: object, **_k: object) -> _FakeSession:
         """Make instance callable — matches ClientSession(read, write) signature."""
         return self
 
-    async def __aenter__(self) -> "_FakeSession":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *exc: object) -> bool:
@@ -220,10 +219,17 @@ async def test_ac004_discovery_observed_ok_and_error(monkeypatch) -> None:
         == 1
     )
 
-    async def _fail_cm(*_a: object, **_k: object) -> object:
-        raise ConnectionError("boom")
+    class _FailCM:
+        def __call__(self, *_a: object, **_k: object) -> _FailCM:
+            return self
 
-    monkeypatch.setattr("mcp_gway.core.client.create_client_transport", _fail_cm)
+        async def __aenter__(self) -> None:
+            raise ConnectionError("boom")
+
+        async def __aexit__(self, *exc: object) -> bool:
+            return False
+
+    monkeypatch.setattr("mcp_gway.core.client.create_client_transport", _FailCM())
     await discover_tools(cfg, metrics=reg)
     body = reg.exposition()
     assert (
@@ -251,7 +257,7 @@ def test_ac005_sse_disconnect_counted(tmp_path: Path, caplog) -> None:
     A short poll accommodates the event-loop scheduling delay.
     """
     gw = Gateway(_make_registry(tmp_path), host="127.0.0.1")
-    c = TestClient(gw.app, timeout=5.0)
+    c = TestClient(gw.app)
     with caplog.at_level(logging.WARNING, logger="mcp_gway.gateway"):
         with c.stream("GET", "/mcp") as resp:
             assert resp.status_code == 200
@@ -281,6 +287,13 @@ def test_ac006_aclose_emits_shutdown_summary(tmp_path: Path, caplog) -> None:
     assert int(rec.http_requests_total) >= 2
     assert rec.sessions_active == 0
     assert int(rec.sse_dropped_total) >= 0
+    # lifetime_seconds is recorded by aclose's own event loop; a short poll
+    # absorbs the loop-scheduling delay (same idiom as AC-005) so the
+    # assertion is stable regardless of run order.
+    for _ in range(100):
+        if gw.metrics.sum("lifetime_seconds") > 0.0:
+            break
+        time.sleep(0.02)
     assert gw.metrics.sum("lifetime_seconds") > 0.0
     payload = json.loads(JSONFormatter().format(rec))
     assert "uptime_seconds" in payload and "http_requests_total" in payload
@@ -533,7 +546,7 @@ def test_ac014_transport_retry_accepted_when_flagged(
         url="https://api.example.com/mcp",
         retry_on_transport_error=True,
     )
-    cm, session = _upstream_env(monkeypatch, fails=1)
+    cm, _session = _upstream_env(monkeypatch, fails=1)
     result = asyncio.run(sf._call_tool_async(cfg, "echo", {}))
     assert result == "ok"
     assert cm.enters == 2, "transport must be retried exactly once"

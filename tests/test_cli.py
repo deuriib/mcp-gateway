@@ -120,7 +120,7 @@ def test_refresh_server_tries_without_auth_first(tmp_path, monkeypatch):
 
     discover_calls = []
 
-    async def mock_discover_tools(cfg, force_auth=False):
+    async def mock_discover_tools(cfg, force_auth=False, metrics=None):
         discover_calls.append(force_auth)
         if not force_auth:
             return []  # Simulate failure without auth
@@ -165,7 +165,7 @@ def test_refresh_server_skips_oauth_when_no_auth_needed(tmp_path, monkeypatch):
 
     discover_calls = []
 
-    async def mock_discover_tools(cfg, force_auth=False):
+    async def mock_discover_tools(cfg, force_auth=False, metrics=None):
         discover_calls.append(force_auth)
         return [ToolInfo(name="ping", description="Ping")]
 
@@ -271,7 +271,7 @@ def test_refresh_continues_after_server_error(tmp_path, monkeypatch):
 
     call_count = {"n": 0}
 
-    async def mock_discover(cfg, force_auth=False):
+    async def mock_discover(cfg, force_auth=False, metrics=None):
         call_count["n"] += 1
         if cfg.name == "server_a":
             raise RuntimeError("Connection refused")

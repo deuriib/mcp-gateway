@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from contextlib import asynccontextmanager
-from typing import ClassVar
+from typing import ClassVar, Self
 
 import pytest
 
@@ -158,14 +158,32 @@ async def test_call_tool_async_bounded(monkeypatch, tmp_path) -> None:  # type: 
     from mcp_gway.server_factory import ServerFactory
 
     src = inspect.getsource(ServerFactory._call_tool_async)
-    assert "asyncio.timeout" in src
+    assert "asyncio.wait_for" in src
+
+    class _SlowSession:
+        """Fake mcp.ClientSession whose initialize() hangs past the timeout."""
+
+        def __init__(self, *_a: object, **_k: object) -> None:
+            pass
+
+        async def __aenter__(self) -> Self:
+            return self
+
+        async def __aexit__(self, *exc: object) -> bool:
+            return False
+
+        async def initialize(self) -> None:
+            await asyncio.sleep(5.0)
+
+        async def call_tool(self, name: str, arguments: object) -> object:
+            raise AssertionError("call_tool must not run when initialize times out")
 
     @asynccontextmanager
     async def _slow(config, **kw):  # type: ignore[no-untyped-def]
-        await asyncio.sleep(5.0)
         yield (None, None)
 
     monkeypatch.setattr(core, "create_client_transport", _slow)
+    monkeypatch.setattr("mcp.ClientSession", _SlowSession)
     reg = Registry(servers_dir=tmp_path / "tbo")
     factory = ServerFactory(reg)
     cfg = MCPServerConfig(
