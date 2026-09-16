@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -280,8 +281,13 @@ async def create_client_transport(
 
 
 async def discover_tools(
-    config: MCPServerConfig, *, force_auth: bool = False
+    config: MCPServerConfig,
+    *,
+    force_auth: bool = False,
+    metrics: object | None = None,
 ) -> list[ToolInfo]:
+    status = "error"
+    start = time.perf_counter()
     try:
         from mcp import ClientSession
 
@@ -298,6 +304,7 @@ async def discover_tools(
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     result = await session.list_tools()
+                    status = "ok"
                     return [
                         ToolInfo(
                             name=t.name,
@@ -306,9 +313,32 @@ async def discover_tools(
                         )
                         for t in result.tools
                     ]
-    except Exception as e:
-        logger.debug("Could not connect to server: %s", e)
+    except TimeoutError:
+        status = "timeout"
+        logger.debug("Discovery timed out for server %s", config.name)
         return []
+    except Exception as e:
+        logger.debug("Could not connect to server %s: %s", config.name, e)
+        return []
+    finally:
+        # FEAT-007 (BR-103): revive discovery_duration_seconds — the metric was
+        # registered in Gateway but never observed. Callers with a registry
+        # (serving-plane agent mode / tests) feed latency+status here; the CLI
+        # refresh path uses structured logs instead (ephemeral process, no
+        # registry — see BR-109).
+        if metrics is not None:
+            try:
+                metrics.observe(
+                    "discovery_duration_seconds",
+                    time.perf_counter() - start,
+                    {
+                        "server": getattr(config, "name", "unknown"),
+                        "status": status,
+                    },
+                )
+            except Exception:
+                # WHY broad: metric failure must never alter discovery outcome.
+                pass
 
 
 async def refresh_server(
@@ -316,8 +346,9 @@ async def refresh_server(
     srv_name: str,
     force_auth: bool,
     oauth_port: int = 8989,
+    metrics: object | None = None,
 ) -> list[ToolInfo]:
-    discovered = await discover_tools(cfg, force_auth=False)
+    discovered = await discover_tools(cfg, force_auth=False, metrics=metrics)
 
     needs_auth = (force_auth or _is_remote_config(cfg)) and getattr(
         cfg, "oauth", None
