@@ -7,6 +7,7 @@ import logging
 import os
 import shlex
 import sys
+import time
 from pathlib import Path
 
 import click
@@ -32,6 +33,42 @@ from mcp_gway.core.client import (
 
 def _get_config_display_type(config: MCPServerConfig) -> str:
     return str(config.type).upper()
+
+
+def _log_cli_event(
+    action: str,
+    status: str,
+    *,
+    server: str | None = None,
+    duration_ms: int | None = None,
+    detail: str | None = None,
+    exc_info: bool = False,
+) -> None:
+    """FEAT-007 (BR-109): structured outcome log for CLI management commands.
+
+    WARNING/ERROR always emitted as JSON to stderr; INFO only when
+    MCP_GWAY_LOG_LEVEL is explicitly set — zero noise for humans by default,
+    full event stream for operators/journald.
+    """
+    if status in ("error", "failed"):
+        level = logging.WARNING
+    else:
+        level = logging.INFO
+    if level == logging.INFO and not os.environ.get("MCP_GWAY_LOG_LEVEL"):
+        return
+    extra: dict[str, object] = {"action": action, "status": status}
+    if server:
+        extra["server"] = server
+    if duration_ms is not None:
+        extra["duration_ms"] = duration_ms
+    if detail:
+        extra["detail"] = detail
+    msg = f"cli {action} {status}"
+    cli_logger = logging.getLogger("mcp_gway.cli")
+    if level == logging.WARNING:
+        cli_logger.warning(msg, extra=extra, exc_info=exc_info)
+    else:
+        cli_logger.info(msg, extra=extra)
 
 
 @click.group()
@@ -66,6 +103,13 @@ def main() -> None:
 @click.option("--oauth-client-secret", default=None, help="OAuth client secret")
 @click.option("--oauth-scope", default=None, help="OAuth scope")
 @click.option("--timeout", type=int, default=5000, help="Timeout ms")
+@click.option(
+    "--retry-on-transport-error",
+    is_flag=True,
+    default=False,
+    help="Opt-in: retry once ONLY when the transport/connect phase fails "
+    "(never after the tool call starts — see ADR-012)",
+)
 @click.option("--enabled/--no-enabled", default=True, help="Enable or disable server")
 @click.option(
     "--oauth-port",
@@ -88,9 +132,11 @@ def add(
     oauth_scope: str | None,
     timeout: int,
     enabled: bool,
+    retry_on_transport_error: bool,
     cwd: str | None,
 ) -> None:
     """Add an MCP server and generate its .pyi stub."""
+    _cli_start = time.monotonic()
     headers_dict = parse_headers(list(headers)) if headers else None
     oauth_config = None
     if oauth_client_id or oauth_client_secret or oauth_scope:
@@ -137,6 +183,7 @@ def add(
                 environment=environment,
                 timeout=timeout,
                 enabled=enabled,
+                retry_on_transport_error=retry_on_transport_error,
             )
         except Exception as e:
             click.echo(f"Error: invalid local config: {e}", err=True)
@@ -160,6 +207,7 @@ def add(
             oauth=oauth_config,
             timeout=timeout,
             enabled=enabled,
+            retry_on_transport_error=retry_on_transport_error,
         )
         try:
             try:
@@ -175,6 +223,13 @@ def add(
             click.echo(f"Warning: transport detection failed: {e}", err=True)
     else:
         click.echo(f"Error: Unknown connection type {conn_type}", err=True)
+        _log_cli_event(
+            "add",
+            "error",
+            server=name,
+            duration_ms=int((time.monotonic() - _cli_start) * 1000),
+            detail=f"unknown connection type {conn_type}",
+        )
         sys.exit(1)
 
     tool_filter = [t.strip() for t in tools.split(",")] if tools != "*" else ["*"]
@@ -231,6 +286,13 @@ def add(
     registry = _get_registry()
     registry.add(config, discovered)
     click.echo(f"Added {name} with {len(discovered)} tools.")
+    _log_cli_event(
+        "add",
+        "success",
+        server=name,
+        duration_ms=int((time.monotonic() - _cli_start) * 1000),
+        detail=f"{len(discovered)} tools",
+    )
 
 
 @main.command()
@@ -431,6 +493,8 @@ def _serve_http(
     elapsed_ms = int((time.monotonic() - t0) * 1000)
 
     n = len(names)
+    loaded_tools = len(getattr(gateway.code_mode.sandbox, "_modules", {}))
+    no_tools = max(0, n - loaded_tools)
     if n == 0:
         server_line = "no servers yet — add one with `mcp-gway add`"
     elif n == 1:
@@ -455,6 +519,13 @@ def _serve_http(
     click.echo(
         f"  {_c('Listening on', dim=True)} {_c(base_url, fg='cyan', underline=True)}  {_c('·', dim=True)} {server_line}"
     )
+    if no_tools > 0:
+        click.echo(
+            f"  {_c(glyph_warn, fg='yellow', bold=True)} "
+            f"{_c('degraded:', bold=True)} "
+            f"{_c(f'{no_tools} server(s) with no tools', fg='yellow', bold=True)} "
+            f"{_c('— run', dim=True)} {_c('mcp-gway refresh <name>', fg='cyan')}"
+        )
     label_w = 9
     click.echo(
         f"  {_c('MCP'.ljust(label_w), dim=True)} {_c(glyph_arr, dim=True)} {_c(f'{base_url}/mcp', fg='cyan')}"
@@ -607,20 +678,42 @@ def refresh(name: str | None, auth: bool, oauth_port: int) -> None:
                 continue
 
         try:
+            _cli_start = time.monotonic()
             discovered = asyncio.run(
                 refresh_server(config, server_name, auth, oauth_port)
             )
         except Exception as e:
             click.echo(f"Error refreshing {server_name}: {e}", err=True)
+            _log_cli_event(
+                "refresh",
+                "error",
+                server=server_name,
+                duration_ms=int((time.monotonic() - _cli_start) * 1000),
+                detail=str(e),
+            )
             continue
 
         if not discovered:
             click.echo(f"Warning: No tools discovered for {server_name}.")
             click.echo(f"Try: mcp-gway refresh {server_name} --auth")
+            _log_cli_event(
+                "refresh",
+                "warning",
+                server=server_name,
+                duration_ms=int((time.monotonic() - _cli_start) * 1000),
+                detail="no tools discovered",
+            )
             continue
 
         registry.update(server_name, discovered)
         click.echo(f"Refreshed {server_name} with {len(discovered)} tools.")
+        _log_cli_event(
+            "refresh",
+            "success",
+            server=server_name,
+            duration_ms=int((time.monotonic() - _cli_start) * 1000),
+            detail=f"{len(discovered)} tools",
+        )
 
     if len(names) > 1:
         click.echo(f"\nDone. Refreshed {len(names)} servers.")
