@@ -16,7 +16,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
+import time
+import uuid
 from typing import Any, TextIO
 
 # 1 MiB per-line cap: stdin here is a local trust-boundary (same user /
@@ -26,6 +29,13 @@ from typing import Any, TextIO
 MAX_LINE_BYTES = 1_048_576
 
 _READ_CHUNK = 8_192
+
+_LABEL_RE = re.compile(r"[^A-Za-z0-9_]")
+
+
+def _stdio_label(method: str) -> str:
+    s = _LABEL_RE.sub("_", str(method))[:32]
+    return s.strip("_") or "_other"
 
 
 def _error(code: int, message: str, req_id: Any = None) -> str:
@@ -40,6 +50,35 @@ class StdioAdapter:
 
     def __init__(self, gateway: Any) -> None:
         self._gateway = gateway
+
+    def _record(self, method: str, status: str, duration: float) -> None:
+        """FEAT-007 (BR-107): per-request stdio telemetry via gateway registry."""
+        metrics = getattr(self._gateway, "metrics", None)
+        if metrics is None:
+            return
+        try:
+            metrics.inc("stdio_requests_total", {"method": method, "status": status})
+            metrics.observe(
+                "stdio_request_duration_seconds", duration, {"method": method}
+            )
+        except Exception:
+            # WHY broad: metrics must never break the stdio request path.
+            pass
+
+    def _log_access(self, method: str, status: str, duration_ms: int, rid: str) -> None:
+        """FEAT-007 (BR-108): JSON access log matching HTTP shape + transport tag."""
+        logger = logging.getLogger("mcp_gway.stdio")
+        logger.info(
+            "stdio request completed",
+            extra={
+                "request_id": rid,
+                "method": method,
+                "path": "stdio",
+                "status": status,
+                "duration_ms": duration_ms,
+                "transport": "stdio",
+            },
+        )
 
     async def handle_line(self, raw: str | bytes) -> str | None:
         """Process one NDJSON line, returning a JSON line or None."""
@@ -67,11 +106,15 @@ class StdioAdapter:
         method = body.get("method")
         has_id = "id" in body
         req_id = body.get("id")
+        request_id = uuid.uuid4().hex
         if not isinstance(method, str):
             if not has_id:
                 return None
             return _error(-32600, "Invalid Request", req_id)
+        method_label = _stdio_label(method)
         if not has_id:
+            status = "ok"
+            start = time.perf_counter()
             if method.startswith("notifications/"):
                 try:
                     self._gateway._handle_method(
@@ -81,14 +124,26 @@ class StdioAdapter:
                         else {},
                     )
                 except Exception:
-                    pass
+                    status = "error"
+            duration = time.perf_counter() - start
+            self._record(method_label, status, duration)
+            self._log_access(method_label, status, int(duration * 1000), request_id)
             return None
         params = body.get("params", {})
         if not isinstance(params, dict):
+            self._record(method_label, "error", 0.0)
+            self._log_access(method_label, "error", 0, request_id)
             return _error(-32602, "Invalid params", req_id)
+        start = time.perf_counter()
         response = await self._gateway._handle_post(body, session_id=None)
+        duration = time.perf_counter() - start
         if not isinstance(response, dict):
+            self._record(method_label, "error", duration)
+            self._log_access(method_label, "error", int(duration * 1000), request_id)
             return _error(-32603, "Internal error", req_id)
+        status = "ok" if "result" in response else "error"
+        self._record(method_label, status, duration)
+        self._log_access(method_label, status, int(duration * 1000), request_id)
         response.setdefault("jsonrpc", "2.0")
         response.setdefault("id", req_id)
         return json.dumps(response, ensure_ascii=False)
