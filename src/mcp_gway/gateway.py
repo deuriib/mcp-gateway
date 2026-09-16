@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -193,7 +194,15 @@ class Gateway:
             ["server", "tool", "status"],
         )
         self.metrics.histogram(
-            "discovery_duration_seconds", "Discovery latency", ["server"]
+            "discovery_duration_seconds", "Discovery latency", ["server", "status"]
+        )
+        self.metrics.counter(
+            "stdio_requests_total",
+            "stdio requests by method/status",
+            ["method", "status"],
+        )
+        self.metrics.histogram(
+            "stdio_request_duration_seconds", "stdio request latency", ["method"]
         )
         self.metrics.counter("sandbox_execute_total", "Sandbox executions", ["status"])
         self.metrics.histogram(
@@ -210,6 +219,47 @@ class Gateway:
         self.metrics.counter(
             "gateway_sse_dropped_total", "Dropped SSE messages (queue full)", ["reason"]
         )
+        # FEAT-007 process/build metrics (BR-101): build_info{version} is the
+        # canonical Prometheus incarnation marker; start_time/uptime let scrapers
+        # and SLOs reason about process age without probing /health.
+        self.metrics.gauge(
+            "process_start_time_seconds", "Gateway process start (unix epoch)", []
+        )
+        self.metrics.set("process_start_time_seconds", time.time(), {})
+        self.metrics.gauge("uptime_seconds", "Gateway uptime in seconds", [])
+        self.metrics.set("uptime_seconds", 0.0, {})
+        self.metrics.counter("build_info", "Gateway build info", ["version"])
+        self.metrics.inc("build_info", {"version": __version__})
+        self.metrics.gauge(
+            "lifetime_seconds", "Gateway lifetime at shutdown (seconds)", []
+        )
+        self.metrics.counter(
+            "gateway_sse_disconnects_total",
+            "SSE stream disconnects by reason",
+            ["reason"],
+        )
+        # FEAT-007 upstream/CodeMode telemetry (BR-111/113/114): pre-registered so
+        # /metrics exposition is stable and histograms carry explicit buckets.
+        self.metrics.counter(
+            "upstream_tool_calls_total",
+            "Upstream MCP tool calls by server/tool/status",
+            ["server", "tool", "status"],
+        )
+        self.metrics.histogram(
+            "upstream_tool_duration_seconds",
+            "Upstream MCP tool latency",
+            ["server", "tool"],
+        )
+        self.metrics.counter(
+            "upstream_retries_total",
+            "Accepted transport-phase retries by server",
+            ["server"],
+        )
+        self.metrics.counter(
+            "code_mode_servers_skipped_total",
+            "CodeMode servers skipped at inject/refresh",
+            ["reason"],
+        )
         registry.ensure()
         try:
             registry._metrics = self.metrics  # type: ignore[attr-defined]
@@ -217,6 +267,21 @@ class Gateway:
             pass
         try:
             self.code_mode.sandbox._metrics = self.metrics  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        try:
+            self.code_mode.server_factory._metrics = (  # type: ignore[attr-defined]
+                self.metrics
+            )
+        except Exception:
+            pass
+        # FEAT-007 (BR-114): servers broken at startup must count too. The
+        # sandbox had no registry during the first inject pass, so re-sync now
+        # that metrics are wired — refresh() only re-attempts servers that
+        # FAILED injection (healthy ones are already in _modules) and records
+        # a skip metric + WARN for each (single skip per server, idempotent).
+        try:
+            self.code_mode.refresh()
         except Exception:
             pass
         from contextlib import asynccontextmanager as _acm
@@ -281,6 +346,23 @@ class Gateway:
                 pass
             except Exception:
                 pass
+        # FEAT-007 (BR-105): the last observability act — a shutdown summary so
+        # an operator grepping stderr after exit sees what the process did.
+        try:
+            uptime = time.monotonic() - self.start_time
+            self.metrics.set("lifetime_seconds", uptime, {})
+            summary = {
+                "uptime_seconds": round(uptime, 3),
+                "http_requests_total": int(self.metrics.sum("http_requests_total")),
+                "sessions_active": len(self._sessions),
+                "sse_dropped_total": int(self.metrics.sum("gateway_sse_dropped_total")),
+            }
+            logging.getLogger("mcp_gway.gateway").info(
+                "gateway shutdown summary", extra=summary
+            )
+        except Exception:
+            # WHY broad: shutdown must never raise hiding cancellation.
+            pass
 
     def _create_session(self, session_id: str) -> SessionInfo:
         info = SessionInfo(queue=asyncio.Queue(maxsize=MAX_QUEUE))
@@ -401,6 +483,13 @@ class Gateway:
         while True:
             self._last_loop_tick = time.monotonic()
             try:
+                self.metrics.set(
+                    "uptime_seconds", time.monotonic() - self.start_time, {}
+                )
+            except Exception:
+                # WHY broad: the heartbeat must never die from a registry error.
+                pass
+            try:
                 self.cleanup_expired_sessions(MAX_IDLE_SECONDS)
             except Exception:
                 pass
@@ -423,6 +512,7 @@ class Gateway:
             info = self._create_session(session_id)
 
         async def event_stream():
+            reason = "client_disconnect"
             try:
                 yield f"event: endpoint\ndata: /mcp/messages?session_id={session_id}\n\n"
                 while True:
@@ -431,11 +521,22 @@ class Gateway:
                             info.queue.get(), timeout=MAX_IDLE_SECONDS
                         )
                     except TimeoutError:
+                        reason = "idle"
                         break
                     if msg is None:
+                        reason = "idle"
                         break
                     info.last_activity = time.monotonic()
                     yield f"event: message\ndata: {json.dumps(msg)}\n\n"
+            except asyncio.CancelledError:
+                reason = "client_disconnect"
+                raise
+            except GeneratorExit:
+                reason = "client_disconnect"
+                raise
+            except Exception:
+                reason = "error"
+                raise
             finally:
                 self._sessions.pop(session_id, None)
                 try:
@@ -444,6 +545,16 @@ class Gateway:
                     )
                 except Exception:
                     pass
+                try:
+                    self.metrics.inc(
+                        "gateway_sse_disconnects_total", {"reason": reason}
+                    )
+                except Exception:
+                    pass
+                logging.getLogger("mcp_gway.gateway").warning(
+                    "SSE session ended",
+                    extra={"session_id": session_id, "reason": reason},
+                )
 
         return StreamingResponse(
             event_stream(),
