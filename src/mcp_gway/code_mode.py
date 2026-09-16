@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from typing import Any
 
@@ -76,7 +77,31 @@ class CodeMode:
             try:
                 struct = self.server_factory.make_server_struct(server_name)
                 self.sandbox.inject_server(server_name, struct)
-            except Exception:  # noqa: S110 — servers may lack config, skip silently
+            except Exception as e:  # FEAT-007 (BR-114): degradation is visible
+                self._record_skip(server_name, e)
+
+    def _record_skip(self, server_name: str, exc: Exception) -> None:
+        """FEAT-007 (BR-114): broken servers are skipped loudly, never silently.
+
+        Emits a structured WARN and increments ``code_mode_servers_skipped_total``
+        so a degraded registry is visible at a glance on /metrics.
+        """
+        logging.getLogger("mcp_gway.code_mode").warning(
+            "code mode server skipped",
+            extra={
+                "server": server_name,
+                "reason": "inject_error",
+                "detail": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        metrics = getattr(self.sandbox, "_metrics", None)
+        if metrics is not None:
+            try:
+                metrics.inc(
+                    "code_mode_servers_skipped_total", {"reason": "inject_error"}
+                )
+            except Exception:
+                # WHY narrow: telemetry must never break injection.
                 pass
 
     def refresh(self) -> None:
@@ -91,8 +116,8 @@ class CodeMode:
             try:
                 struct = self.server_factory.make_server_struct(name)
                 self.sandbox.inject_server(name, struct)
-            except Exception:  # noqa: S110 — servers may lack config, skip silently
-                pass
+            except Exception as e:  # FEAT-007 (BR-114): degradation is visible
+                self._record_skip(name, e)
 
     def _tool_file_names(self, server: str) -> list[str]:
         """Sanitized per-tool file stems for tool-level VFS (callable names)."""
