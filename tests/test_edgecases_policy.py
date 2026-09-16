@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 
 import pytest
@@ -51,15 +52,22 @@ def test_status_expired_future_invalid(monkeypatch, tmp_path):
     monkeypatch.setenv(P.UNRESTRICTED_ENV, "1")
     mp = P.marker_path()
     mp.parent.mkdir(parents=True, exist_ok=True)
-    mp.write_text(
-        str(int(time.time()) - P.UNRESTRICTED_TTL_SECONDS - 10), encoding="utf-8"
-    )
+
+    def _write(content: str) -> None:
+        mp.write_text(content, encoding="utf-8")
+        # unrestricted_status rejects non-0o600 markers on posix; write with
+        # the same mode create_unrestricted_marker enforces so this test
+        # exercises content states (expired/future/invalid), not permissions.
+        if os.name != "nt":
+            os.chmod(mp, 0o600)
+
+    _write(str(int(time.time()) - P.UNRESTRICTED_TTL_SECONDS - 10))
     assert P.unrestricted_status().state == "expired"
-    mp.write_text(str(int(time.time()) + 1000), encoding="utf-8")
+    _write(str(int(time.time()) + 1000))
     assert P.unrestricted_status().state == "future"
-    mp.write_text("", encoding="utf-8")
+    _write("")
     assert P.unrestricted_status().state == "marker-invalid"
-    mp.write_text("notanint", encoding="utf-8")
+    _write("notanint")
     assert P.unrestricted_status().state == "marker-invalid"
 
 
