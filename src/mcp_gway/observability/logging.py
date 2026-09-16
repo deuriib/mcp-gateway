@@ -35,7 +35,24 @@ class JSONFormatter(logging.Formatter):
             "message": record.getMessage(),
             "request_id": rid,
         }
-        for key in ("method", "path", "status", "duration_ms", "server", "tool"):
+        for key in (
+            "method",
+            "path",
+            "status",
+            "duration_ms",
+            "server",
+            "tool",
+            # FEAT-007: stdio access log (BR-108), CLI events (BR-109),
+            # shutdown summary (BR-105) carry these on the record.
+            "transport",
+            "action",
+            "reason",
+            "detail",
+            "uptime_seconds",
+            "http_requests_total",
+            "sessions_active",
+            "sse_dropped_total",
+        ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)
         return json.dumps(payload, ensure_ascii=False)

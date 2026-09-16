@@ -14,6 +14,11 @@ from mcp_gway.observability.metrics import MetricsRegistry
 
 logger = logging.getLogger(__name__)
 
+# FEAT-007 (BR-106): requests above this threshold emit a WARN-level log so
+# operators can triage p95 outliers without enabling verbose DEBUG. Fixed
+# constant, no env — decision recorded in ADR-012.
+_SLOW_REQUEST_THRESHOLD_MS = 1000
+
 
 def _get_request_id(request: Request) -> str:
     raw = request.headers.get("X-Request-ID") or request.headers.get("x-request-id")
@@ -109,6 +114,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         }
         # Log at INFO, but avoid logging health probes too verbosely? We log all
         logger.info("request completed", extra=extra)
+        if duration_ms > _SLOW_REQUEST_THRESHOLD_MS:
+            logger.warning("slow request", extra=extra)
         return response
 
 

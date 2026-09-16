@@ -5,6 +5,12 @@ from typing import Any
 
 _DEFAULT_BUCKETS: list[float] = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5]
 
+# FEAT-007 (BR-102): hard cap on distinct label combinations per metric.
+# Overflow coalesces into a reserved `_other` label so a label storm (many
+# servers x many tools, or attacker-influenced status/path labels) can never
+# grow memory without bound (EC-OBS-03 of SPEC-2026-08-26).
+_MAX_LABEL_COMBOS = 200
+
 
 def _prefixed(name: str) -> str:
     if name.startswith("mcp_gway_"):
@@ -127,6 +133,7 @@ class MetricsRegistry:
             # normalize label tuple key
             key = self._label_key(meta["labelnames"], labels)
             data: dict[tuple[str, ...], int] = meta["data"]
+            key = self._bounded_key(meta, key, data)
             data[key] = data.get(key, 0) + amount
 
     def set(
@@ -145,6 +152,7 @@ class MetricsRegistry:
                 self._metrics[name] = meta
             key = self._label_key(meta["labelnames"], labels)
             data: dict[tuple[str, ...], float] = meta["data"]
+            key = self._bounded_key(meta, key, data)
             data[key] = float(value)
 
     def observe(
@@ -165,6 +173,7 @@ class MetricsRegistry:
             buckets: list[float] = meta.get("buckets", list(_DEFAULT_BUCKETS))  # type: ignore[assignment]
             key = self._label_key(meta["labelnames"], labels)
             data: dict[tuple[str, ...], dict[str, Any]] = meta["data"]
+            key = self._bounded_key(meta, key, data)
             entry = data.get(key)
             if entry is None:
                 entry = {"bucket_counts": [0] * len(buckets), "sum": 0.0, "count": 0}
@@ -189,6 +198,45 @@ class MetricsRegistry:
         self, labelnames: list[str], labels: dict[str, str]
     ) -> tuple[str, ...]:
         return tuple(str(labels.get(k, "")) for k in labelnames)
+
+    def _bounded_key(
+        self,
+        meta: dict[str, Any],
+        key: tuple[str, ...],
+        data: dict[tuple[str, ...], Any],
+    ) -> tuple[str, ...]:
+        """Coalesce label-cardinality overflow into a reserved `_other` series.
+
+        Applied on every write path (inc/set/observe) under the registry lock so
+        concurrent writers see a consistent cap. Metrics with no labels are exempt
+        (a single series can never explode). A real label combo equal to `_other`
+        merges into the overflow series — documented trade-off of the cap.
+        """
+        if not meta["labelnames"]:
+            return key
+        if key not in data and len(data) >= _MAX_LABEL_COMBOS:
+            return ("_other",) * len(meta["labelnames"])
+        return key
+
+    def sum(self, name: str) -> float:
+        """Sum scalar values across all label combos (shutdown summaries).
+
+        Histogram entries (dict payloads) are skipped; use `count` semantics of
+        `_sum`/`_count` exposition instead when histogram totals are needed.
+        """
+        total = 0.0
+        with self._lock:
+            meta = self._metrics.get(name)
+            if meta is None:
+                return 0.0
+            for v in meta["data"].values():
+                if isinstance(v, dict):
+                    continue
+                try:
+                    total += float(v)
+                except (TypeError, ValueError):
+                    continue
+        return total
 
     def _labels_dict(
         self, labelnames: list[str], key: tuple[str, ...]
