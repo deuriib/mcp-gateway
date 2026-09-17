@@ -1,0 +1,73 @@
+# Benchmark Configuration: MCP Gateway Performance Audit
+# SPEC-PERF-001 / BRIEF-performance
+# Date: 2026-09-16
+
+target:
+  url: "http://127.0.0.1:8080"
+  transport: "http"  # http | sse | stdio
+
+paths:
+  - name: "mcp_post"
+    method: "POST"
+    path: "/mcp"
+    content_type: "application/json"
+    body: |
+      {"jsonrpc": "2.0", "method": "tools/list", "id": 1}
+  - name: "mcp_get"
+    method: "GET"
+    path: "/mcp"
+    headers:
+      Accept: "text/event-stream"
+  - name: "health"
+    method: "GET"
+    path: "/health"
+  - name: "ready"
+    method: "GET"
+    path: "/ready"
+  - name: "live"
+    method: "GET"
+    path: "/live"
+  - name: "metrics"
+    method: "GET"
+    path: "/metrics"
+
+benchmark:
+  concurrency: 10
+  duration_sec: 30
+  warmup_sec: 5
+  iterations: 1000  # for single-request benchmarks
+
+profiling:
+  code_mode:
+    tools:
+      - "listToolFiles"
+      - "readToolFile"
+      - "getToolDocs"
+      - "executeToolCode"
+    sandbox_init: true
+    sandbox_exec: true
+
+resources:
+  sample_interval_sec: 0.1
+  memory_rss: true
+  cpu_percent: true
+  startup_time: true
+
+output:
+  format: "json"  # json | markdown | both
+  directory: "docs/specs/30_delivery/reports"
+  filename_prefix: "perf_report"
+
+transports:
+  - name: "stdio"
+    command: ["uv", "run", "mcp-gway", "serve", "--transport", "stdio"]
+    host: null
+    port: null
+  - name: "http"
+    command: ["uv", "run", "mcp-gway", "serve", "--transport", "http", "--host", "127.0.0.1", "--port", "8080"]
+    host: "127.0.0.1"
+    port: 8080
+  - name: "sse"
+    command: ["uv", "run", "mcp-gway", "serve", "--transport", "sse", "--host", "127.0.0.1", "--port", "8080"]
+    host: "127.0.0.1"
+    port: 8080

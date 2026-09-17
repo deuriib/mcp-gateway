@@ -1,0 +1,77 @@
+{
+  "timestamp": "2026-09-17T22:30:29Z",
+  "version": "2.4.0",
+  "iterations": 200,
+  "results": [
+    {
+      "path": "/mcp",
+      "method": "POST",
+      "p50": 47.78,
+      "p95": 57.23,
+      "p99": 77.27,
+      "mean": 48.84,
+      "min": 33.39,
+      "max": 139.17,
+      "status": 200,
+      "requests": 200,
+      "errors": 0,
+      "throughput_rps": 20.5
+    },
+    {
+      "path": "/health",
+      "method": "GET",
+      "p50": 4.58,
+      "p95": 6.8,
+      "p99": 8.39,
+      "mean": 4.75,
+      "min": 3.41,
+      "max": 10.44,
+      "status": 200,
+      "requests": 200,
+      "errors": 0,
+      "throughput_rps": 210.5
+    },
+    {
+      "path": "/ready",
+      "method": "GET",
+      "p50": 4.52,
+      "p95": 7.06,
+      "p99": 12.33,
+      "mean": 5.05,
+      "min": 3.34,
+      "max": 76.91,
+      "status": 503,
+      "requests": 200,
+      "errors": 0,
+      "throughput_rps": 197.8
+    },
+    {
+      "path": "/live",
+      "method": "GET",
+      "p50": 4.2,
+      "p95": 8.72,
+      "p99": 12.44,
+      "mean": 4.71,
+      "min": 3.0,
+      "max": 12.46,
+      "status": 200,
+      "requests": 200,
+      "errors": 0,
+      "throughput_rps": 212.3
+    },
+    {
+      "path": "/metrics",
+      "method": "GET",
+      "p50": 4.57,
+      "p95": 6.88,
+      "p99": 10.27,
+      "mean": 4.77,
+      "min": 3.19,
+      "max": 10.68,
+      "status": 200,
+      "requests": 200,
+      "errors": 0,
+      "throughput_rps": 209.7
+    }
+  ]
+}
