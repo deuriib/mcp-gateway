@@ -1,6 +1,6 @@
 # Quality Gate Report — FEAT-007 Observability/Resilience Hardening
 
-**Spec:** `docs/sbtdd/specs/feat-007-observability-hardening/spec.md`
+**Spec:** `docs/specs/50_archive/feat-007-observability-hardening/spec.md`
 **ADR:** `docs/architecture/adr-012-observability-hardening.md`
 **Gate Keeper:** montilla (CEO)
 **Date:** 2026-09-15

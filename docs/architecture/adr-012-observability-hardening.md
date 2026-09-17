@@ -119,7 +119,7 @@ gating untouched.
 
 ## Acceptance Criteria (1:1 ↔ tests)
 
-FEAT-007 `docs/sbtdd/specs/feat-007-observability-hardening/acceptance.md`
+FEAT-007 `docs/specs/50_archive/feat-007-observability-hardening/acceptance.md`
 AC-001..AC-019 map 1:1 to tests in `tests/test_obsfeat007_*.py` (per-AC), plus
 `test_observability_*` extensions. Verify: `uv run pytest -q` (full suite green) and
 `uv run ruff check src/ tests/` + `uv run ruff format --check src/ tests/` (0).

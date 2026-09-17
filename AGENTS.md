@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-**MCP Gateway** — A standalone Python CLI that aggregates multiple MCP servers behind a single headless HTTP/SSE endpoint with Code Mode (v2.2.0 interno, CLI-only, headless, sin dashboard/catalog).
+**MCP Gateway** — A standalone Python CLI that aggregates multiple MCP servers behind a single headless HTTP/SSE endpoint with Code Mode (v2.4.0 interno, CLI-only, headless, sin dashboard/catalog).
 
-> **Nota interna:** ver `CHANGELOG.md` (al día hasta v2.2.0, 2026-09-11). Releases internos no publicados — no anuncio externo.
+> **Nota interna:** ver `CHANGELOG.md` (al día hasta v2.4.0, 2026-09-17). Releases internos no publicados — no anuncio externo.
 
 ## Tech Stack
 
@@ -22,7 +22,7 @@
 
 ```
 src/mcp_gway/
-├── __init__.py          # Package version (2.2.0)
+├── __init__.py          # Package version (2.4.0)
 ├── models.py            # Pydantic models (MCPServerConfig OpenCode-only local|remote, ToolInfo, OAuthConfig)
 ├── registry.py          # .pyi file CRUD (servers/ directory) — única fuente de verdad
 ├── sandbox.py           # Starlark sandbox (hermetic execution)
@@ -136,16 +136,16 @@ mcp-gway local-unrestricted enable|disable|status  # break-glass explícito: cre
 
 - **PyPI**: Hybrid workflow `.github/workflows/release.yml` — `on: push tags v*` **+** `on: workflow_run Tests completed` (ver ADR-007)
   - `push v*` → `uv build` + `pypi-publish` determinístico (GA interno `v2.0.0` via tag, nota interna no publicada — no anuncio externo)
-  - `workflow_run` → `python-semantic-release@v10 (>=10.0.0, uv.lock 10.6.1)` para patches automáticos `fix/perf` → minor/patch sin tag manual (línea v2.0.1..v2.2.0 ya liberada así)
+  - `workflow_run` → `python-semantic-release@v10 (>=10.0.0, uv.lock 10.6.1)` para patches automáticos `fix/perf` → minor/patch sin tag manual (línea v2.0.1..v2.4.0 ya liberada así)
   - Condición: `if: push || workflow_run.conclusion == 'success'` + `concurrency: release` + `fetch-depth: 0`
-- **Version**: `2.2.0` sincronizada `pyproject.toml:project.version` + `src/mcp_gway/__init__.py:__version__` (`[tool.semantic_release]`)
+- **Version**: `2.4.0` sincronizada `pyproject.toml:project.version` + `src/mcp_gway/__init__.py:__version__` (`[tool.semantic_release]`)
 - **Build**: `uv_build` backend — sin Node en CI (`ruff` único linter)
 
 ## Key Patterns
 
 ### Endpoints vivos + Retiro dashboard/catalog
 
-- **Vivos (v2.2.0):** `/mcp` (GET+POST), `/health`, `/ready`, `/live`, `/metrics` (`gateway.py:194-200`, 7 Route entries; `/mcp/messages` es alias POST al mismo handler `_mcp_post`, no endpoint independiente). Gestión CLI-only.
+- **Vivos (v2.4.0):** `/mcp` (GET+POST), `/health`, `/ready`, `/live`, `/metrics` (`gateway.py:194-200`, 7 Route entries; `/mcp/messages` es alias POST al mismo handler `_mcp_post`, no endpoint independiente). Gestión CLI-only.
 - **Retirados (no servir):** dashboard (`/dashboard`, `/api/servers`, `/static`, `/` alias) y catalog (`/api/catalog`, `/dashboard/catalog`, Bifrost fetch, `~/.config/mcp-gway/catalog.json` — borrar caché vieja manualmente).
 
 ### Registry (.pyi + .json) — Única fuente

@@ -24,7 +24,7 @@
 - [x] Stage skill loaded: `skill(quality-gate)` cited (name + trigger match)
 - [x] Agent template read: `agents/c-level/vasquez.md` cited (owning C-level)
 - [x] Execution mode declared: `single` (direct, no task)
-- [x] Packet intact: `SPEC:docs/specs/SPEC-PERF-001.md#REQ-IDs / HARD:single+local-first+deny-default+sin-secretos+Ley-172-13+255-tests-verdes / GATE:OPEN / DOMAINS:[engineering]`
+- [x] Packet intact: `SPEC:docs/specs/50_archive/SPEC-PERF-001.md#REQ-IDs / HARD:single+local-first+deny-default+sin-secretos+Ley-172-13+255-tests-verdes / GATE:OPEN / DOMAINS:[engineering]`
 
 ## Escalations
 

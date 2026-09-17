@@ -76,7 +76,7 @@ Pass: the full suite completed green in one quiet run — 532 passed, 2 skipped,
 
 ## Scoped Evidence (file:line per claim)
 
-- SPEC: `docs/specs/10_design/SPEC-mgw-alias.md:17-22` (REQs), `:26-30` (ACs), `:34-35` (packaging contract)
+- SPEC: `docs/specs/50_archive/SPEC-mgw-alias.md:17-22` (REQs), `:26-30` (ACs), `:34-35` (packaging contract)
 - Proposal: `docs/specs/40_workspace/backend/PROPOSED_CHANGES.md:17,21` (pyproject + NO-OP cli.py freeze)
 - Matrix: `docs/specs/40_workspace/backend/TEST_MATRIX.md:9-14,27-28` (trace + V-001/V-002)
 - Tests: `tests/test_cli_alias.py:26-30` (T-002), `:33-38` (T-003), `:41-52` (T-001)

@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/mcp-gway)](https://pypi.org/project/mcp-gway/)
 [![License](https://img.shields.io/pypi/l/mcp-gway)](https://github.com/deuriib/mcp-gateway/blob/main/LICENSE)
 
-A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) servers behind a single headless HTTP/SSE endpoint with **Code Mode** — reducing LLM input token usage by up to 92% when using multiple MCP servers. Headless gateway (**v2.2.0**): CLI-managed, no UI dependencies.
+A standalone CLI gateway that aggregates multiple MCP (Model Context Protocol) servers behind a single headless HTTP/SSE endpoint with **Code Mode** — reducing LLM input token usage by up to 92% when using multiple MCP servers. Headless gateway (**v2.4.0**): CLI-managed, no UI dependencies.
 
 ## Features
 
@@ -90,7 +90,7 @@ mcp-gway serve --host 0.0.0.0
 # exit 2
 ```
 
-## Observability — Logs + Metrics + Health (Approach C, v2.2.0)
+## Observability — Logs + Metrics + Health (Approach C, v2.4.0)
 
 > **Zero vendor lock-in:** stdlib `json` logs (no `structlog`), vendored `MetricsRegistry` (no `prometheus_client`), correlation via `X-Request-ID` + `contextvars`, health probes `/health|/ready|/live` + Prometheus text `/metrics`. Local-first + masking `***` preserved; `X-Warning: exposed` solo en `GET /metrics` → `403`.
 
@@ -98,7 +98,7 @@ mcp-gway serve --host 0.0.0.0
 
 ```bash
 curl -s http://127.0.0.1:8080/health | jq
-# {"status":"ok","version":"2.2.0","checks":{"registry":"ok","routes":"ok"},"uptime_seconds":42}
+# {"status":"ok","version":"2.4.0","checks":{"registry":"ok","routes":"ok"},"uptime_seconds":42}
 curl -s http://127.0.0.1:8080/ready | jq   # 200 ready / 503 not_ready (registry/routes/event_loop checks)
 curl -s http://127.0.0.1:8080/live | jq    # 200 alive — no FS I/O, <5ms
 curl -s http://127.0.0.1:8080/metrics | head -n 20
@@ -275,7 +275,7 @@ Pre-commit is already in place (`.pre-commit-config.yaml` — `ruff` v0.16.4, `r
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        MCP Gateway v2.2.0                          │
+│                        MCP Gateway v2.4.0                          │
 ├──────────────────────────────────────────────────────────────────────┤
 │  CLI (click)              │  Gateway (Starlette + uvicorn, CSP)      │
 │  - add remote/local       │  - POST /mcp (JSON-RPC)                  │
@@ -303,7 +303,7 @@ Pre-commit is already in place (`.pre-commit-config.yaml` — `ruff` v0.16.4, `r
 ```
 
 - **Sin Node** en runtime ni CI: sin UI ni assets vendoreados, `ruff` único linter, `uv_build` backend.
-- **Release híbrido** (ADR-007): `push tags v*` → `uv build` + `pypi-publish` (GA `v2.0.0` tag manual, release interno no publicado) + `workflow_run Tests completed` → `python-semantic-release@v10 (>=10.0.0, uv.lock 10.6.1)` para `fix/perf` patches auto (línea v2.0.1..v2.2.0 ya liberada así). `concurrency: release`, `fetch-depth:0`, `[tool.semantic_release]` sync `pyproject.toml` + `__init__.py` (`2.2.0` exacta).
+- **Release híbrido** (ADR-007): `push tags v*` → `uv build` + `pypi-publish` (GA `v2.0.0` tag manual, release interno no publicado) + `workflow_run Tests completed` → `python-semantic-release@v10 (>=10.0.0, uv.lock 10.6.1)` para `fix/perf` patches auto (línea v2.0.1..v2.4.0 ya liberada así). `concurrency: release`, `fetch-depth:0`, `[tool.semantic_release]` sync `pyproject.toml` + `__init__.py` (`2.4.0` exacta).
 
 ## License
 

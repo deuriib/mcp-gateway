@@ -1,6 +1,6 @@
 # Archived: SPEC-MGW-001 Minimal CLI Alias mgw
 
-**Spec:** `docs/specs/10_design/SPEC-mgw-alias.md`
+**Spec:** `docs/specs/50_archive/SPEC-mgw-alias.md`
 **Brief:** `docs/briefs/BRIEF-mgw-alias.md`
 **ADR:** `docs/architecture/adr-013-cli-alias-mgw.md`
 **Archived:** 2026-09-16
@@ -9,7 +9,7 @@
 
 ## Artifacts
 - Brief: `docs/briefs/BRIEF-mgw-alias.md`
-- Spec: `docs/specs/10_design/SPEC-mgw-alias.md`
+- Spec: `docs/specs/50_archive/SPEC-mgw-alias.md`
 - Architecture: `docs/specs/10_design/ARCHITECTURE.md` + `API_CONTRACTS.md`
 - Requirements: `docs/specs/15_requirements/REQ-mgw-alias.md`
 - Proposal + plan + matrix: `docs/specs/40_workspace/backend/PROPOSED_CHANGES.md`, `IMPLEMENTATION_PLAN.md`, `TEST_MATRIX.md`

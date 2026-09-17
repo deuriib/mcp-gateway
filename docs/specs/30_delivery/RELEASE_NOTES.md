@@ -1,15 +1,16 @@
-# Release Notes: Unreleased batch → next hybrid release
+# Release Notes: v2.4.0
 
 **Date:** 2026-09-17
-**Release Manager:** montilla (CEO) — single mode, direct
+**Release Manager:** orchestrator / operations function (owning domain owner vasquez + devops for tag/publish mechanics)
 **Specs Included:** SPEC-MGW-001, FEAT-007 (ADR-012), ADR-010 (unified serve), SPEC-PERF-001, SPEC-READY-001
 **Domains-Touched:** [engineering]
-**Ship Type:** deploy (library/CLI via hybrid release; no hand tag per ADR-007)
+**Ship Type:** deploy
 
 Consolidates the 8 `CHANGELOG.md` Unreleased bullets — all merged, gated, and
-pushed; this ship is the release trigger, not new implementation. Per-item
-detail lives in `RELEASE_NOTES-MGW-ALIAS.md`, `RELEASE_NOTES-FEAT007.md`,
-`RELEASE-NOTES-PERF-001.md` (read those by reference; nothing duplicated here).
+verified; this ship is the release commit + tag, not new implementation.
+Per-item detail lives in `RELEASE_NOTES-MGW-ALIAS.md`,
+`RELEASE_NOTES-FEAT007.md`, `RELEASE-NOTES-PERF-001.md` (read those by
+reference; nothing duplicated here).
 
 ## Highlights
 
@@ -28,7 +29,7 @@ detail lives in `RELEASE_NOTES-MGW-ALIAS.md`, `RELEASE_NOTES-FEAT007.md`,
 ### Features
 
 - `mgw` console script bound to the same `mcp_gway.cli:main`
-  (SPEC-MGW-001, engineering) — `pyproject.toml:21`
+  (SPEC-MGW-001, engineering) — `pyproject.toml:20-21`
 - Unified `serve --transport [stdio|http|sse]`; `--registry-dir` common to
   `serve`; `--host/--port` apply to `http|sse` only (ADR-010, engineering)
 - FEAT-007 observability hardening: `build_info`, uptime/lifetime lifecycle,
@@ -44,10 +45,11 @@ detail lives in `RELEASE_NOTES-MGW-ALIAS.md`, `RELEASE_NOTES-FEAT007.md`,
   `APP_ENV`/`DEBUG`/`LOG_LEVEL` fallbacks removed; inert
   `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD` purged from docs
 
-### Docs (internal-only, no src/ changes)
+### Domain Ships
 
-- SPEC-PERF-001 audit tooling: benchmark script, runbook, findings template,
-  architecture NFRs, ADR-011 — shipped `6e159cc`
+- Engineering: v2.4.0 deploy via hybrid release (`push tags v*` + `workflow_run`
+  per ADR-007); `pyproject.toml` + `__init__.py` already at `2.4.0`;
+  AGENTS.md/README drift fixed to `v2.4.0` in this ship
 
 ### Breaking Changes
 
@@ -62,21 +64,23 @@ detail lives in `RELEASE_NOTES-MGW-ALIAS.md`, `RELEASE_NOTES-FEAT007.md`,
 
 ## Known Issues
 
-- FEAT-007 refuter: AC-004 dead-code note accepted, tracked for next release.
-- FEAT-007 risk: 4 Medium (raw error text in structured stderr logs) —
-  hygiene, not network-facing; tracked next sprint.
-- Version/tag skew at ship time: files at 2.4.0, last tag `v2.3.0`.
-  Reconciliation is owned by the hybrid automation on push (Tests →
-  python-semantic-release); no hand tag, no hand version edit in this ship.
+- FEAT-007 refuter: AC-004 dead-code note accepted (`discovery_duration_seconds`
+  no production caller passes `metrics=`), tracked for next release. Owner: vasquez.
+- FEAT-007 risk: 4 Medium (raw error text in structured stderr logs M-01..M-04) —
+  hygiene, not network-facing; tracked next sprint. Owner: vasquez.
+- Code mode refresh dead code (reliability F-1) — informational, harmless overlap.
+  Owner: vasquez.
 
 ## Rollback / Undo
 
+- Release itself: `git revert <release-commit>` then `git tag -d v2.4.0`
+  (and `git push origin :refs/tags/v2.4.0` only if the tag was pushed —
+  default is DO NOT PUSH unless devops confirms remote). If published to PyPI,
+  owner (devops + vasquez) yanks `mcp-gway==2.4.0` and re-runs Tests so the
+  hybrid automation reconciles. No prod deploy, no migration, no data to reverse.
 - `mgw`: revert one `pyproject.toml` line + delete `tests/test_cli_alias.py`
   + 4 doc lines. Owner: vasquez. ETA <15 min. Worst case unreverted:
   `mgw: command not found`, `mcp-gway` unaffected — no outage possible.
 - Unified serve / FEAT-007 / retry: revert respective `cli.py` /
   `server_factory.py` / `models.py` hunks per ADRs 010/012; reinstall.
   Owner: vasquez + barrera (path-cite for trust-boundary hunks).
-- Release itself: hybrid flow is tag-driven; a bad promotion is undone by
-  reverting the release commit and re-running Tests. No prod deploy, no
-  migration, no data to reverse.

@@ -5,7 +5,7 @@
 **Reviewed by:** @review-risk  
 **Date:** 2026-09-15  
 **Scope:** Security and business risk of FEAT-007 observability/resilience hardening changes  
-**Spec:** `docs/sbtdd/specs/feat-007-observability-hardening/spec.md`  
+**Spec:** `docs/specs/50_archive/feat-007-observability-hardening/spec.md`  
 **ADR:** `docs/architecture/adr-012-observability-hardening.md`
 
 ---

@@ -3,7 +3,7 @@
 ## Verdict: ⚠️ CONDITIONAL
 
 Reviewed: 11 production files + 1 test file (1,334 LOC production + 595 LOC tests)
-Spec: `docs/sbtdd/specs/feat-007-observability-hardening/spec.md`
+Spec: `docs/specs/50_archive/feat-007-observability-hardening/spec.md`
 ADR: `docs/architecture/adr-012-observability-hardening.md`
 
 ---

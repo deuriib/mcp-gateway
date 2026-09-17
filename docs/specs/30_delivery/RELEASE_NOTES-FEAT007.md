@@ -2,7 +2,7 @@
 
 **Version:** 2.3.0 (pending)
 **Date:** 2026-09-15
-**Spec:** `docs/sbtdd/specs/feat-007-observability-hardening/spec.md`
+**Spec:** `docs/specs/50_archive/feat-007-observability-hardening/spec.md`
 
 ## Highlights
 

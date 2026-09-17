@@ -1,6 +1,6 @@
 # HANDOFF.md — FEAT-007 Observability/Resilience Hardening
 
-**Spec:** `docs/sbtdd/specs/feat-007-observability-hardening/spec.md`
+**Spec:** `docs/specs/50_archive/feat-007-observability-hardening/spec.md`
 **Gate:** ✅ OPEN (GATE_REPORT.md)
 **Handoff Date:** 2026-09-15
 **From:** vasquez (CTO) via montilla (CEO)
@@ -30,9 +30,9 @@
 ### Documentation (4 files)
 | File | Content |
 |------|---------|
-| `docs/sbtdd/specs/feat-007-observability-hardening/spec.md` | Spec |
-| `docs/sbtdd/specs/feat-007-observability-hardening/scenarios.md` | Scenarios |
-| `docs/sbtdd/specs/feat-007-observability-hardening/acceptance.md` | Acceptance criteria |
+| `docs/specs/50_archive/feat-007-observability-hardening/spec.md` | Spec |
+| `docs/specs/50_archive/feat-007-observability-hardening/scenarios.md` | Scenarios |
+| `docs/specs/50_archive/feat-007-observability-hardening/acceptance.md` | Acceptance criteria |
 | `docs/architecture/adr-012-observability-hardening.md` | ADR |
 
 ## DoD Checklist

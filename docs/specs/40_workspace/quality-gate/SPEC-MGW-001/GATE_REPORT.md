@@ -32,7 +32,7 @@ Non-touched domain rows deleted (single-domain SPEC).
 - [x] Stage skill loaded: `skill(quality-gate)` cited (trigger: impl-ready gate)
 - [x] Agent template read: `agents/c-level/vasquez.md` (gate keeper) cited; each reviewer ran in CEO-dispatched `task(general)` ordered to read skill + gate-report + own `agents/engineering/<reviewer>.md` first (4/4 returns cite both)
 - [x] Execution mode declared: `single` (min gate readability+risk+refuter+qa; reviewers via `task(general)` max 2 per quality-gate skill — reviewers always run CEO-dispatched)
-- [x] Packet intact: `SPEC:docs/specs/10_design/SPEC-mgw-alias.md#REQ-F-001..003+NF-001..003 / HARD:single+approved-proposal-only+guardrails-1-14 / GATE:arch-approved+impl-complete / DOMAINS:[engineering]` — reference-only throughout
+- [x] Packet intact: `SPEC:docs/specs/50_archive/SPEC-mgw-alias.md#REQ-F-001..003+NF-001..003 / HARD:single+approved-proposal-only+guardrails-1-14 / GATE:arch-approved+impl-complete / DOMAINS:[engineering]` — reference-only throughout
 - [x] No unchecked above → gate not CLOSED
 
 ## Escalations

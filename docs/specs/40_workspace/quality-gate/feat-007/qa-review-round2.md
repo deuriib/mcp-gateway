@@ -2,7 +2,7 @@
 
 **Reviewer**: QA (quality-gate)
 **Date**: 2026-09-15
-**Spec**: docs/sbtdd/specs/feat-007-observability-hardening/spec.md
+**Spec**: docs/specs/50_archive/feat-007-observability-hardening/spec.md
 **Test file**: tests/test_obsfeat007.py (19 test functions, AC-001..AC-018)
 **Round 1**: qa-review.md (REJECTED — 9 pass / 10 fail = 47%)
 

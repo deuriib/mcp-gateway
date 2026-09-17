@@ -22,7 +22,7 @@
 | Architecture review | `docs/specs/40_workspace/architecture/ARCHITECTURE-REVIEW-PERF-001.md` | done |
 | Proposal | `docs/specs/40_workspace/backend/PROPOSED_CHANGES.md` | done |
 | Quality gate | `docs/specs/40_workspace/quality-gate/SPEC-PERF-001/GATE-REPORT.md` | done |
-| Spec | `docs/specs/SPEC-PERF-001.md` | done |
+| Spec | `docs/specs/50_archive/SPEC-PERF-001.md` | done |
 
 ## Definition of Done Checklist
 

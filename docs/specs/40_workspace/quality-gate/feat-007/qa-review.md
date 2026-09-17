@@ -2,8 +2,8 @@
 
 **Reviewer**: QA (quality-gate)
 **Date**: 2026-09-15
-**Spec**: docs/sbtdd/specs/feat-007-observability-hardening/spec.md
-**Acceptance**: docs/sbtdd/specs/feat-007-observability-hardening/acceptance.md
+**Spec**: docs/specs/50_archive/feat-007-observability-hardening/spec.md
+**Acceptance**: docs/specs/50_archive/feat-007-observability-hardening/acceptance.md
 **Test file**: 	ests/test_obsfeat007.py (19 test functions, AC-001..AC-018)
 
 ## Verdict: ❌ REJECTED
