@@ -85,7 +85,7 @@ async def handle_ready(request: Request) -> JSONResponse:
         try:
             last = float(getattr(gateway, "_last_loop_tick", time.monotonic()))
             drift = time.monotonic() - last
-            if drift > 3:
+            if drift > 35:
                 loop_status = "fail"
                 loop_reason = f"event loop blocked drift={drift:.1f}s"
         except Exception:
