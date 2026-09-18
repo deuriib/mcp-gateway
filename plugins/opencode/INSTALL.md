@@ -20,7 +20,7 @@ no Node/mise toolchain beyond what opencode already provides.
 
 | Target project path | Source in this repo | Notes |
 | ------------------- | ------------------- | ----- |
-| `<PROJECT>/.opencode/plugins/mcp-gateway.ts` | `<CHECKOUT>/.opencode/plugins/mcp-gateway.ts` | The plugin; auto-loaded per-project (load order #4). Only impl file. |
+| `<PROJECT>/.opencode/plugins/mcp-gateway.ts` | `<CHECKOUT>/plugins/opencode/mcp-gateway.ts` | The plugin; auto-loaded per-project (load order #4). Only impl file. |
 | `<PROJECT>/skills/mcp-gway/SKILL.md` | `<CHECKOUT>/skills/mcp-gway/SKILL.md` | Skill source; plugin wires source root `"skills"` via `config.skills.paths`. |
 
 `<CHECKOUT>` = your local checkout of this repository.
@@ -33,7 +33,7 @@ do not publish anything, do not install extra runtimes.
 
 ```powershell
 New-Item -ItemType Directory -Force -Path "<PROJECT>/.opencode/plugins" | Out-Null
-Copy-Item -LiteralPath "<CHECKOUT>/.opencode/plugins/mcp-gateway.ts" -Destination "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Force
+Copy-Item -LiteralPath "<CHECKOUT>/plugins/opencode/mcp-gateway.ts" -Destination "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Force
 New-Item -ItemType Directory -Force -Path "<PROJECT>/skills/mcp-gway" | Out-Null
 Copy-Item -LiteralPath "<CHECKOUT>/skills/mcp-gway/SKILL.md" -Destination "<PROJECT>/skills/mcp-gway/SKILL.md" -Force
 ```
@@ -44,7 +44,7 @@ Same files, sourced through an explicit `file:///` location instead of
 a git working tree (useful when you only have the file path, not a clone):
 
 ```powershell
-Copy-Item -LiteralPath "<FILE_URL_PATH>/.opencode/plugins/mcp-gateway.ts" -Destination "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Force
+Copy-Item -LiteralPath "<FILE_URL_PATH>/plugins/opencode/mcp-gateway.ts" -Destination "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Force
 Copy-Item -LiteralPath "<FILE_URL_PATH>/skills/mcp-gway/SKILL.md" -Destination "<PROJECT>/skills/mcp-gway/SKILL.md" -Force
 ```
 

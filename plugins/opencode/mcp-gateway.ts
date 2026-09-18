@@ -16,7 +16,7 @@ All MCP tools run via \`gateway_*\` helpers. **Mandatory order:**
 ### Calling Convention (Starlark)
 
 \`\`\`python
-result = Servername.tool_name(params....)
+result = Server.tool(param=value, params....)
 value = result["key"]  # brackets, not dot
 \`\`\`
 

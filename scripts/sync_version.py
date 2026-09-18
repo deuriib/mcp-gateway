@@ -7,8 +7,8 @@ Semantic-release owns ``pyproject.toml`` + ``src/mcp_gway/__init__.py`` +
 ``CHANGELOG.md`` — this script never writes those files.
 
 Owned refs (closed allow-list):
-- ``.opencode/plugins/mcp-gateway.ts`` — ``const MARKER = "MCP-GWAY vX.Y.Z"``
-- ``.opencode/INSTALL.md`` — ``MCP-GWAY vX.Y.Z`` tokens
+- ``plugins/opencode/mcp-gateway.ts`` — ``const MARKER = "MCP-GWAY vX.Y.Z"``
+- ``plugins/opencode/INSTALL.md`` — ``MCP-GWAY vX.Y.Z`` tokens
 - ``docs/specs/40_workspace/engineering/PROPOSED_CHANGES-version-sync.md``
   — ``MCP-GWAY vX.Y.Z`` marker, if present (idempotent no-op otherwise)
 - ``package.json`` — ``"version": "X.Y.Z"`` (JSON parse, 2-space indent +
@@ -29,8 +29,8 @@ TS_MARKER_RE = re.compile(
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-.+][0-9A-Za-z-.+]*)?$")
 
 OWNED_TARGETS: tuple[str, ...] = (
-    ".opencode/plugins/mcp-gateway.ts",
-    ".opencode/INSTALL.md",
+    "plugins/opencode/mcp-gateway.ts",
+    "plugins/opencode/INSTALL.md",
     "package.json",
     "README.md",
     "AGENTS.md",
@@ -57,7 +57,7 @@ def read_version_from_pyproject(root: Path) -> str:
 
 def sync_text(path: str, text: str, version: str) -> str:
     """Return synced text for an owned target; no-op when marker absent."""
-    if path.endswith(".opencode/plugins/mcp-gateway.ts"):
+    if path.endswith("plugins/opencode/mcp-gateway.ts"):
         replacement = f'const MARKER = "MCP-GWAY v{version}";'
         synced, count = TS_MARKER_RE.subn(replacement, text)
         if count == 0:
