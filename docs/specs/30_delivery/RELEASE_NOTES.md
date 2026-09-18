@@ -1,10 +1,20 @@
-# Release Notes: v2.4.0
+# Release Notes: Unreleased — post-v2.4.0 delta (ships with next version)
 
-**Date:** 2026-09-17
+**Date:** 2026-09-18
 **Release Manager:** orchestrator / operations function (owning domain owner vasquez + devops for tag/publish mechanics)
 **Specs Included:** SPEC-MGW-001, FEAT-007 (ADR-012), ADR-010 (unified serve), SPEC-PERF-001, SPEC-READY-001
 **Domains-Touched:** [engineering]
 **Ship Type:** deploy
+
+> **Tag-collision provenance (Option C):** remote `v2.4.0` is the published
+> automation tag (annotated `07b3b05…` → `0cdcfe8`, semantic-release
+> 2026-09-16) and stays untouched. The local lightweight `v2.4.0`
+> (→ `6601767`, 2026-09-17) was deleted locally only (`git tag -d v2.4.0`,
+> no push) to prevent an accidental `push --tags` collision. Everything below
+> is the 09-16/17 delta that rides `CHANGELOG.md ## Unreleased` and ships
+> with the NEXT version (feat-scope → v2.5.0; see proposal
+> `40_workspace/engineering/PROPOSED_CHANGES-v240-collision.md`). It is NOT
+> v2.4.0.
 
 Consolidates the 8 `CHANGELOG.md` Unreleased bullets — all merged, gated, and
 verified; this ship is the release commit + tag, not new implementation.
@@ -73,11 +83,18 @@ reference; nothing duplicated here).
 
 ## Rollback / Undo
 
-- Release itself: `git revert <release-commit>` then `git tag -d v2.4.0`
-  (and `git push origin :refs/tags/v2.4.0` only if the tag was pushed —
-  default is DO NOT PUSH unless devops confirms remote). If published to PyPI,
-  owner (devops + vasquez) yanks `mcp-gway==2.4.0` and re-runs Tests so the
-  hybrid automation reconciles. No prod deploy, no migration, no data to reverse.
+- Published `v2.4.0`: NEVER `git tag -d v2.4.0`, NEVER
+  `git push origin :refs/tags/v2.4.0`, NEVER re-push or force-move the tag.
+  Published recovery is `git revert <release-commit>` + yank
+  `mcp-gway==<version>` from PyPI (owner: devops + vasquez, PyPI hash confirm
+  required) and re-run Tests so the hybrid automation reconciles. No prod
+  deploy, no migration, no data to reverse.
+- Local lightweight `v2.4.0` (collision, → `6601767`): already removed
+  locally via `git tag -d v2.4.0` with NO push (local-only, verified absent
+  via `git for-each-ref`/`show-ref`; remote annotated `07b3b05…` → `0cdcfe8`
+  untouched). Do NOT `push --tags` until the next version tag exists;
+  if the lightweight ever reappears locally, delete it again locally —
+  never push a deletion for the published tag name.
 - `mgw`: revert one `pyproject.toml` line + delete `tests/test_cli_alias.py`
   + 4 doc lines. Owner: vasquez. ETA <15 min. Worst case unreverted:
   `mgw: command not found`, `mcp-gway` unaffected — no outage possible.
