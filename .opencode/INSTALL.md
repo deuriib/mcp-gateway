@@ -57,7 +57,7 @@ byte-identical files.
 
 ```powershell
 Test-Path -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts"
-Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern "MCP-GWAY v2.5.0" -SimpleMatch
+Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern "MCP-GWAY v2.6.0" -SimpleMatch
 Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern 'mcp["gateway"]' -SimpleMatch
 Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern 'type: "remote"' -SimpleMatch
 Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern "http://127.0.0.1:8080/mcp" -SimpleMatch
@@ -68,7 +68,7 @@ opencode --version
 
 Expected:
 
-- Plugin file exists; it mentions marker `MCP-GWAY v2.5.0` and MCP entry
+- Plugin file exists; it mentions marker `MCP-GWAY v2.6.0` and MCP entry
   `gateway` (exactly `mcp["gateway"]`, remote HTTP
   `http://127.0.0.1:8080/mcp`, env-overridable via `MCP_GWAY_URL`,
   optional `Authorization` via `MCP_GWAY_TOKEN` only when set).
