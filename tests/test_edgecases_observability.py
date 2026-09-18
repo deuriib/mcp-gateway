@@ -42,9 +42,14 @@ def test_ready_not_ready_and_loop_blocked(tmp_path):
     gw = _gw(tmp_path)
     c = TestClient(gw.app)
     assert c.get("/ready").json()["status"] == "ready"
+    # Contract: drift threshold is 35s (30s heartbeat + 5s buffer, health.py:88).
+    # Drift below threshold stays ready; only drift above threshold is 503.
     gw._last_loop_tick -= 10
-    assert c.get("/ready").status_code == 503
+    assert c.get("/ready").status_code == 200
     gw._last_loop_tick += 10
+    gw._last_loop_tick -= 40
+    assert c.get("/ready").status_code == 503
+    gw._last_loop_tick += 40
     with patch.object(gw.registry, "list", side_effect=RuntimeError("down")):
         assert c.get("/ready").status_code == 503
 
