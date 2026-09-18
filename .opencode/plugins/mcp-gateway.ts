@@ -34,25 +34,61 @@ value = result["key"]  # brackets, not dot
 
 const COMPACTION_REINJECT = `<!-- ${MARKER} -->\n${MCP_RULES}`;
 
-const SKILL_INSTRUCTION = "skills/mcp-gway/SKILL.md";
+const SKILL_PATH = "skills";
+
+const GATEWAY_URL_DEFAULT = "http://127.0.0.1:8080/mcp";
+
+function getEnv(name: string): string | undefined {
+  try {
+    const env = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } })["process"]?.["env"];
+    const value = env?.[name];
+    return typeof value === "string" && value.trim() !== "" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveGatewayUrl(): string {
+  const override = getEnv("MCP_GWAY_URL");
+  return override !== undefined ? override.trim() : GATEWAY_URL_DEFAULT;
+}
+
+function resolveGatewayHeaders(): Record<string, string> | undefined {
+  const token = getEnv("MCP_GWAY_TOKEN");
+  return token !== undefined ? { Authorization: `Bearer ${token.trim()}` } : undefined;
+}
+
+function ensureSkillPath(config: Record<string, any>): void {
+  const skills = (config["skills"] ??= {});
+  if (Array.isArray(skills)) {
+    if (!skills.includes(SKILL_PATH)) {
+      skills.push(SKILL_PATH);
+    }
+    return;
+  }
+  const paths = (skills["paths"] ??= []);
+  if (Array.isArray(paths) && !paths.includes(SKILL_PATH)) {
+    paths.push(SKILL_PATH);
+  }
+}
 
 function ensureMcpGateway(config: Record<string, any>): void {
   const mcp = (config["mcp"] ??= {});
-  if (!mcp["mcp-gway"]) {
-    mcp["mcp-gway"] = {
-      type: "local",
-      command: ["mcp-gway", "serve", "--transport", "stdio"],
+  if (!mcp["gateway"]) {
+    const entry: Record<string, any> = {
+      type: "remote",
+      url: resolveGatewayUrl(),
       enabled: true,
       timeout: 5000,
+      oauth: false,
     };
+    const headers = resolveGatewayHeaders();
+    if (headers) {
+      entry["headers"] = headers;
+    }
+    mcp["gateway"] = entry;
   }
-  const instructions = (config["instructions"] ??= []);
-  if (
-    Array.isArray(instructions) &&
-    !instructions.includes(SKILL_INSTRUCTION)
-  ) {
-    instructions.push(SKILL_INSTRUCTION);
-  }
+  ensureSkillPath(config);
 }
 
 function appendRules(system: unknown): unknown {
@@ -60,7 +96,7 @@ function appendRules(system: unknown): unknown {
     return system.includes(MARKER) ||
       system.includes("MCP Rules — Gateway Protocol")
       ? system
-      : `${system}\n\n${MCP_RULES}`;
+      : `${system}\n\n${COMPACTION_REINJECT}`;
   }
   if (Array.isArray(system)) {
     const joined = system.join("\n");
@@ -70,9 +106,9 @@ function appendRules(system: unknown): unknown {
     ) {
       return system;
     }
-    return [...system, MCP_RULES];
+    return [...system, COMPACTION_REINJECT];
   }
-  return MCP_RULES;
+  return COMPACTION_REINJECT;
 }
 
 export const McpGatewayPlugin: Plugin = async (_ctx) => {
