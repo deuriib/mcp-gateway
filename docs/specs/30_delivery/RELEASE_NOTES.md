@@ -22,9 +22,11 @@
 - Single-file install story: `.opencode/INSTALL.md` covers copy-from-checkout
   (Option A) vs `file:///` copy (Option B) with marker + `curl /health` verify steps.
 - Version drift is now CI-gated: `scripts/sync_version.py --check` runs in
-  `test.yml` (`Verify version sync` step); closed allow-list of owned
-  marker targets, `pyproject.toml` stays the read-only source
-  (VS-001..VS-004, gate OPEN, `--check` clean at 2.5.0 exit 0).
+  `release.yml` (`Verify version sync` step after Build, before Publish,
+  gated `push || released`; moved from `test.yml` by intent-owner hand-edit
+  2026-09-18); closed allow-list of owned marker targets incl. `package.json`
+  `"version"` (in-script JSON path), `pyproject.toml` stays the read-only source
+  (VS-001..VS-004, gate OPEN delta, `--check` clean at 2.5.0 exit 0).
 
 ## Changes
 
@@ -35,9 +37,11 @@
   (REQ-OP-001..008, engineering) — `.opencode/plugins/mcp-gateway.ts`
 - Install guide for this plugin, HTTP revision (REQ-OP-008, engineering) —
   `.opencode/INSTALL.md`
-- Version-sync script (stdlib-only, `--check`/`--write`) + CI check step
-  after Lint, before tests (VS-001..VS-004, engineering) —
-  `scripts/sync_version.py`, `.github/workflows/test.yml`
+- Version-sync script (stdlib-only, `--check`/`--write`, incl. `package.json`
+  JSON sync) + CI check step in `release.yml` after Build, before Publish
+  (moved from `test.yml`, VS-001..VS-004, engineering) —
+  `scripts/sync_version.py`, `.github/workflows/release.yml`
+  (`.github/workflows/test.yml` check removed)
 - Lockfile aligned to the released version (`mcp-gway` 2.4.0 → 2.5.0
   editable entry, `uv sync` artifact, no dependency change) — `uv.lock`
 
@@ -63,9 +67,9 @@
   (OPEN) · handoff `docs/specs/40_workspace/verify-handoff/opencode-plugin/HANDOFF.md`
   · secret scan 0 hits · structural matrix 20/20.
 - Version-sync lane: proposal `docs/specs/40_workspace/engineering/PROPOSED_CHANGES-version-sync.md`
-  (VS-001..VS-004) · gate `docs/specs/40_workspace/quality-gate/version-sync/GATE_REPORT.md`
-  (OPEN, 4/4) · handoff `docs/specs/40_workspace/verify-handoff/version-sync/HANDOFF.md`
-  · `sync_version.py --check` clean at 2.5.0 · ruff clean.
+  (VS-001..VS-004, delta-updated to tree truth per HARD-1 inversion) · gate `docs/specs/40_workspace/quality-gate/version-sync/GATE_REPORT.md`
+  (OPEN delta, 4/4 min wave re-run on hand-edit) · handoff `docs/specs/40_workspace/verify-handoff/version-sync/HANDOFF.md`
+  (delta) · `sync_version.py --check` clean at 2.5.0 · 9.9.9 drift 3 files exit 2 · ruff clean · `pytest tests/test_cli.py` 25 passed.
 
 ## Known Issues
 

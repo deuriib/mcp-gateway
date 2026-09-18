@@ -82,6 +82,10 @@ jobs:
         if: ${{ github.event_name == 'push' || steps.release.outputs.released == 'true' }}
         run: uv build
 
+      - name: Verify version sync
+        if: ${{ github.event_name == 'push' || steps.release.outputs.released == 'true' }}
+        run: uv run scripts/sync_version.py --check
+
       - name: Publish to PyPI
         if: ${{ github.event_name == 'push' || steps.release.outputs.released == 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1

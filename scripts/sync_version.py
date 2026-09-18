@@ -11,10 +11,13 @@ Owned refs (closed allow-list):
 - ``.opencode/INSTALL.md`` — ``MCP-GWAY vX.Y.Z`` tokens
 - ``docs/specs/40_workspace/engineering/PROPOSED_CHANGES-version-sync.md``
   — ``MCP-GWAY vX.Y.Z`` marker, if present (idempotent no-op otherwise)
+- ``package.json`` — ``"version": "X.Y.Z"`` (JSON parse, 2-space indent +
+  trailing newline per repo style; no-op when already at version)
 """
 
 import argparse
 import difflib
+import json
 import re
 import sys
 from pathlib import Path
@@ -28,7 +31,7 @@ VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-.+][0-9A-Za-z-.+]*)?$")
 OWNED_TARGETS: tuple[str, ...] = (
     ".opencode/plugins/mcp-gateway.ts",
     ".opencode/INSTALL.md",
-    "docs/specs/40_workspace/engineering/PROPOSED_CHANGES-version-sync.md",
+    "package.json",
     "README.md",
     "AGENTS.md",
 )
@@ -60,6 +63,17 @@ def sync_text(path: str, text: str, version: str) -> str:
         if count == 0:
             return text
         return synced
+    if path.endswith("package.json"):
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return text
+        if not isinstance(data, dict):
+            return text
+        if data.get("version") == version:
+            return text
+        data["version"] = version
+        return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     synced, _ = MARKER_RE.subn(f"MCP-GWAY v{version}", text)
     return synced
 
