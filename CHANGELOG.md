@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v2.5.0 (2026-09-17)
+
 - **feat(cli)**: expose `mgw` as a 1:1 shortcut for `mcp-gway` (verified 2026-09-17, same `cli.main`, SPEC-MGW-001); `mcp-gway` stays canonical, both shims ship on install (`pyproject.toml:20-21`). Evidence: `tests/test_cli_alias.py` 3/3 green + README/AGENTS.md shortcut callouts.
 - **fix(ready)**: event-loop drift threshold 3s → 35s (30s heartbeat + 5s buffer, SPEC-READY-001) — `/ready` returned 503 false-positive; now 200 when healthy, p99=16ms. Change: `src/mcp_gway/observability/health.py:88`.
 - **docs(perf)**: internal-only performance audit tooling (verified 2026-09-17, SPEC-PERF-001, engineering). Benchmark script (`bench_perf.py`), runbook (`RUNBOOK-perf.md`), findings baseline v2.4.0 (`PERF-FINDINGS-v2.4.0.md` + `reports/baseline_20260917_*.json`, all 5 SLO hypotheses PASS), architecture NFRs (`ARCHITECTURE.md`), ADR-011. No user-facing impact, no src/ changes.
@@ -9,6 +11,7 @@
 - **docs(verify)**: FEAT-007 verification evidence 2026-09-17 — `tests/test_obsfeat007.py` 11/11 core ACs green (AC-001/003/004/008/009/013/014/015/016/017/018), `ruff check` + `format --check` clean; `--retry-on-transport-error` evidence `test_ac014/015/016` green (`server_factory.py:101-148`, `models.py:720`, `cli.py:107-112`).
 
 ### Residual risks (accepted, owners tracked)
+
 - AC-004 (`discovery_duration_seconds`) dead code — no production caller passes `metrics=`. Owner: vasquez.
 - Raw error messages in CLI/CodeMode logs (M-01..M-04) — hygiene, not network-facing. Owner: vasquez.
 - Code mode refresh dead code (reliability F-1) — informational overlap, harmless. Owner: vasquez.
@@ -24,24 +27,30 @@
 - **feat(cli)**: opt-in `--retry-on-transport-error` for `mcp-gway add` — retries exactly once only when the transport/connect+initialize phase fails, never after `session.call_tool` starts (non-idempotency-safe, ADR-012 decision 9). Default off → zero behavior change for existing configs.
 
 ## v2.2.0 (2026-09-11)
+
 - **feat**: add `AI` directory to `.gitignore` so local Claude skills are never committed (`a559bbc`). Version bump only — no runtime changes.
 
 ## v2.1.2 (2026-09-11)
+
 - **fix(policy)**: harden break-glass marker create/remove/status with explicit CLI (`mcp-gway local-unrestricted enable|disable|status`) — marker ops distinguish missing vs failure and fail closed (`416ef38`).
 
 ## v2.1.1 (2026-09-11)
+
 - **fix(mcp)**: typed JSON-RPC errors `-32602` (invalid params) / `-32603` (internal) with `data` carrying safe `[reason=...]` tokens; `.pyi` stub sanitization; parameter validation on tool calls (`dd8e52b`).
 
 ## v2.1.0 (2026-09-11)
+
 - **feat(mcp)**: stdio local mode — `mcp-gway mcp` serves NDJSON JSON-RPC over stdin/stdout (usable as an OpenCode `type: local` server via `command: [mcp-gway, mcp]`), with hardened client-side transport (`filtered_stdio_client`) that drops non-JSON noise from child servers (`cec3277`).
 
 ## v2.0.1 (2026-09-10)
+
 - **fix(policy)**: expand environment denylist — exact `PATH, PATHEXT, SYSTEMROOT, COMSPEC, LD_PRELOAD, LD_LIBRARY_PATH, PYTHONPATH, PYTHONHOME, NODE_OPTIONS, NODE_PATH, NODE_EXTRA_CA_CERTS, NODE_TLS_REJECT_UNAUTHORIZED` + prefixes `DYLD_, NPM_CONFIG_, BUN_, UV_` (`e9d4d5f`).
 - **docs**: allow-list wording sync — exact denylist and `bunx` opt-in CISO note (pin + owner + regate 90d; runtime stays out) (`2b26b3d`, `218148f`).
 - **docs(release)**: sync ADR-007 to `python-semantic-release` v10 (`ce89db7`).
 - **tests**: drop legacy monkeypatch paths in transport tests (`814c0db`).
 
 ## v2.0.0 (2026-09-10)
+
 - **breaking**: removed dashboard (`/dashboard`, `/api/servers`, `/static`, `/` alias) and catalog (`/api/catalog`, `/dashboard/catalog`, Bifrost fetch, `~/.config/mcp-gway/catalog.json` cache). Gateway serves `/mcp`, `/health`, `/ready`, `/live`, `/metrics` only; management is CLI-only. Dropped `htpy` dependency (`httpx` kept). Delete stale cache manually: `rm ~/.config/mcp-gway/catalog.json`.
 
 - **feat-006**: Dynamic-no-static local allow-list + 72h break-glass ([ADR-009](docs/architecture/adr-009-dynamic-local-commands.md))
@@ -51,6 +60,7 @@
   - Env vars (do not rename): `MCP_GWAY_ALLOW_LOCAL_COMMANDS`, `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL`, `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD`.
 
 ### Migration
+
 - Endpoints servidos solo `/mcp`, `/health`, `/ready`, `/live`, `/metrics`; gestión CLI-only.
 - Delete stale cache: `rm ~/.config/mcp-gway/catalog.json`.
 - Vars: `MCP_GWAY_ALLOW_LOCAL_COMMANDS` / `MCP_GWAY_ALLOW_UNRESTRICTED_LOCAL` / `MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD`.
@@ -70,7 +80,6 @@
   (hover:bg-slate-50 vs purged /80) - Add native tooltips via title on
   View/Toggle/Delete/Refresh/Reveal/Copy/Close for accessibility
 
-
 ## v0.9.0 (2026-08-25)
 
 ### Chores
@@ -78,8 +87,8 @@
 - **lock**: Sync uv.lock to 0.8.0
   ([`9aaef3f`](https://github.com/deuriib/mcp-gateway/commit/9aaef3fbd2643edbfb6bf3b9678d7fe8f301ef8b))
 
-Match pyproject.toml and src/mcp_gway/__init__.py after 0.8.0 semantic release; previous lock at
-  0.7.1 causing inconsistent build metadata.
+Match pyproject.toml and src/mcp_gway/**init**.py after 0.8.0 semantic release; previous lock at
+0.7.1 causing inconsistent build metadata.
 
 ### Features
 
@@ -87,10 +96,9 @@ Match pyproject.toml and src/mcp_gway/__init__.py after 0.8.0 semantic release; 
   ([`7686d48`](https://github.com/deuriib/mcp-gateway/commit/7686d4855c165474047147ce3452f45fcaca181e))
 
 Serve the same SSR dashboard on both root and dashboard via handle_dashboard alias. Keeps
-  local-first gating, CSP and X-Warning behaviour identical so index path fulfils product
-  requirement that root must load the dashboard, not 404. Single handler reuse avoids duplication
-  and preserves bounded-context purity.
-
+local-first gating, CSP and X-Warning behaviour identical so index path fulfils product
+requirement that root must load the dashboard, not 404. Single handler reuse avoids duplication
+and preserves bounded-context purity.
 
 ## v0.8.0 (2026-08-25)
 
@@ -100,10 +108,9 @@ Serve the same SSR dashboard on both root and dashboard via handle_dashboard ali
   ([`333180b`](https://github.com/deuriib/mcp-gateway/commit/333180b8da6c451d87a6d99cc5919a5b07d6bee7))
 
 Redesign dashboard under ui-ux-pro-max minimalism-and-swiss-style: header glass + stats grid, row
-  stagger 28ms with reduced-motion, badges with dot/status, filter, progressive disclosure form,
-  drawer and empty state polish. Vendored Tailwind expanded to 14KB covering new utilities while
-  staying local-first and <100KB. 188 tests pass, ruff clean.
-
+stagger 28ms with reduced-motion, badges with dot/status, filter, progressive disclosure form,
+drawer and empty state polish. Vendored Tailwind expanded to 14KB covering new utilities while
+staying local-first and <100KB. 188 tests pass, ruff clean.
 
 ## v0.7.2 (2026-08-25)
 
@@ -113,26 +120,26 @@ Redesign dashboard under ui-ux-pro-max minimalism-and-swiss-style: header glass 
   ([`70c64df`](https://github.com/deuriib/mcp-gateway/commit/70c64df6cffe8b599d180fbafae52097d2efbef8))
 
 Resilience C1: dialog.js now handles htmx:responseError/sendError/ timeout/swapError with
-  handleDialogError -> toast + fallback aside panel inside dialog, reuses server error HTML and
-  htmx.process. Set htmx.config.timeout=7000 so offline/slow doesn't hang.
+handleDialogError -> toast + fallback aside panel inside dialog, reuses server error HTML and
+htmx.process. Set htmx.config.timeout=7000 so offline/slow doesn't hang.
 
 Resilience I1: hx-indicator #global-spinner on tr and View button, global timeout, indicator wiring.
 
 Readability/Reliability: extract _DIALOG_ID/_DIALOG_TARGET/_CLOSE_ATTRS, _BASE_BADGE/_BADGE_COLORS,
-  split server_drawer 210 lines into _drawer_header/_drawer_metadata/_drawer_actions/_tool_panel,
-  fix nested role dialog -> region inside native dialog, delegate stopPropagation via single
-  document click listener (survives #server-table-body swaps), dedup openDialog/clearDialog helpers,
-  isEmpty robust via childElementCount, documented delays.
+split server_drawer 210 lines into _drawer_header/_drawer_metadata/_drawer_actions/_tool_panel,
+fix nested role dialog -> region inside native dialog, delegate stopPropagation via single
+document click listener (survives #server-table-body swaps), dedup openDialog/clearDialog helpers,
+isEmpty robust via childElementCount, documented delays.
 
 Tests: add 7 hardening tests for dialog contract (layout has dialog no drawer, row targets dialog +
-  indicator, drawer returns aside region, dialog.js resilient tokens, detail panel, close clears, no
-  inline onclick) -> 188 passed, ruff clean.
+indicator, drawer returns aside region, dialog.js resilient tokens, detail panel, close clears, no
+inline onclick) -> 188 passed, ruff clean.
 
 - **dashboard**: Migrate drawer to native dialog with vendored style
   ([`129654b`](https://github.com/deuriib/mcp-gateway/commit/129654be5fc196da06dde0f694f3f8f39483e2ac))
 
 Drawer inline was rendered at page bottom (screenshot shandcn below footer, truncated) instead of
-  overlay â€” broke UX and a11y. Replace div#drawer fixed overlay with native <dialog
+overlay â€” broke UX and a11y. Replace div#drawer fixed overlay with native <dialog
   id=server-dialog> using existing Tailwind vendored style (backdrop blur, shadow-xl, border-l).
 
 - views.py: hx-target #drawer -> #server-dialog, remove inline onclick stopPropagation (CSP
@@ -143,8 +150,7 @@ Drawer inline was rendered at page bottom (screenshot shandcn below footer, trun
   h-screen backdrop:* open:flex etc) <7.6KB, htmx 2.3KB, dialog 2.8KB, no Node
 
 Verified 181/181 pytest, ruff ok, layout contains <dialog> and no id=drawer, /static/dialog.js
-  served with showModal.
-
+served with showModal.
 
 ## v0.7.1 (2026-08-25)
 
@@ -154,10 +160,10 @@ Verified 181/181 pytest, ruff ok, layout contains <dialog> and no id=drawer, /st
   ([`abf3beb`](https://github.com/deuriib/mcp-gateway/commit/abf3beb218b7250c041e4e9186ff3c6c8a8ec35b))
 
 Expand patch_tags from [fix, perf] to include refactor, docs, build, chore, style, test, ci, revert
-  so workflow_run Tests + python-semantic-release triggers automated patch on any conventional
-  commit. Add revert to allowed_tags for completeness. Keeps minor_tags=[feat] and BREAKING
-  CHANGE->major intact to preserve semver; hybrid workflow push v* + workflow_run Tests +
-  concurrency:release prevents duplicate versions. No Node, pure ruff/uv.
+so workflow_run Tests + python-semantic-release triggers automated patch on any conventional
+commit. Add revert to allowed_tags for completeness. Keeps minor_tags=[feat] and BREAKING
+CHANGE->major intact to preserve semver; hybrid workflow push v* + workflow_run Tests +
+concurrency:release prevents duplicate versions. No Node, pure ruff/uv.
 
 ### Documentation
 
@@ -165,16 +171,15 @@ Expand patch_tags from [fix, perf] to include refactor, docs, build, chore, styl
   ([`23c6f8b`](https://github.com/deuriib/mcp-gateway/commit/23c6f8b017dcf701d48814b9ddc851a3e5b615c9))
 
 Sync AGENTS.md, README.md and SPEC-UI-001 with shipped v0.7.0 GA so docs match code and close the
-  SBTDD verification gate (Registry single source, htpy+htmx bounded context, local-first 127.0.0.1,
-  masking ***).
+SBTDD verification gate (Registry single source, htpy+htmx bounded context, local-first 127.0.0.1,
+masking ***).
 
 Polish src/mcp_gway/dashboard/views.py bottom area: sticky table header, action group
-  (View/Toggle/Delete) with hx-* handlers, footer, drawer/header and spacing refinements with
-  transition/shadow polish for visual completeness. No logic change, only presentation.
+(View/Toggle/Delete) with hx-* handlers, footer, drawer/header and spacing refinements with
+transition/shadow polish for visual completeness. No logic change, only presentation.
 
 Verified: ruff check/format pass, 181 pytest pass, dashboard SSR/API intact. Keeps history atomic
-  before push per CEO GO.
-
+before push per CEO GO.
 
 ## v0.7.0 (2026-08-25)
 
@@ -193,8 +198,7 @@ Verified: ruff check/format pass, 181 pytest pass, dashboard SSR/API intact. Kee
 - views.server_row: hide Wave1-unimplemented hx-delete/hx-patch (would 405); Wave1 demo shows only
   inspect. Keeps js handlers for Wave2.
 
-- local gating: retain MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD default 1 (dashboard allows local unless
-  0) - documented.
+- local gating: retain MCP_GWAY_ALLOW_LOCAL_VIA_DASHBOARD default 1 (dashboard allows local unless 0) - documented.
 
 Verified: ruff clean, 171 pytest green, manual form hx POST 201, content-length 413.
 
@@ -220,8 +224,8 @@ Verified: ruff clean, 171 pytest green, manual form hx POST 201, content-length 
   ([`1eee823`](https://github.com/deuriib/mcp-gateway/commit/1eee82390a89d3194187759dd58cd18ae9f7c696))
 
 Prevent future CI failures like run 32782781915 where ruff F401+I001 blocked pipeline and caused
-  Release skip. Add deterministic local gate so git commit fails fast if lint not clean - haces las
-  cosas con excelencia desde el commit 1.
+Release skip. Add deterministic local gate so git commit fails fast if lint not clean - haces las
+cosas con excelencia desde el commit 1.
 
 - .pre-commit-config.yaml pinned to astral-sh/ruff-pre-commit v0.16.4 with ruff --fix and
   ruff-format plus hygiene hooks (trailing-whitespace, end-of-file-fixer, check-yaml,
@@ -239,39 +243,39 @@ Co-authored-by: Vasquez <deuriib@gmail.com>
   ([`a407e8f`](https://github.com/deuriib/mcp-gateway/commit/a407e8f29e2f79f24dfd17d4ddeef2d8fecc851b))
 
 Opcion B (latest estable) sobre A (minimo). CTO pidio explicitamente B: llevar todo a latest Node24
-  nativo con security hardening y sin warnings Node20. Preserva logica de jobs, solo bump de tags.
+nativo con security hardening y sin warnings Node20. Preserva logica de jobs, solo bump de tags.
 
 Bumps: - actions/checkout@v5.0.1 -> @v7.0.1 (latest Node24 immutable, publicado 20-jul-2026, ESM,
-  fix SHA-256 repos y fork-PR blocking; action.yml using: node24 verificado) -
-  actions/setup-python@v6.3.0 -> @v7.0.0 (latest Node24 ESM, publicado 20-jul-2026; action.yml
-  using: node24 verificado) - astral-sh/setup-uv@v7.0.0 -> @v10.0.1 immutable via SHA
-  20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1 (latest Node24 immutable desde v8.0.0,
-  publicado 14-ago-2026; action.yml using: node24 verificado; SHA pin es ideal immutable, tag
-  @v10.0.1 tambien immutable)
+fix SHA-256 repos y fork-PR blocking; action.yml using: node24 verificado) -
+actions/setup-python@v6.3.0 -> @v7.0.0 (latest Node24 ESM, publicado 20-jul-2026; action.yml
+using: node24 verificado) - astral-sh/setup-uv@v7.0.0 -> @v10.0.1 immutable via SHA
+20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1 (latest Node24 immutable desde v8.0.0,
+publicado 14-ago-2026; action.yml using: node24 verificado; SHA pin es ideal immutable, tag
+@v10.0.1 tambien immutable)
 
 Trade-offs vs A: - A = higiene minima (primer major Node24: checkout v5, setup-python v6, setup-uv
-  v7) minimo bump, minimo riesgo. - B = latest estable: mas fixes/security hardening (checkout v7
-  SHA-256 + ESM + allow-unsafe-pr-checkout), setup-python v7 ESM, setup-uv v10 ultimas
-  features/perf. Mayor churn de major pero still Node24 native y elimina deuda futura. Elegido por
-  decision explicita CTO.
+v7) minimo bump, minimo riesgo. - B = latest estable: mas fixes/security hardening (checkout v7
+SHA-256 + ESM + allow-unsafe-pr-checkout), setup-python v7 ESM, setup-uv v10 ultimas
+features/perf. Mayor churn de major pero still Node24 native y elimina deuda futura. Elegido por
+decision explicita CTO.
 
 Compatibilidad runner: - checkout@v7 y setup-python@v7 (ESM) requieren runner >=v2.327.1.
-  ubuntu-latest actual es v2.330+ -> OK.
+ubuntu-latest actual es v2.330+ -> OK.
 
 Breakings documentados (no mitigados, comportamiento seguro deseado): - setup-uv@v10: enable-cache
-  auto ahora deshabilita cache en workflow_run y release (seguridad #984). Nuestro release.yml es
-  workflow_run -> cache se deshabilitara por defecto. Es el comportamiento seguro deseado, no se
-  hace override. - checkout@v7: nuevo allow-unsafe-pr-checkout=false bloquea checkout de fork PR en
-  workflow_run/pull_request_target. Nuestro release.yml corre sobre workflow_run de Tests en
-  main/master (no fork) -> sin impacto, pero documentado.
+auto ahora deshabilita cache en workflow_run y release (seguridad #984). Nuestro release.yml es
+workflow_run -> cache se deshabilitara por defecto. Es el comportamiento seguro deseado, no se
+hace override. - checkout@v7: nuevo allow-unsafe-pr-checkout=false bloquea checkout de fork PR en
+workflow_run/pull_request_target. Nuestro release.yml corre sobre workflow_run de Tests en
+main/master (no fork) -> sin impacto, pero documentado.
 
 No toca semver, no toca uv.lock, no mezcla otros chores. Tags completos pinned para
-  reproducibilidad.
+reproducibilidad.
 
 Validacion local: - uv run ruff check src/ tests/ -> All checks passed - uv run ruff format --check
-  src/ tests/ -> 25 files already formatted - uv run pytest -v -> 152 passed - python yaml.safe_load
-  ambos workflows -> YAML valid OK - grep confirma solo v7.0.1/v7.0.0/v10.0.1 (SHA), sin
-  v5.0.1/v6.3.0/v7.0.0 residuales
+src/ tests/ -> 25 files already formatted - uv run pytest -v -> 152 passed - python yaml.safe_load
+ambos workflows -> YAML valid OK - grep confirma solo v7.0.1/v7.0.0/v10.0.1 (SHA), sin
+v5.0.1/v6.3.0/v7.0.0 residuales
 
 - **ci**: Hybrid release workflow for v0.7.0 GA
   ([`b45dbc0`](https://github.com/deuriib/mcp-gateway/commit/b45dbc0cf23734bd7af9c79b9899aafa15c406a0))
@@ -280,30 +284,30 @@ Validacion local: - uv run ruff check src/ tests/ -> All checks passed - uv run 
   ([`a3b78ee`](https://github.com/deuriib/mcp-gateway/commit/a3b78ee9d70c73febc9615c337be23d2ce0d2e6d))
 
 GitHub deprecated Node20 (EOL Apr 2026, runners default Node24 since 2026-06-16). Workflows
-  test.yml/release.yml used checkout@v4, setup-python@v5 and setup-uv@v4 (all Node20) causing
-  'Node.js 20 is deprecated' warnings. FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 only masks.
+test.yml/release.yml used checkout@v4, setup-python@v5 and setup-uv@v4 (all Node20) causing
+'Node.js 20 is deprecated' warnings. FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 only masks.
 
 Migrate to minimal native Node24 majors (higiene minima, no logic change): - actions/checkout@v4 ->
-  @v5.0.1 (first Node24; v5.0.1 chosen over v6.1.0/ v7.0.1 which are also Node24 to minimize major
-  bump; v5.1.0 also Node24 but v5.0.1 matches ticket example and is stable patch) -
-  actions/setup-python@v5 (Node20) -> @v6.3.0 (first Node24 major is v6; ticket incorrectly says @v5
-  is Node24 - corrected: v5=Node20, v6=Node24; v6.3.0 is latest v6 patch for fixes, verified
-  v6.0.0..v6.3.0 and v7.0.0 all Node24; v7 exists but v6 is minimal) - astral-sh/setup-uv@v4
-  (Node20) -> @v7.0.0 (v5/v6 still Node20, v7 first Node24; verified v4/v5/v6=Node20,
-  v7.0.0/v7.6.0/v10.0.1=Node24; v7.0.0 is minimal Node24, v7.6.0+ also Node24 but minimal chosen)
+@v5.0.1 (first Node24; v5.0.1 chosen over v6.1.0/ v7.0.1 which are also Node24 to minimize major
+bump; v5.1.0 also Node24 but v5.0.1 matches ticket example and is stable patch) -
+actions/setup-python@v5 (Node20) -> @v6.3.0 (first Node24 major is v6; ticket incorrectly says @v5
+is Node24 - corrected: v5=Node20, v6=Node24; v6.3.0 is latest v6 patch for fixes, verified
+v6.0.0..v6.3.0 and v7.0.0 all Node24; v7 exists but v6 is minimal) - astral-sh/setup-uv@v4
+(Node20) -> @v7.0.0 (v5/v6 still Node20, v7 first Node24; verified v4/v5/v6=Node20,
+v7.0.0/v7.6.0/v10.0.1=Node24; v7.0.0 is minimal Node24, v7.6.0+ also Node24 but minimal chosen)
 
 Verified python-semantic-release@v9 uses: docker and pypa/gh-action-pypi-publish@release/v1 uses:
-  composite (no Node, no change).
+composite (no Node, no change).
 
 Compatibility: Node24 requires runner >=2.327.1, ubuntu-latest cumple. Tags pinned con version
-  completa para reproducibilidad.
+completa para reproducibilidad.
 
 Evidencia action.yml using: node24 consultada: - checkout@v5.0.1, v6.0.3, v7.0.0 -> node24 -
-  setup-python@v5 -> node20, @v6.3.0/@v7.0.0 -> node24 - setup-uv@v4/v5/v6 -> node20, @v7.0.0 ->
-  node24 - psr@v9 -> docker, pypi-publish@release/v1 -> composite
+setup-python@v5 -> node20, @v6.3.0/@v7.0.0 -> node24 - setup-uv@v4/v5/v6 -> node20, @v7.0.0 ->
+node24 - psr@v9 -> docker, pypi-publish@release/v1 -> composite
 
 Validacion local: uv run ruff check/format OK, pytest 152 passed, YAML syntax OK, grep sin
-  checkout@v4/setup-python@v5/setup-uv@v4, solo Node24.
+checkout@v4/setup-python@v5/setup-uv@v4, solo Node24.
 
 - **release**: Bump version 0.6.0 -> 0.7.0 for GA
   ([`5f96c44`](https://github.com/deuriib/mcp-gateway/commit/5f96c449005a366e77cccc98759131662802a961))
@@ -327,7 +331,6 @@ Validacion local: uv run ruff check/format OK, pytest 152 passed, YAML syntax OK
 - **dashboard**: Management MCPs dashboard GA
   ([`e1d52eb`](https://github.com/deuriib/mcp-gateway/commit/e1d52ebc6c101bde6fa408c8fb88b3e4eac862b1))
 
-
 ## v0.6.0 (2026-08-25)
 
 ### Bug Fixes
@@ -342,8 +345,8 @@ Validacion local: uv run ruff check/format OK, pytest 152 passed, YAML syntax OK
   ([`426ff62`](https://github.com/deuriib/mcp-gateway/commit/426ff62ded5e24a854f337371f3673ffcf86f777))
 
 Unblocks CI run 32782781915 which failed on ruff check (F401 in conftest.py:9, I001 in
-  test_transport.py:3) causing Release 32782803712 to skip. No functional change â€” 152 tests pass,
-  ruff check/format clean.
+test_transport.py:3) causing Release 32782803712 to skip. No functional change â€” 152 tests pass,
+ruff check/format clean.
 
 ### Chores
 
@@ -379,7 +382,6 @@ Co-Authored-By: Vasquez CTO <vasquez@mcp-gateway>
 - Update fixtures to MCPServerConfig and fix lint
   ([`0fb1a32`](https://github.com/deuriib/mcp-gateway/commit/0fb1a321f715530a6a0673bf845e07fa6278b203))
 
-
 ## v0.5.2 (2026-08-24)
 
 ### Bug Fixes
@@ -388,8 +390,7 @@ Co-Authored-By: Vasquez CTO <vasquez@mcp-gateway>
   ([`7064975`](https://github.com/deuriib/mcp-gateway/commit/70649759664c3e5945d1b911d2d54dd809a0d731))
 
 Starlark sandbox lacked a print builtin, causing cryptic errors when users wrote print() in
-  executeToolCode. Inject _noop as print so scripts with print() run without failing.
-
+executeToolCode. Inject _noop as print so scripts with print() run without failing.
 
 ## v0.5.1 (2026-08-24)
 
@@ -399,9 +400,8 @@ Starlark sandbox lacked a print builtin, causing cryptic errors when users wrote
   ([`55ca24d`](https://github.com/deuriib/mcp-gateway/commit/55ca24dd17fac49685733cdbb720106751d546f0))
 
 MCP servers like context7 expose tools with hyphens (query-docs, resolve-library-id) which break
-  Starlark struct syntax. Add _sanitize_identifier() to convert non-identifier characters to
-  underscores at the Starlark boundary, preserving original names for MCP calls.
-
+Starlark struct syntax. Add _sanitize_identifier() to convert non-identifier characters to
+underscores at the Starlark boundary, preserving original names for MCP calls.
 
 ## v0.5.0 (2026-08-24)
 
@@ -416,7 +416,7 @@ MCP servers like context7 expose tools with hyphens (query-docs, resolve-library
   ([`452d258`](https://github.com/deuriib/mcp-gateway/commit/452d258688ef187d667e958269b98e0af9260914))
 
 Previously, executeToolCode ran code in an empty sandbox with no access to MCP servers. This commit
-  bridges the gap by:
+bridges the gap by:
 
 - Adding ServerFactory: creates server structs and call_tool function that wrap async MCP client
   calls with asyncio.run() for sync access - Extending StarlarkSandbox with set_global() for
@@ -425,7 +425,6 @@ Previously, executeToolCode ran code in an empty sandbox with no access to MCP s
 
 112 tests passing, 0 regressions.
 
-
 ## v0.4.4 (2026-08-24)
 
 ### Bug Fixes
@@ -433,7 +432,7 @@ Previously, executeToolCode ran code in an empty sandbox with no access to MCP s
 - Mock win32 platform in absolute_path_invalid test for CI (Linux)
   ([`1c8faad`](https://github.com/deuriib/mcp-gateway/commit/1c8faad645948334fd8747bca0f00bbced993012))
 
-- Use Self type for __aenter__/__aiter__ (ruff PYI034)
+- Use Self type for **aenter**/**aiter** (ruff PYI034)
   ([`349986e`](https://github.com/deuriib/mcp-gateway/commit/349986e3f36378616d7cdfefb97097b1ccd1e78b))
 
 - Windows stdio transport â€” command resolution, noise filter, env passthrough
@@ -442,12 +441,11 @@ Previously, executeToolCode ran code in an empty sandbox with no access to MCP s
 - Add stdio_transport.py: resolve_windows_command prefers .exe over .cmd/.bat to bypass cmd.exe
   banner injection on Windows - Add filtered_stdio_client: wraps MCP SDK stdio_client, drops
   non-JSON parse failures from read stream with on_noise callback - Fix _FilteredReadStream to
-  implement async context manager protocol (__aenter__/__aexit__) required by MCP SDK dispatcher -
+  implement async context manager protocol (**aenter**/**aexit**) required by MCP SDK dispatcher -
   Fix t.inputSchema -> t.input_schema for MCP SDK v2 compatibility - Wire StdioConfig.envs ->
   StdioServerParameters.env with --env CLI option - Wire on_noise callback in production (logs
   warning to stderr) - 22 new tests in test_stdio_transport.py, 3 new tests in test_cli.py, 1 new
   test in test_registry.py (96/96 pass, ruff clean)
-
 
 ## v0.4.3 (2026-08-24)
 
@@ -457,8 +455,7 @@ Previously, executeToolCode ran code in an empty sandbox with no access to MCP s
   ([`4a9afe3`](https://github.com/deuriib/mcp-gateway/commit/4a9afe300efd0c3d774ada45d6798c8273cdc809))
 
 Extract _refresh_server as standalone async function (was defined inside the for loop). Wrap each
-  server refresh in try/except so a failure in one server does not abort the entire refresh cycle.
-
+server refresh in try/except so a failure in one server does not abort the entire refresh cycle.
 
 ## v0.4.2 (2026-08-24)
 
@@ -468,9 +465,8 @@ Extract _refresh_server as standalone async function (was defined inside the for
   ([`1acdeed`](https://github.com/deuriib/mcp-gateway/commit/1acdeed05d4b856aafeeab2bf9ec822f418d4770))
 
 Old-format STDIO .pyi files store the command in # connection_string: instead of # stdio_command:.
-  The fallback parser was checking for stdio_command first and creating no StdioConfig when it was
-  missing, causing validation errors on refresh.
-
+The fallback parser was checking for stdio_command first and creating no StdioConfig when it was
+missing, causing validation errors on refresh.
 
 ## v0.4.1 (2026-08-24)
 
@@ -480,9 +476,8 @@ Old-format STDIO .pyi files store the command in # connection_string: instead of
   ([`988bba3`](https://github.com/deuriib/mcp-gateway/commit/988bba3314c6c699a7eec89c774ca7e95cdd3721))
 
 list_servers() was parsing .pyi comments for connection_type, which no longer exist in the new
-  JSON-based format. Now reads from get_config() which handles both JSON and legacy .pyi comment
-  fallback.
-
+JSON-based format. Now reads from get_config() which handles both JSON and legacy .pyi comment
+fallback.
 
 ## v0.4.0 (2026-08-24)
 
@@ -506,9 +501,8 @@ list_servers() was parsing .pyi comments for connection_type, which no longer ex
   all connection types - STREAMABLE_HTTP validation: require connection_string in model_post_init -
   Configurable OAuth port: --oauth-port option on add/refresh commands - Clean registry: config in
   JSON files, .pyi contains only tool signatures, backward compatible with old comment-style .pyi
-  files - serverInfo.version now reads __version__ instead of hardcoded 0.1.0 - 22 new tests (71
+  files - serverInfo.version now reads **version** instead of hardcoded 0.1.0 - 22 new tests (71
   total), all passing, lint clean
-
 
 ## v0.3.0 (2026-08-24)
 
@@ -517,7 +511,6 @@ list_servers() was parsing .pyi comments for connection_type, which no longer ex
 - Move servers/ to ~/.config/mcp-gway/servers/
   ([`db62a5a`](https://github.com/deuriib/mcp-gateway/commit/db62a5a6fb4eafc8547191ce8a8685f9152c31c9))
 
-
 ## v0.2.1 (2026-08-24)
 
 ### Bug Fixes
@@ -525,14 +518,12 @@ list_servers() was parsing .pyi comments for connection_type, which no longer ex
 - Return docs_url in getToolDocs instead of opening browser
   ([`7bc1457`](https://github.com/deuriib/mcp-gateway/commit/7bc145717a113e8840d4f7dcce5c80ba4d14875a))
 
-
 ## v0.2.0 (2026-08-24)
 
 ### Features
 
 - Add --docs-url option and open browser in getToolDocs
   ([`c41f412`](https://github.com/deuriib/mcp-gateway/commit/c41f41209f8c720ab3e270100201f5325a639aed))
-
 
 ## v0.1.4 (2026-08-24)
 
@@ -546,7 +537,6 @@ list_servers() was parsing .pyi comments for connection_type, which no longer ex
 - Update package name to mcp-gway in README and AGENTS
   ([`6a3e48e`](https://github.com/deuriib/mcp-gateway/commit/6a3e48e4dc777dacf270c113f74361f3d85cc801))
 
-
 ## v0.1.3 (2026-08-24)
 
 ### Bug Fixes
@@ -556,7 +546,6 @@ list_servers() was parsing .pyi comments for connection_type, which no longer ex
 
 - Rename Python module to mcp_gway to match PyPI package name
   ([`4c6de5d`](https://github.com/deuriib/mcp-gateway/commit/4c6de5d9a6fc9d3212ba3a98c2e0a1336660a24e))
-
 
 ## v0.1.2 (2026-08-24)
 
@@ -570,14 +559,12 @@ list_servers() was parsing .pyi comments for connection_type, which no longer ex
 - Chain release workflow to run after tests pass
   ([`bfe88bc`](https://github.com/deuriib/mcp-gateway/commit/bfe88bcd0127db06385013f21a7f8a3716b50137))
 
-
 ## v0.1.1 (2026-08-24)
 
 ### Bug Fixes
 
 - Update docstring format
   ([`f421602`](https://github.com/deuriib/mcp-gateway/commit/f4216026bc86c833c1fadc3bdef4cf6d9803b75b))
-
 
 ## v0.1.0 (2026-08-24)
 
