@@ -63,7 +63,7 @@ byte-identical files.
 
 ```powershell
 Test-Path -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts"
-Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern "MCP-GWAY v2.6.0" -SimpleMatch
+Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern "MCP-GWAY v2.7.0" -SimpleMatch
 Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern '@opencode/plugin' -SimpleMatch
 Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern 'Plugin.define' -SimpleMatch
 Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern 'ctx.mcp.transform' -SimpleMatch
@@ -78,7 +78,7 @@ opencode --version
 
 Expected:
 
-- Plugin file exists; it mentions marker `MCP-GWAY v2.6.0`, imports `@opencode/plugin`, defines `id: "mcp-gateway"`, registers `gateway` via `ctx.mcp.transform` (remote HTTP `http://127.0.0.1:8080/mcp`, `oauth: false`, `disabled: false`, `timeout: { catalog, execution }`, env-overridable via `MCP_GWAY_URL`, optional `Authorization` via `MCP_GWAY_TOKEN` only when set).
+- Plugin file exists; it mentions marker `MCP-GWAY v2.7.0`, imports `@opencode/plugin`, defines `id: "mcp-gateway"`, registers `gateway` via `ctx.mcp.transform` (remote HTTP `http://127.0.0.1:8080/mcp`, `oauth: false`, `disabled: false`, `timeout: { catalog, execution }`, env-overridable via `MCP_GWAY_URL`, optional `Authorization` via `MCP_GWAY_TOKEN` only when set).
 - System rules injected via `ctx.session.hook("context")` and re-injected via `ctx.session.hook("compaction")` (never throws, deduped by marker).
 - Gateway health endpoint answers (`curl /health`) while
   `mcp-gway serve --transport http` runs on loopback.
