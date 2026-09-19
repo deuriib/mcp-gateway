@@ -37,6 +37,9 @@ const COMPACTION_REINJECT = `<!-- ${MARKER} -->\n${MCP_RULES}`;
 const GATEWAY_URL_DEFAULT = "http://127.0.0.1:8080/mcp";
 const GATEWAY_TIMEOUT_MS = 5000;
 
+const SKILL_URL_DEFAULT =
+  "https://raw.githubusercontent.com/deuriib/mcp-gateway/master/skills/mcp-gway/SKILL.md";
+
 function getEnv(name: string): string | undefined {
   try {
     const env = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } })["process"]?.["env"];
@@ -74,6 +77,11 @@ function systemHasRules(system: unknown): boolean {
 function pushRules(system: unknown): void {
   if (!Array.isArray(system) || systemHasRules(system)) return;
   (system as unknown[]).push({ type: "text", text: COMPACTION_REINJECT });
+}
+
+function resolveSkillUrl(): string {
+  const override = getEnv("MCP_GWAY_SKILL_URL");
+  return override !== undefined ? override.trim() : SKILL_URL_DEFAULT;
 }
 
 function stripFrontmatter(body: string): string {
@@ -117,10 +125,10 @@ export default Plugin.define({
     });
 
     try {
-      const dir = ctx.location.directory.replace(/[/\\]+$/, "");
-      const legacyPath = `${dir}/skills/mcp-gway/SKILL.md`;
-      const { readFile } = await import("node:fs/promises");
-      const raw = await readFile(legacyPath, "utf8");
+      const skillUrl = resolveSkillUrl();
+      const res = await fetch(skillUrl);
+      if (!res.ok) throw new Error(`skill fetch ${res.status} from ${skillUrl}`);
+      const raw = await res.text();
       const content = stripFrontmatter(raw);
       const description = parseDescription(raw) ?? "Manage MCP servers with the mcp-gway CLI plus Code Mode discovery.";
       await ctx.skill.transform((editor) => {
@@ -130,7 +138,7 @@ export default Plugin.define({
               id: "mcp-gway",
               name: "mcp-gway",
               description,
-              location: legacyPath,
+              location: skillUrl,
               content,
             } as unknown as Parameters<typeof editor.add>[0]);
           }
