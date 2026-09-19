@@ -37,9 +37,6 @@ const COMPACTION_REINJECT = `<!-- ${MARKER} -->\n${MCP_RULES}`;
 const GATEWAY_URL_DEFAULT = "http://127.0.0.1:8080/mcp";
 const GATEWAY_TIMEOUT_MS = 5000;
 
-const SKILL_URL_DEFAULT =
-  "https://raw.githubusercontent.com/deuriib/mcp-gateway/master/skills/mcp-gway/SKILL.md";
-
 function getEnv(name: string): string | undefined {
   try {
     const env = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } })["process"]?.["env"];
@@ -77,11 +74,6 @@ function systemHasRules(system: unknown): boolean {
 function pushRules(system: unknown): void {
   if (!Array.isArray(system) || systemHasRules(system)) return;
   (system as unknown[]).push({ type: "text", text: COMPACTION_REINJECT });
-}
-
-function resolveSkillUrl(): string {
-  const override = getEnv("MCP_GWAY_SKILL_URL");
-  return override !== undefined ? override.trim() : SKILL_URL_DEFAULT;
 }
 
 function stripFrontmatter(body: string): string {
@@ -125,10 +117,37 @@ export default Plugin.define({
     });
 
     try {
-      const skillUrl = resolveSkillUrl();
-      const res = await fetch(skillUrl);
-      if (!res.ok) throw new Error(`skill fetch ${res.status} from ${skillUrl}`);
-      const raw = await res.text();
+      const loc = ctx.location as unknown as {
+        directory?: unknown;
+        project?: { canonical?: unknown; directory?: unknown };
+      };
+      const bases: string[] = [];
+      const pushBase = (v: unknown): void => {
+        if (typeof v === "string" && v.trim() !== "") {
+          const norm = v.replace(/[/\\]+$/, "");
+          if (!bases.includes(norm)) bases.push(norm);
+        }
+      };
+      pushBase(loc.project?.canonical);
+      pushBase(loc.project?.directory);
+      pushBase(loc.directory);
+      const { readFile } = await import("node:fs/promises");
+      let raw: string | undefined;
+      let skillPath = "";
+      for (const base of bases) {
+        for (const rel of ["/.opencode/skills/mcp-gway/SKILL.md", "/skills/mcp-gway/SKILL.md"]) {
+          const p = `${base}${rel}`;
+          try {
+            raw = await readFile(p, "utf8");
+            skillPath = p;
+            break;
+          } catch {
+            continue;
+          }
+        }
+        if (raw !== undefined) break;
+      }
+      if (raw === undefined) throw new Error(`mcp-gway SKILL.md not found in ${bases.join(", ")}`);
       const content = stripFrontmatter(raw);
       const description = parseDescription(raw) ?? "Manage MCP servers with the mcp-gway CLI plus Code Mode discovery.";
       await ctx.skill.transform((editor) => {
@@ -138,14 +157,18 @@ export default Plugin.define({
               id: "mcp-gway",
               name: "mcp-gway",
               description,
-              location: skillUrl,
+              location: skillPath,
               content,
             } as unknown as Parameters<typeof editor.add>[0]);
           }
         } catch {
         }
       });
-    } catch {
+    } catch (err) {
+      try {
+        console.error(`[mcp-gateway] skill load skipped: ${(err as Error)?.message ?? err}`);
+      } catch {
+      }
     }
 
     await ctx.session.hook("context", (event) => {
