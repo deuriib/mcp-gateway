@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode-ai/plugin";
+import { Plugin } from "@opencode/plugin";
 
 const MARKER = "MCP-GWAY v2.6.0";
 
@@ -34,9 +34,8 @@ value = result["key"]  # brackets, not dot
 
 const COMPACTION_REINJECT = `<!-- ${MARKER} -->\n${MCP_RULES}`;
 
-const SKILL_PATH = "skills";
-
 const GATEWAY_URL_DEFAULT = "http://127.0.0.1:8080/mcp";
+const GATEWAY_TIMEOUT_MS = 5000;
 
 function getEnv(name: string): string | undefined {
   try {
@@ -58,89 +57,101 @@ function resolveGatewayHeaders(): Record<string, string> | undefined {
   return token !== undefined ? { Authorization: `Bearer ${token.trim()}` } : undefined;
 }
 
-function ensureSkillPath(config: Record<string, any>): void {
-  const skills = (config["skills"] ??= {});
-  if (Array.isArray(skills)) {
-    if (!skills.includes(SKILL_PATH)) {
-      skills.push(SKILL_PATH);
+function systemHasRules(system: unknown): boolean {
+  if (!Array.isArray(system)) return false;
+  return system.some((entry) => {
+    if (typeof entry === "string") {
+      return entry.includes(MARKER) || entry.includes("MCP Rules — Gateway Protocol");
     }
-    return;
-  }
-  const paths = (skills["paths"] ??= []);
-  if (Array.isArray(paths) && !paths.includes(SKILL_PATH)) {
-    paths.push(SKILL_PATH);
-  }
+    if (entry && typeof entry === "object") {
+      const text = (entry as { text?: unknown })["text"];
+      return typeof text === "string" && (text.includes(MARKER) || text.includes("MCP Rules — Gateway Protocol"));
+    }
+    return false;
+  });
 }
 
-function ensureMcpGateway(config: Record<string, any>): void {
-  const mcp = (config["mcp"] ??= {});
-  if (!mcp["gateway"]) {
-    const entry: Record<string, any> = {
-      type: "remote",
-      url: resolveGatewayUrl(),
-      enabled: true,
-      timeout: 5000,
-      oauth: false,
-    };
-    const headers = resolveGatewayHeaders();
-    if (headers) {
-      entry["headers"] = headers;
-    }
-    mcp["gateway"] = entry;
-  }
-  ensureSkillPath(config);
+function pushRules(system: unknown): void {
+  if (!Array.isArray(system) || systemHasRules(system)) return;
+  (system as unknown[]).push({ type: "text", text: COMPACTION_REINJECT });
 }
 
-function appendRules(system: unknown): unknown {
-  if (typeof system === "string") {
-    return system.includes(MARKER) ||
-      system.includes("MCP Rules — Gateway Protocol")
-      ? system
-      : `${system}\n\n${COMPACTION_REINJECT}`;
-  }
-  if (Array.isArray(system)) {
-    const joined = system.join("\n");
-    if (
-      joined.includes(MARKER) ||
-      joined.includes("MCP Rules — Gateway Protocol")
-    ) {
-      return system;
-    }
-    return [...system, COMPACTION_REINJECT];
-  }
-  return COMPACTION_REINJECT;
+function stripFrontmatter(body: string): string {
+  if (!body.startsWith("---")) return body;
+  const end = body.indexOf("\n---", 3);
+  if (end === -1) return body;
+  return body.slice(end + 4).replace(/^\n+/, "");
 }
 
-export const McpGatewayPlugin: Plugin = async (_ctx) => {
-  return {
-    config: async (config) => {
+function parseDescription(body: string): string | undefined {
+  const match = body.match(/^---\s*\n([\s\S]*?)\n---/);
+  const front = match?.[1];
+  const desc = front?.match(/^\s*description:\s*(.+?)\s*$/m)?.[1];
+  return desc?.trim() || undefined;
+}
+
+export default Plugin.define({
+  id: "mcp-gateway",
+  async setup(ctx) {
+    const gatewayUrl = resolveGatewayUrl();
+    const gatewayHeaders = resolveGatewayHeaders();
+    const gatewayTimeout = { catalog: GATEWAY_TIMEOUT_MS, execution: GATEWAY_TIMEOUT_MS };
+
+    await ctx.mcp.transform((editor) => {
       try {
-        ensureMcpGateway(config as unknown as Record<string, any>);
-      } catch {
-        // Never break session bootstrap on config merge failure.
-      }
-    },
-    "experimental.chat.system.transform": async (_input, output) => {
-      try {
-        const out = output as unknown as Record<string, any>;
-        out["system"] = appendRules(out["system"]);
-      } catch {
-        // No-op: system injection must never throw.
-      }
-    },
-    "experimental.session.compacting": async (_input, output) => {
-      try {
-        const out = output as unknown as Record<string, any>;
-        if (Array.isArray(out["context"])) {
-          out["context"].push(COMPACTION_REINJECT);
-        } else if (typeof out["prompt"] === "string") {
-          out["prompt"] = `${out["prompt"]}\n\n${COMPACTION_REINJECT}`;
+        if (!editor.get("gateway")) {
+          const config: Record<string, unknown> = {
+            type: "remote",
+            url: gatewayUrl,
+            oauth: false,
+            disabled: false,
+            timeout: gatewayTimeout,
+          };
+          if (gatewayHeaders) {
+            config["headers"] = gatewayHeaders;
+          }
+          editor.set("gateway", config as unknown as Parameters<typeof editor.set>[1]);
         }
       } catch {
-        // No-op: compaction re-injection must never throw.
       }
-    },
-  };
-};
+    });
 
-export default McpGatewayPlugin;
+    try {
+      const dir = ctx.location.directory.replace(/[/\\]+$/, "");
+      const legacyPath = `${dir}/skills/mcp-gway/SKILL.md`;
+      const { readFile } = await import("node:fs/promises");
+      const raw = await readFile(legacyPath, "utf8");
+      const content = stripFrontmatter(raw);
+      const description = parseDescription(raw) ?? "Manage MCP servers with the mcp-gway CLI plus Code Mode discovery.";
+      await ctx.skill.transform((editor) => {
+        try {
+          if (!editor.get("mcp-gway")) {
+            editor.add({
+              id: "mcp-gway",
+              name: "mcp-gway",
+              description,
+              location: legacyPath,
+              content,
+            } as unknown as Parameters<typeof editor.add>[0]);
+          }
+        } catch {
+        }
+      });
+    } catch {
+    }
+
+    await ctx.session.hook("context", (event) => {
+      try {
+        pushRules((event as unknown as { system?: unknown })["system"]);
+      } catch {
+      }
+    });
+
+    await ctx.session.hook("compaction", (event) => {
+      try {
+        pushRules((event as unknown as { system?: unknown })["system"]);
+      } catch {
+      }
+    });
+  },
+});
