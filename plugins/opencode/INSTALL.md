@@ -1,96 +1,136 @@
-# INSTALL — mcp-gateway opencode plugin (V2)
+# mcp-gateway — Install (V2)
 
 > *"Haces las cosas como para Dios, por eso trabajas con excelencia y dedicación."*
 
-Single-file local opencode V2 plugin (`@opencode/plugin`, `Plugin.define({ id: "mcp-gateway" })`). No npm publish, no Node/mise toolchain beyond what opencode already provides.
+Requires **opencode V2** (`opencode --version` → `2.x`). The plugin is V2-only:
+`plugins/opencode/mcp-gateway.ts` exports `Plugin.define({ id: "mcp-gateway" })`
+from `@opencode/plugin`. V1 (`@opencode-ai/plugin`, `plugin` key,
+`experimental.*` hooks) is not supported.
 
 ## Prerequisites
 
-- `opencode` V2 on `PATH` (`opencode --version` prints `v2.x`).
+- [opencode](https://opencode.ai/) V2 installed
+- Git (repo is public — no `gh` auth needed unless you fork private)
 - Gateway reachable over localhost HTTP: run
   `mcp-gway serve --transport http --host 127.0.0.1 --port 8080`
-  (default entry URL `http://127.0.0.1:8080/mcp`) before starting opencode.
+  (default entry URL `http://127.0.0.1:8080/mcp`) before starting opencode
+- `mcp-gway` on `PATH` where the gateway runs (`mcp-gway --help` works)
 - Optional env overrides (export in the shell that launches opencode):
   `MCP_GWAY_URL` (custom gateway URL), `MCP_GWAY_TOKEN` (adds
-  `Authorization: Bearer <token>` header only when set).
-- `mcp-gway` on `PATH` where the gateway runs (`mcp-gway --help` works).
-- `@opencode/plugin` resolvable from the target project (the plugin imports
-  it and Bun resolves via ancestor `node_modules`). If the plugin shows
-  `failed: Plugin failed to load / Cannot find package '@opencode/plugin'`
-  in `opencode api get "/api/plugin?location%5Bdirectory%5D=<PROJECT>"`,
-  run `bun add -D @opencode/plugin@2.0.9` (or `npm i -D`) once in `<PROJECT>`.
+  `Authorization: Bearer <token>` header only when set)
+- No npm publish, no Node/mise toolchain beyond what opencode already provides
 
-## What gets installed
+Config locations:
 
-| Target project path | Source in this repo | Notes |
-| ------------------- | ------------------- | ----- |
-| `<PROJECT>/.opencode/plugins/mcp-gateway.ts` | `<CHECKOUT>/plugins/opencode/mcp-gateway.ts` | The plugin; auto-loaded per-project. Only impl file. V2-only, no V1 shim. |
-| `<PROJECT>/.opencode/skills/mcp-gway/SKILL.md` | `<CHECKOUT>/skills/mcp-gway/SKILL.md` | Skill source; auto-discovered by V2 (no config edit). |
+- Global: `~/.config/opencode/opencode.json`
+- Project override: `<your-project>/opencode.json`
 
-`<CHECKOUT>` = your local checkout of this repository.
-`<PROJECT>` = the target project where opencode runs.
+> Key name is `plugins` (V2 array). The old V1 `plugin` key and
+> `{"name": "mcp-gateway@..."}` object form are skipped by V2 with a
+> normalization warning — use the forms below.
 
-Legacy `<PROJECT>/skills/mcp-gway/SKILL.md` still loads via the plugin's `ctx.skill.transform` fallback, but new installs should use `.opencode/skills/`.
+## Option A — Package install (normal use, Recommended)
 
-No other files are needed. Do not publish anything, do not install extra runtimes.
-`package.json` keeps `main`/`exports` pointing at the plugin file with dependency `@opencode/plugin` (pinned to the targeted V2 release).
-
-## Option A — copy from a git checkout
-
-```powershell
-New-Item -ItemType Directory -Force -Path "<PROJECT>/.opencode/plugins" | Out-Null
-Copy-Item -LiteralPath "<CHECKOUT>/plugins/opencode/mcp-gateway.ts" -Destination "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Force
-New-Item -ItemType Directory -Force -Path "<PROJECT>/.opencode/skills/mcp-gway" | Out-Null
-Copy-Item -LiteralPath "<CHECKOUT>/skills/mcp-gway/SKILL.md" -Destination "<PROJECT>/.opencode/skills/mcp-gway/SKILL.md" -Force
+```bash
+opencode plugin add github:deuriib/mcp-gateway
 ```
 
-## Option B — copy via `file:///` path
+This installs the repo as a package; the loader uses the repo-root
+`package.json` (`main: ./plugins/opencode/mcp-gateway.ts`,
+dependency `@opencode/plugin@2.0.9`). The `mcp-gway` skill resolves via
+local-path `ctx.skill.transform` (project `canonical` → `directory` →
+plugin `directory`, trying `.opencode/skills/mcp-gway/SKILL.md` then legacy
+`skills/mcp-gway/SKILL.md`) plus V2 auto-discovery of
+`.opencode/skills/` — never from cwd, never from URL.
 
-Same files, sourced through an explicit `file:///` location instead of
-a git working tree (useful when you only have the file path, not a clone):
+Equivalent manual entry (`opencode.jsonc`):
 
-```powershell
-Copy-Item -LiteralPath "<FILE_URL_PATH>/plugins/opencode/mcp-gateway.ts" -Destination "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Force
-Copy-Item -LiteralPath "<FILE_URL_PATH>/skills/mcp-gway/SKILL.md" -Destination "<PROJECT>/.opencode/skills/mcp-gway/SKILL.md" -Force
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["mcp-gateway@github:deuriib/mcp-gateway"]
+}
 ```
 
-`<FILE_URL_PATH>` = the local path behind your `file:///` source
-(e.g. the UNC/absolute path your `file:///` URL points at).
-Prefer Option A when you have a checkout; both options install
-byte-identical files.
+## Option B — Local file (development only)
+
+Use when editing this repo and want live changes. Copy the single file into
+the project's auto-discovered plugin dir (a root-level `plugins/` dir is NOT
+auto-discovered — only `.opencode/plugins/` is), plus the skill file for
+auto-discovery:
+
+```bash
+mkdir -p <your-project>/.opencode/plugins <your-project>/.opencode/skills/mcp-gway
+cp plugins/opencode/mcp-gateway.ts <your-project>/.opencode/plugins/mcp-gateway.ts
+cp skills/mcp-gway/SKILL.md <your-project>/.opencode/skills/mcp-gway/SKILL.md
+```
+
+`@opencode/plugin` must resolve from the plugin file (nearest `node_modules`
+walking up). If load fails with `Cannot find package '@opencode/plugin'`,
+run `bun add -D @opencode/plugin@2.0.9` (or `npm i -D`) once in `<your-project>`.
+
+Notes:
+
+- The source of truth stays at `plugins/opencode/mcp-gateway.ts` (plugin) and
+  `skills/mcp-gway/SKILL.md` (skill) in this repo — never edit the copies
+  directly; re-copy after every edit.
+- Never commit a `file:///` path to a shared project config.
 
 ## Verify
 
-```powershell
-Test-Path -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts"
-Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern "MCP-GWAY v2.8.0" -SimpleMatch
-Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern '@opencode/plugin' -SimpleMatch
-Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern 'Plugin.define' -SimpleMatch
-Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern 'ctx.mcp.transform' -SimpleMatch
-Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern 'ctx.session.hook("context"' -SimpleMatch
-Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern 'ctx.session.hook("compaction"' -SimpleMatch
-Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern 'type: "remote"' -SimpleMatch
-Select-String -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Pattern "http://127.0.0.1:8080/mcp" -SimpleMatch
-Test-Path -LiteralPath "<PROJECT>/.opencode/skills/mcp-gway/SKILL.md"
-curl.exe -s http://127.0.0.1:8080/health
-opencode --version
+1. Quit + restart opencode (config is not hot-reloaded; `opencode service restart`).
+2. `opencode api get "/api/plugin?location[directory]=<your-project>"` lists
+   `mcp-gateway` with `status: active`.
+3. `opencode api get "/api/skill?location[directory]=<your-project>"` lists
+   `mcp-gway` (single skill; ID is path-derived, frontmatter `name` is display only).
+4. Start any session — the system prompt contains `MCP-GWAY v2.8.0`
+   (Gateway Protocol card, deduped by marker).
+5. Gateway + MCP are live:
+
+```bash
+curl -s http://127.0.0.1:8080/health
+opencode mcp list   # expect: gateway connected
+opencode --version  # expect: v2.x
 ```
 
-Expected:
+## Troubleshooting
 
-- Plugin file exists; it mentions marker `MCP-GWAY v2.8.0`, imports `@opencode/plugin`, defines `id: "mcp-gateway"`, registers `gateway` via `ctx.mcp.transform` (remote HTTP `http://127.0.0.1:8080/mcp`, `oauth: false`, `disabled: false`, `timeout: { catalog, execution }`, env-overridable via `MCP_GWAY_URL`, optional `Authorization` via `MCP_GWAY_TOKEN` only when set).
-- System rules injected via `ctx.session.hook("context")` and re-injected via `ctx.session.hook("compaction")` (never throws, deduped by marker).
-- Gateway health endpoint answers (`curl /health`) while
-  `mcp-gway serve --transport http` runs on loopback.
-- Skill file exists under `.opencode/skills/`, so V2 auto-discovery resolves it with no config edit.
-- `opencode --version` prints `v2.x` without error.
+| Symptom | Fix |
+|---------|-----|
+| Plugin not loaded after edit | quit + restart opencode (or `opencode service restart`); sessions keep the old system prompt |
+| `github:` install asks for auth | repo is public — update opencode; private forks need `gh auth login` or the `git+ssh://` variant |
+| Duplicated `MCP-GWAY` banner | update to latest — `systemHasRules()` dedupes by marker; don't list both git + local at once |
+| Skills not found | keep only one `mcp-gateway` entry; confirm `<your-project>/.opencode/skills/mcp-gway/SKILL.md` exists (exact `SKILL.md` name) and check log for `[mcp-gateway] skill load skipped` (tells you which bases were tried) |
+| Skill loads wrong content | transform guards with `if (!editor.get("mcp-gway"))` — a later source with the same ID wins; remove the duplicate |
+| Build fails | plugin must stay single-file, zero runtime deps beyond `@opencode/plugin@2.0.9`: `bun build plugins/opencode/mcp-gateway.ts --external @opencode/plugin` |
+| `Cannot find package '@opencode/plugin'` | install `@opencode/plugin@2.0.9` where the plugin file resolves (repo root has it; target project needs it too) |
+| Old `{"name": "mcp-gateway@..."}` entry ignored | V2 wants bare `"mcp-gateway@..."` string or `{"package": ..., "options": ...}` — rewrite the entry |
+| Gateway not connected | start `mcp-gway serve --transport http --host 127.0.0.1 --port 8080` first; check `MCP_GWAY_URL` / `MCP_GWAY_TOKEN` in the launching shell |
 
-Then restart opencode in `<PROJECT>` (`opencode service restart` if using the shared background service); the plugin loads automatically (no registration step, no config edit).
+## V2 notes (behavior deltas)
+
+- System injection is `ctx.session.hook("context")` as `{type:"text", text}`
+  parts; compaction reminder is `ctx.session.hook("compaction")`.
+- Skill is registered via `ctx.skill.transform` as `mcp-gway` (single skill,
+  filesystem `location:`, content without frontmatter, `description` required
+  for advertising). No URL fetching — URL `location` is invalid per `Skill.Info`.
+- MCP server is registered via `ctx.mcp.transform` as `gateway`
+  (`type: "remote"`, `url: http://127.0.0.1:8080/mcp`, `oauth: false`,
+  `disabled: false`, `timeout: { catalog, execution }`).
+- File-based `.opencode/skills/` discovery is the V2-native path; the
+  transform is the local-path fallback/injector for the same `mcp-gway` ID.
+
+## Which to use?
+
+- Default: **Option A (package)** — portable, shareable.
+- Only when editing `mcp-gateway.ts` or `skills/`: **Option B (local)** — then restart opencode after every edit.
 
 ## Rollback
 
-```powershell
-Remove-Item -LiteralPath "<PROJECT>/.opencode/plugins/mcp-gateway.ts" -Force
+```bash
+opencode plugin remove mcp-gateway@github:deuriib/mcp-gateway
+# and/or, for local copies:
+rm <your-project>/.opencode/plugins/mcp-gateway.ts
 ```
 
 Opencode then runs as before (all hooks are additive; transform merge
